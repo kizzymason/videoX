@@ -1,6 +1,6 @@
 # videoX 开发清单
 
-- 日期：2026-08-19
+- 日期：2026-08-19（同日修订：补上存储模块漏提交）
 - 仓库：https://github.com/kizzymason/videoX
 - HEAD（对照时）：`e331274`（仅一次 Initial commit）
 - 原则：以代码为准，不以 README 宣传为准。
@@ -19,25 +19,39 @@
 - 算法召回 + AI 打分双轨推荐（一期已经超配，不要再加码大模型）
 - PC / 移动 PWA / 管理后台三端
 
+注意：上传 / 转码 / HLS 的**逻辑写了**，但都依赖缺失的 `storage` 模块，当前树编译不过、主链路跑不起来。
+
 ## P0 没有就不稳
 
-1. **真跑通全链路**  
-   有 Vitest 和 `scripts/e2e-pipeline.mjs`，没有 CI。先确认 `setup → 上传 → 转码 → 播放` 在干净环境能绿。
+0. **补回 `apps/api/src/modules/storage/`（今天第一件事）**  
+   `uploads` / `media` / `admin` / `worker/transcode` 都在 import，`@videox/api` 还 export 了 `"./storage": "./src/modules/storage/index.ts"`，目录却没进 git。至少要有：
+   - `keys.ts`：source / hlsDir / master / poster 等键
+   - `driver.ts`：local + S3，`get/put/putFile/head/delete/deletePrefix`
+   - `service.ts`：读 `storage_profiles` 热切换、测试连接、激活互斥
+   - `index.ts` 对齐 package exports  
+   验收：`npm run typecheck` 过；admin「测试连接」成功；上传小 mp4 → 360p → PC 能播。
+   没补上之前，不要开推荐优化或新页面。
 
-2. **上传权限与配额**  
-   上传 UI 只在 admin；API 任意登录用户都能传，路由层未见大小 / MIME / 每用户配额。要么前台加创作者投稿，要么 API 改为管理员，并加上限。
+1. **种子不要假装可播**  
+   演示视频 `status=ready` 但没有 HLS。要么 seed 后入队转码，要么列表过滤无 rendition 的条目。
 
-3. **生产最小闭环**  
-   无 Dockerfile、无 api/worker/web 的 compose、无反代。`.env.example` 密钥可 fallback。启动时拒绝 `dev_*` 默认密钥；CORS 不要在非本机全开。
+2. **真跑通全链路**  
+   `setup → 上传 → 转码 → 播放` 和 `scripts/e2e-pipeline.mjs`。存储补回之前这条必挂。
 
-4. **CI**  
-   GitHub Actions 跑 typecheck + 不依赖数据库的单测。`redeem-lock` 需要真 PG，不要假装在空跑环境里过。
+3. **上传权限与配额**  
+   上传 UI 只在 admin；API 任意登录用户都能传。加大小 / MIME / 配额，或改 `requireAdmin`。
 
-5. **播放鉴权别打爆缓存**  
-   每个 manifest / 分片 / 密钥都硬校验 token。业界签目录或短时 JWT，切片长缓存。移动切网还会误伤 IP 绑定。
+4. **生产最小闭环**  
+   Dockerfile、api/worker/web compose、反代。启动时拒绝 `dev_*` 默认密钥。
 
-6. **UGC 发布闸门**  
-   转码完成 → 敏感词 / 规则 → 自动过或进人工 → 再公开。现在没有这条闸。
+5. **CI**  
+   typecheck + 不依赖数据库的单测。存储补回后 typecheck 才有意义。
+
+6. **播放鉴权别打爆缓存**  
+   不要每个分片都验签；改目录级短时票。
+
+7. **UGC 发布闸门**  
+   转码完成 → 敏感词 / 规则 → 自动过或进人工 → 再公开。
 
 ## P1 中文站一对比就会输
 
@@ -46,6 +60,7 @@
 - 发现页可降级：最新 / 7 日热门 / 分类精选必须在推荐失败时还能用
 - 用户上传 VTT/SRT；Whisper 放后面
 - 大文件直传对象存储（S3 SDK 已引入，默认仍打穿 Express）
+- 秒传不要跨 `accessLevel` 复用加密态；改 vip 要重转码才会加密
 
 ## P2 可以后做
 
@@ -59,18 +74,21 @@
 
 | 说法 | 代码 |
 | --- | --- |
+| setup/dev 后即可播放上传转码 | `modules/storage/` 未进 git，主链路编译不过 |
+| 种子视频可验证播放 | 只有元数据 + SVG 占位，无 HLS |
 | 输出 fMP4/CMAF | 免费档 fMP4；VIP 加密档是 MPEG-TS `.ts` |
 | 数据流图画前台也能传 | 上传 UI 仅 `apps/admin` |
+| 后台 S3 测试连接即时生效 | 路由写了，storage 实现文件不存在 |
 | 移动端仿 APP | 仅 Vite PWA，无 RN / 原生工程 |
 | SEO 提 SSR | 三端都是 SPA |
-| 后续接入支付 | 只有卡密，无微信/支付宝/Stripe |
+| 后续接入支付 | 只有卡密 |
 
 ## 本周顺序
 
 | 日 | 事项 | 完成标准 |
 | --- | --- | --- |
-| D1 8/19 | 清单入库 + 最小 CI | 本文档合入；typecheck 与纯逻辑测试在 PR 上跑 |
-| D2 | 跑通 setup 和一条真实转码播放 | 种子账号能播；短片能出 360p |
+| D1 8/19 | 补 storage + 清单/CI 入库 | `modules/storage/` 在树上；typecheck 绿 |
+| D2 | 跑通一条真实转码播放 | 短片出 360p；种子不再假装可播 |
 | D3 | 上传权限 + 拒绝默认密钥 | 非创作者不能传；漏配 `.env` 不能带着 `dev_*` 启动 |
 | D4 | playToken 改目录级短时票 | 热分片可缓存；切网不掉流 |
 | D5 | 弹幕 MVP 或前台「我的稿件」二选一 | 用户侧能感知到 |
