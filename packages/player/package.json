@@ -1,0 +1,34 @@
+{
+  "name": "@videox/player",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./desktop": "./src/skins/desktop/index.ts",
+    "./mobile": "./src/skins/mobile/index.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "echo \"@videox/player is consumed as TypeScript source\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@videox/shared": "*",
+    "clsx": "^2.1.1",
+    "hls.js": "^1.7.0",
+    "lucide-react": "^1.32.0",
+    "tailwind-merge": "^3.6.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "5.9.3"
+  }
+}

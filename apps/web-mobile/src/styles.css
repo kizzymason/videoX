@@ -1,0 +1,42 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@videox/ui/theme.css';
+
+@source '../../../packages/ui/src';
+@source '../../../packages/player/src';
+
+@layer base {
+  html {
+    /* 移动端禁用双击缩放与选中高亮，避免手势冲突 */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    /* 整页交给内部滚动容器，body 不滚动，底部 Tab 才能真正固定 */
+    overscroll-behavior-y: none;
+  }
+
+  #root {
+    display: flex;
+    min-height: 100dvh;
+    flex-direction: column;
+  }
+}
+
+@layer utilities {
+  .tab-scroll {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /** 沉浸式竖屏流：整屏一页，原生 scroll-snap 比 JS 跟手得多。 */
+  .snap-feed {
+    scroll-snap-type: y mandatory;
+  }
+  .snap-page {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "name": "videox",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f",
+    "db:generate": "npm run generate -w @videox/db",
+    "db:migrate": "npm run migrate -w @videox/db",
+    "db:seed": "npm run seed -w @videox/db",
+    "db:reset": "npm run reset -w @videox/db",
+    "db:check": "npx tsx packages/db/src/check-connection.ts",
+    "dev:api": "npm run dev -w @videox/api",
+    "dev:worker": "npm run dev -w @videox/worker",
+    "dev:pc": "npm run dev -w @videox/web-pc",
+    "dev:mobile": "npm run dev -w @videox/web-mobile",
+    "dev:admin": "npm run dev -w @videox/admin",
+    "dev": "concurrently -n api,worker,pc,mobile,admin -c cyan,magenta,green,yellow,blue \"npm:dev:api\" \"npm:dev:worker\" \"npm:dev:pc\" \"npm:dev:mobile\" \"npm:dev:admin\"",
+    "build": "npm run build -w @videox/web-pc && npm run build -w @videox/web-mobile && npm run build -w @videox/admin",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke": "node scripts/smoke.mjs",
+    "e2e": "node scripts/e2e-pipeline.mjs",
+    "icons": "node scripts/gen-icons.mjs",
+    "setup": "npm install && npm run db:up && node scripts/wait-for-db.mjs && npm run db:migrate && npm run db:seed"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "concurrently": "^10.0.5",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.11"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.18.20": true,
+    "ffmpeg-static@5.3.0": true,
+    "msgpackr-extract@3.0.4": true
+  }
+}

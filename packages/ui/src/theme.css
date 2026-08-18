@@ -1,0 +1,246 @@
+/**
+ * videoX 设计令牌。
+ *
+ * 全部用 OKLCH：它的亮度通道是感知均匀的，所以「把这个灰调亮一点」这类调整
+ * 在深浅两套主题里都能得到一致的观感，不会像 HSL 那样某些色相突然发闷。
+ *
+ * 配色策略——白底为主、纯黑为强调（按钮/焦点/选中态），中间层次全部靠
+ * 极低饱和度的中性灰 + 1px 描边拉开，接近 ChatGPT / Claude 的克制感。
+ */
+
+@theme {
+  --font-sans: ui-sans-serif, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+  --radius-xs: 0.375rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
+
+  /* 卡片阴影刻意做得很淡：主要靠描边分层，阴影只用来提示悬浮。 */
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.04), 0 1px 3px oklch(0 0 0 / 0.06);
+  --shadow-pop: 0 8px 24px oklch(0 0 0 / 0.1), 0 2px 6px oklch(0 0 0 / 0.06);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.16 0.004 285);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.16 0.004 285);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0.004 285);
+
+  /* 强调色 = 近黑。不用纯 #000，留一点点亮度让大面积色块不至于发死。 */
+  --primary: oklch(0.17 0.004 285);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.968 0.002 285);
+  --secondary-foreground: oklch(0.22 0.004 285);
+
+  --muted: oklch(0.972 0.002 285);
+  --muted-foreground: oklch(0.55 0.008 285);
+
+  --accent: oklch(0.962 0.003 285);
+  --accent-foreground: oklch(0.2 0.004 285);
+
+  --destructive: oklch(0.58 0.21 27.3);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  --success: oklch(0.62 0.15 152);
+  --warning: oklch(0.75 0.15 78);
+  --info: oklch(0.62 0.14 250);
+  /* 会员体系统一用琥珀金，和黑白基调形成唯一一处高饱和对比。 */
+  --vip: oklch(0.74 0.14 78);
+  --vip-foreground: oklch(0.26 0.06 78);
+
+  --border: oklch(0.922 0.003 285);
+  --input: oklch(0.922 0.003 285);
+  --ring: oklch(0.17 0.004 285);
+
+  --sidebar: oklch(0.985 0.001 285);
+  --sidebar-foreground: oklch(0.24 0.004 285);
+  --sidebar-border: oklch(0.925 0.003 285);
+  --sidebar-accent: oklch(0.95 0.003 285);
+  --sidebar-accent-foreground: oklch(0.17 0.004 285);
+
+  --chart-1: oklch(0.17 0.004 285);
+  --chart-2: oklch(0.55 0.11 250);
+  --chart-3: oklch(0.68 0.13 165);
+  --chart-4: oklch(0.74 0.14 78);
+  --chart-5: oklch(0.62 0.17 12);
+
+  --radius: 0.625rem;
+}
+
+.dark {
+  --background: oklch(0.145 0.004 285);
+  --foreground: oklch(0.96 0.002 285);
+
+  --card: oklch(0.178 0.004 285);
+  --card-foreground: oklch(0.96 0.002 285);
+  --popover: oklch(0.19 0.004 285);
+  --popover-foreground: oklch(0.96 0.002 285);
+
+  /* 暗色下强调色反转成近白，保持「强调 = 最高对比」这条规则。 */
+  --primary: oklch(0.96 0.002 285);
+  --primary-foreground: oklch(0.17 0.004 285);
+
+  --secondary: oklch(0.24 0.005 285);
+  --secondary-foreground: oklch(0.95 0.002 285);
+
+  --muted: oklch(0.235 0.005 285);
+  --muted-foreground: oklch(0.68 0.008 285);
+
+  --accent: oklch(0.26 0.006 285);
+  --accent-foreground: oklch(0.96 0.002 285);
+
+  --destructive: oklch(0.62 0.2 25);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  --success: oklch(0.68 0.15 152);
+  --warning: oklch(0.78 0.14 78);
+  --info: oklch(0.68 0.13 250);
+  --vip: oklch(0.79 0.14 80);
+  --vip-foreground: oklch(0.22 0.06 78);
+
+  --border: oklch(1 0 0 / 0.1);
+  --input: oklch(1 0 0 / 0.14);
+  --ring: oklch(0.72 0.006 285);
+
+  --sidebar: oklch(0.165 0.004 285);
+  --sidebar-foreground: oklch(0.9 0.002 285);
+  --sidebar-border: oklch(1 0 0 / 0.08);
+  --sidebar-accent: oklch(0.24 0.005 285);
+  --sidebar-accent-foreground: oklch(0.97 0.002 285);
+
+  --chart-1: oklch(0.96 0.002 285);
+  --chart-2: oklch(0.68 0.13 250);
+  --chart-3: oklch(0.74 0.13 165);
+  --chart-4: oklch(0.79 0.14 78);
+  --chart-5: oklch(0.7 0.17 12);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-vip: var(--vip);
+  --color-vip-foreground: var(--vip-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* 焦点环统一走 --ring，键盘用户才看得到，鼠标点击不出现。 */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+  }
+}
+
+@layer utilities {
+  /* 细滚动条：默认滚动条在留白很多的界面里显得很重。 */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-tap-highlight {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 移动端安全区：刘海屏与手势条。 */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .h-safe-bottom {
+    height: env(safe-area-inset-bottom);
+  }
+
+  .line-clamp-2-cjk {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+  }
+}

@@ -1,0 +1,84 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@videox/ui/theme.css';
+
+@source '../../../packages/ui/src';
+
+@layer base {
+  #root {
+    display: flex;
+    min-height: 100vh;
+    flex-direction: column;
+  }
+}
+
+@theme {
+  --animate-loading-slide: loading-slide 1.1s ease-in-out infinite;
+
+  @keyframes loading-slide {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(400%);
+    }
+  }
+}
+
+@layer components {
+  /** 后台表格统一形态：紧凑、1px 描边、表头吸顶。 */
+  .admin-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.8125rem;
+  }
+  .admin-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-card);
+    border-bottom: 1px solid var(--color-border);
+    padding: 0.625rem 0.75rem;
+    text-align: left;
+    font-weight: 500;
+    color: var(--color-muted-foreground);
+    white-space: nowrap;
+  }
+  .admin-table tbody td {
+    border-bottom: 1px solid var(--color-border);
+    padding: 0.625rem 0.75rem;
+    vertical-align: middle;
+  }
+  .admin-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .admin-table tbody tr:hover {
+    background: color-mix(in oklab, var(--color-muted) 55%, transparent);
+  }
+}
+
+@layer utilities {
+  /** recharts 的 tooltip 默认带白底黑边，和暗色主题冲突，统一交给设计令牌。 */
+  .recharts-default-tooltip {
+    border-radius: var(--radius-md) !important;
+    border: 1px solid var(--color-border) !important;
+    background: var(--color-popover) !important;
+    color: var(--color-popover-foreground) !important;
+    box-shadow: var(--shadow-md);
+    font-size: 0.75rem;
+  }
+  .recharts-tooltip-item {
+    color: var(--color-popover-foreground) !important;
+  }
+  .recharts-cartesian-axis-tick text {
+    fill: var(--color-muted-foreground);
+    font-size: 11px;
+  }
+  .recharts-cartesian-grid line {
+    stroke: var(--color-border);
+  }
+  .recharts-surface:focus {
+    outline: none;
+  }
+}

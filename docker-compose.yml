@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: videox-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: videox
+      POSTGRES_PASSWORD: videox_dev_password
+      POSTGRES_DB: videox
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    # 宿主机 5432 可能已被本机安装的 PostgreSQL 占用，这里对外暴露 15433。
+    ports:
+      - "15433:5432"
+    volumes:
+      - videox_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U videox -d videox"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: videox-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    # 宿主机 6379 常被其它项目占用，这里对外暴露 6380。
+    ports:
+      - "6380:6379"
+    volumes:
+      - videox_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  videox_pgdata:
+  videox_redisdata:
