@@ -182,7 +182,7 @@ export interface VideoSummary {
   durationSeconds: number;
   width: number | null;
   height: number | null;
-  /** vod = 点播目录， shorts = Shorts 目录。与 orientation 独立，以后台上传 kind 为准。 */
+  /** vod = 点播目录，shorts = Shorts 目录。与 orientation 独立，以后台上传 kind 为准。 */
   kind: VideoKind;
   status: VideoStatus;
   visibility: VideoVisibility;
