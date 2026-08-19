@@ -5,7 +5,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
-import { HLS_SEGMENT_SECONDS, FAST_START_RENDITION } from '@videox/shared';
+import { HLS_SEGMENT_SECONDS, FAST_START_RENDITION, reviewHoldPatch } from '@videox/shared';
 import { deriveHlsContentKey, deriveHlsIv } from '@videox/shared/play-token';
 import { db, t } from '@videox/api/core/db';
 import { env } from '@videox/api/config/env';
@@ -302,6 +302,11 @@ export async function runTranscodeJob(job: Job<TranscodeJobData>): Promise<void>
       await storage.put(StorageKeys.master(videoId), Buffer.from(buildMaster(records, meta.fps), 'utf8'), 'application/vnd.apple.mpegurl');
 
       const isLast = index === ladder.length - 1;
+      const [current] = await db
+        .select({ visibility: t.videos.visibility, publishedAt: t.videos.publishedAt })
+        .from(t.videos)
+        .where(eq(t.videos.id, videoId))
+        .limit(1);
       await db
         .update(t.videos)
         .set({
@@ -310,6 +315,7 @@ export async function runTranscodeJob(job: Job<TranscodeJobData>): Promise<void>
           outputBytes,
           // 首档产出即可播，但只有全部档位补齐才算 ready。
           status: isLast ? 'ready' : 'partially_ready',
+          ...reviewHoldPatch(current ?? { visibility: 'public', publishedAt: null }),
           updatedAt: new Date(),
         })
         .where(eq(t.videos.id, videoId));
@@ -324,13 +330,18 @@ export async function runTranscodeJob(job: Job<TranscodeJobData>): Promise<void>
     }
 
     // ---- 5. 收尾 ---------------------------------------------------------
+    const [current] = await db
+      .select({ visibility: t.videos.visibility, publishedAt: t.videos.publishedAt })
+      .from(t.videos)
+      .where(eq(t.videos.id, videoId))
+      .limit(1);
     await db
       .update(t.videos)
       .set({
         status: 'ready',
         renditions: records,
         outputBytes,
-        publishedAt: new Date(),
+        ...reviewHoldPatch(current ?? { visibility: 'public', publishedAt: null }),
         updatedAt: new Date(),
       })
       .where(eq(t.videos.id, videoId));
