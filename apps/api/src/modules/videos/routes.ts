@@ -3,7 +3,6 @@ import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import {
   PLAYABLE_VIDEO_STATUSES,
   playTicketSchema,
-  shortsUsePlayableFallback,
   videoListQuerySchema,
   type PlaybackTicket,
   type VideoSummary,
@@ -50,9 +49,11 @@ videosRouter.get(
       minDuration?: number;
       maxDuration?: number;
       orientation?: 'vertical' | 'horizontal';
+      kind?: 'vod' | 'shorts';
     }>(req);
 
-    const result = await listVideos({ ...q, adminView: false });
+    // 首页点播目录不混 Shorts：忽略客户端 orientation/kind，强制横屏 + vod。
+    const result = await listVideos({ ...q, adminView: false, orientation: 'horizontal', kind: 'vod' });
 
     if (req.auth && result.items.length > 0) {
       void recordImpressions(req.auth.id, result.items.map((v) => v.id));
@@ -62,7 +63,7 @@ videosRouter.get(
   }),
 );
 
-/** Shorts：已通过、可播、竖屏优先。竖屏为空时回落到任意可播片。必须挂在 /:idOrSlug 前面。 */
+/** Shorts：只出竖屏。库存为空就空，不再回落点播。必须挂在 /:idOrSlug 前面。 */
 videosRouter.get(
   '/shorts',
   optionalAuth,
@@ -73,14 +74,12 @@ videosRouter.get(
       pageSize: number;
       sort: 'recommended' | 'latest' | 'popular' | 'trending' | 'most_liked' | 'longest' | 'shortest';
     }>(req);
-    const vertical = await listVideos({
+    const result = await listVideos({
       ...q,
       adminView: false,
       orientation: 'vertical',
+      kind: 'shorts',
     });
-    const result = shortsUsePlayableFallback(vertical.total)
-      ? await listVideos({ ...q, adminView: false })
-      : vertical;
     if (req.auth && result.items.length > 0) {
       void recordImpressions(req.auth.id, result.items.map((v) => v.id));
     }
@@ -132,6 +131,13 @@ videosRouter.get(
       WHERE v.id <> ${video.id}
         AND v.status IN ('ready','partially_ready')
         AND v.visibility = 'public'
+        AND v.width is not null AND v.height is not null
+        AND (
+          CASE
+            WHEN ${video.height}::int > ${video.width}::int THEN v.height > v.width
+            ELSE v.width >= v.height
+          END
+        )
       ORDER BY score DESC, v.published_at DESC NULLS LAST
       LIMIT ${limit}
     `);
@@ -154,6 +160,7 @@ videosRouter.get(
         durationSeconds: t.videos.durationSeconds,
         width: t.videos.width,
         height: t.videos.height,
+        kind: t.videos.kind,
         status: t.videos.status,
         visibility: t.videos.visibility,
         accessLevel: t.videos.accessLevel,
@@ -309,12 +316,15 @@ videosRouter.get(
       ok(res, []);
       return;
     }
+    const orientation =
+      video.width != null && video.height != null && video.height > video.width ? 'vertical' : 'horizontal';
     const result = await listVideos({
       page: 1,
       pageSize: Math.min(12, Number(req.query.limit ?? 8)),
       authorId: video.authorId,
       sort: 'latest',
       excludeIds: [video.id],
+      orientation,
     });
     ok(res, result.items);
   }),
