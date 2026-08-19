@@ -1,5 +1,5 @@
 import { desc, eq, sql } from 'drizzle-orm';
-import type { VideoSummary } from '@videox/shared';
+import { isVerticalVideo, type VideoSummary } from '@videox/shared';
 import { db, t, sqlRows } from '../../core/db.js';
 import { logger } from '../../core/logger.js';
 import { recommendVideos } from '../recommend/service.js';
@@ -27,7 +27,7 @@ interface CatalogHome {
 export async function getCatalogHome(options: { userId: string | null }): Promise<CatalogHome> {
   const [rec, latestPage, hotRows, categoryRows] = await Promise.all([
     settleRecommend(() => recommendVideos({ userId: options.userId, limit: RAIL_SIZE })),
-    listVideos({ page: 1, pageSize: RAIL_SIZE, sort: 'latest' }),
+    listVideos({ page: 1, pageSize: RAIL_SIZE, sort: 'latest', orientation: 'horizontal', kind: 'vod' }),
     sqlRows<{ id: string }>(sql`
       SELECT v.id
       FROM videos v
@@ -35,6 +35,8 @@ export async function getCatalogHome(options: { userId: string | null }): Promis
         AND v.visibility = 'public'
         AND (v.published_at IS NULL OR v.published_at <= now())
         AND coalesce(v.published_at, v.created_at) > now() - interval '7 days'
+        AND v.kind = 'vod'
+        AND v.width is not null AND v.height is not null AND v.width >= v.height
       ORDER BY v.view_count DESC, v.like_count DESC, coalesce(v.published_at, v.created_at) DESC
       LIMIT ${RAIL_SIZE}
     `),
@@ -63,6 +65,8 @@ export async function getCatalogHome(options: { userId: string | null }): Promis
       pageSize: CATEGORY_RAIL_SIZE,
       categoryId: category.id,
       sort: 'popular',
+      orientation: 'horizontal',
+      kind: 'vod',
     });
     if (page.items.length === 0) continue;
     categories.push({
@@ -72,7 +76,7 @@ export async function getCatalogHome(options: { userId: string | null }): Promis
   }
 
   return {
-    recommend: rec.items,
+    recommend: rec.items.filter((v) => v.kind !== 'shorts' && !isVerticalVideo(v)),
     latest: latestPage.items,
     hot7d,
     categories,
