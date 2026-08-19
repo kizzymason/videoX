@@ -4,6 +4,7 @@ import { db, t, sqlRows } from '../../core/db.js';
 import { logger } from '../../core/logger.js';
 import { recommendVideos } from '../recommend/service.js';
 import { getSummariesByIds, listVideos } from '../videos/service.js';
+import { settleRecommend } from './fallback.js';
 
 const RAIL_SIZE = 24;
 const CATEGORY_RAIL_SIZE = 8;
@@ -23,14 +24,7 @@ export interface CatalogHome {
   degraded: boolean;
 }
 
-/** 推荐挂了也不能拖垮发现页：吞掉异常，交给 latest / 7 日热门 / 分类精选。 */
-export async function settleRecommend<T>(load: () => Promise<T[]>): Promise<{ items: T[]; degraded: boolean }> {
-  try {
-    return { items: await load(), degraded: false };
-  } catch {
-    return { items: [], degraded: true };
-  }
-}
+export { settleRecommend } from './fallback.js';
 
 export async function getCatalogHome(options: { userId: string | null }): Promise<CatalogHome> {
   const [rec, latestPage, hotRows, categoryRows] = await Promise.all([

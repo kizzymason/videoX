@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { settleRecommend } from '../apps/api/src/modules/catalog/home.ts';
+import { settleRecommend } from '../apps/api/src/modules/catalog/fallback.ts';
 
 describe('发现页推荐降级', () => {
   it('recommend 正常时 degraded=false 且带回推荐条', async () => {
