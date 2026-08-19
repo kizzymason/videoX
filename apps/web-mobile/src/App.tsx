@@ -21,8 +21,24 @@ import {
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { SearchPage } from './pages/SearchPage';
+import { prefetchWatchPage } from './lib/prefetch-watch';
 
 const WatchPage = React.lazy(() => import('./pages/WatchPage').then((m) => ({ default: m.WatchPage })));
+
+/** 详情 chunk 未到时不要整页铺黑，否则第一次点进会像 Shorts 全屏播放器。 */
+function WatchRouteFallback() {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
+      <div className="pt-safe bg-black">
+        <div className="aspect-video w-full bg-black" />
+      </div>
+      <div className="space-y-3 p-4">
+        <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
+        <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+      </div>
+    </div>
+  );
+}
 
 /**
  * 顶/底安全区跟底栏同色。Shorts 进则暗、离则亮。
@@ -129,6 +145,16 @@ export function App() {
   }, [bootstrap]);
 
   React.useEffect(() => {
+    const run = () => prefetchWatchPage();
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(run, { timeout: 1500 });
+      return () => cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(run, 400);
+    return () => clearTimeout(id);
+  }, []);
+
+  React.useEffect(() => {
     setMode(themeMode);
   }, [themeMode, setMode]);
 
@@ -179,7 +205,7 @@ export function App() {
         <Route
           path="watch/:idOrSlug"
           element={
-            <React.Suspense fallback={<div className="flex-1 bg-black" />}>
+            <React.Suspense fallback={<WatchRouteFallback />}>
               <WatchPage />
             </React.Suspense>
           }

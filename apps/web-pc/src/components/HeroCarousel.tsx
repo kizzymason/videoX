@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Banner } from '@videox/shared';
 import { cn } from '@videox/ui';
 import { contentApi } from '../lib/api';
+import { prefetchWatchPage } from '../lib/prefetch-watch';
 
 export function HeroCarousel({ banners }: { banners: Banner[] }) {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ export function HeroCarousel({ banners }: { banners: Banner[] }) {
   if (banners.length === 0) return null;
 
   const open = (banner: Banner) => {
+    prefetchWatchPage();
     void contentApi.bannerClick(banner.id).catch(() => undefined);
     if (banner.videoId) navigate(`/watch/${banner.videoId}`);
     else if (banner.linkUrl) window.open(banner.linkUrl, '_blank', 'noopener');

@@ -13,8 +13,19 @@ import { MembershipPage } from './pages/MembershipPage';
 import { LoginPage, NotFoundPage, ProfilePage, RegisterPage, SettingsPage } from './pages/AccountPages';
 import { AuthModal } from './components/AuthModal';
 import { useAuthModalStore } from './stores/auth-modal';
+import { prefetchWatchPage } from './lib/prefetch-watch';
 
 const WatchPage = React.lazy(() => import('./pages/WatchPage').then((m) => ({ default: m.WatchPage })));
+
+function WatchRouteFallback() {
+  return (
+    <div className="mx-auto w-full max-w-[1600px] px-6 py-6">
+      <div className="aspect-video w-full animate-pulse rounded-2xl bg-muted" />
+      <div className="mt-5 h-6 w-2/3 animate-pulse rounded bg-muted" />
+      <div className="mt-3 h-4 w-1/3 animate-pulse rounded bg-muted" />
+    </div>
+  );
+}
 
 /** 需要登录的页面统一在这里挡一道，未登录时打开登录弹窗。 */
 function RequireAuth({ children }: { children: React.ReactElement }) {
@@ -44,6 +55,16 @@ export function App() {
   }, [bootstrap]);
 
   React.useEffect(() => {
+    const run = () => prefetchWatchPage();
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(run, { timeout: 1500 });
+      return () => cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(run, 400);
+    return () => clearTimeout(id);
+  }, []);
+
+  React.useEffect(() => {
     setMode(themeMode);
   }, [themeMode, setMode]);
 
@@ -71,7 +92,7 @@ export function App() {
         <Route
           path="watch/:idOrSlug"
           element={
-            <React.Suspense fallback={<div className="min-h-[60vh]" />}>
+            <React.Suspense fallback={<WatchRouteFallback />}>
               <WatchPage />
             </React.Suspense>
           }

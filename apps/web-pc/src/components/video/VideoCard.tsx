@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { formatCount, formatDuration, formatRelativeTime, type VideoSummary } from '@videox/shared';
 import { Badge, Skeleton, cn } from '@videox/ui';
 import { contentApi } from '../../lib/api';
+import { prefetchWatchPage } from '../../lib/prefetch-watch';
 
 export interface VideoCardProps {
   video: VideoSummary;
@@ -24,6 +25,7 @@ export function VideoCard({ video, progressPercent, className, layout = 'grid' }
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
 
   const onEnter = () => {
+    prefetchWatchPage();
     // 悬停 400ms 才认为是真的想看，避免鼠标划过就发一堆预取请求。
     hoverTimer.current = setTimeout(() => {
       setHovering(true);

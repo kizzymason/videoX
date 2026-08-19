@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { formatCount, formatDuration, type VideoSummary } from '@videox/shared';
 import { cn } from '@videox/ui';
+import { prefetchWatchPage } from '../lib/prefetch-watch';
 
 export const CARD_TEXT_HEIGHT = 62;
 
@@ -32,7 +33,11 @@ export function MobileVideoCard({
   const ratio = aspect ?? LIST_POSTER_ASPECT;
 
   return (
-    <Link to={`/watch/${video.slug || video.id}`} className={cn('no-tap-highlight flex flex-col', className)}>
+    <Link
+      to={`/watch/${video.slug || video.id}`}
+      onPointerDown={prefetchWatchPage}
+      className={cn('no-tap-highlight flex flex-col', className)}
+    >
       <div className="relative w-full overflow-hidden rounded-xl bg-muted" style={{ aspectRatio: ratio }}>
         {poster ? (
           <img src={poster} alt={video.title} loading="lazy" decoding="async" className="size-full object-cover" />
