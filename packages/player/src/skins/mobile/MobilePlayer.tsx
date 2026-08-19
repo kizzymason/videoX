@@ -1,5 +1,6 @@
 import * as React from 'react';
 import {
+  Captions,
   ChevronLeft,
   Gauge,
   Lock,
@@ -21,6 +22,7 @@ import { PLAYBACK_RATES } from '../../core/engine.js';
 import { usePlayer, type UsePlayerOptions } from '../../react/use-player.js';
 import { ProgressBar } from '../shared/progress-bar.js';
 import { ErrorVeil, GateVeil, LoadingVeil } from '../shared/overlays.js';
+import { useCaptions } from '../shared/use-captions.js';
 import { useGestures } from './use-gestures.js';
 
 export interface MobilePlayerProps extends UsePlayerOptions {
@@ -53,12 +55,14 @@ export function MobilePlayer({
   ...playerOptions
 }: MobilePlayerProps) {
   const { engine, snapshot, videoRef, containerRef, spriteCues } = usePlayer({ hotkeys: false, ...playerOptions });
+  const captions = useCaptions(playerOptions.source?.captions, videoRef);
+  const hasCaptions = (playerOptions.source?.captions?.length ?? 0) > 0;
 
   const [controlsVisible, setControlsVisible] = React.useState(true);
   const [locked, setLocked] = React.useState(false);
   const [scrubbing, setScrubbing] = React.useState(false);
   const [brightness, setBrightness] = React.useState(1);
-  const [panel, setPanel] = React.useState<'none' | 'rate' | 'quality'>('none');
+  const [panel, setPanel] = React.useState<'none' | 'rate' | 'quality' | 'captions'>('none');
   const hideTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scheduleHide = React.useCallback(() => {
@@ -105,6 +109,8 @@ export function MobilePlayer({
     }
   };
 
+  const panelTitle = panel === 'rate' ? '播放速度' : panel === 'quality' ? '清晰度' : '字幕';
+
   return (
     <div
       ref={containerRef}
@@ -116,7 +122,21 @@ export function MobilePlayer({
         className="size-full bg-black object-contain"
         poster={poster ?? undefined}
         crossOrigin="use-credentials"
-      />
+      >
+        {captions.tracksReady
+          ? captions.tracks.map((track) => (
+              <track
+                key={track.lang}
+                kind="subtitles"
+                src={track.src}
+                srcLang={track.lang}
+                label={captions.labelFor(track.lang)}
+              />
+            ))
+          : null}
+      </video>
+      {/* 白字薄黑影，不要 karaoke 底框。cue 只能画在 video 里。 */}
+      <style>{`video::cue{color:#fff;background:transparent;text-shadow:0 1px 2px rgba(0,0,0,.85),0 0 6px rgba(0,0,0,.4)}`}</style>
 
       {poster && !snapshot.hasFirstFrame ? (
         <img src={poster} alt="" className="pointer-events-none absolute inset-0 size-full object-contain" />
@@ -245,6 +265,16 @@ export function MobilePlayer({
               {snapshot.autoQuality ? '自动' : (snapshot.levels.find((l) => l.index === snapshot.selectedLevel)?.label ?? '自动')}
             </button>
           ) : null}
+          {hasCaptions ? (
+            <button
+              type="button"
+              aria-label="字幕"
+              onClick={() => setPanel('captions')}
+              className="grid size-9 place-items-center"
+            >
+              <Captions className="size-5" />
+            </button>
+          ) : null}
           <button
             type="button"
             aria-label="全屏"
@@ -263,7 +293,7 @@ export function MobilePlayer({
             className="pb-safe flex w-48 flex-col gap-1 overflow-y-auto bg-black/90 p-3 backdrop-blur-sm"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="px-2 pb-1 text-xs text-white/50">{panel === 'rate' ? '播放速度' : '清晰度'}</p>
+            <p className="px-2 pb-1 text-xs text-white/50">{panelTitle}</p>
             {panel === 'rate'
               ? PLAYBACK_RATES.map((rate) => (
                   <PanelItem
@@ -277,32 +307,57 @@ export function MobilePlayer({
                     {rate === 1 ? '正常' : `${rate}x`}
                   </PanelItem>
                 ))
-              : [
-                  <PanelItem
-                    key="auto"
-                    active={snapshot.autoQuality}
-                    onClick={() => {
-                      engine.setLevel(-1);
-                      setPanel('none');
-                    }}
-                  >
-                    自动
-                  </PanelItem>,
-                  ...[...snapshot.levels]
-                    .sort((a, b) => b.height - a.height)
-                    .map((level) => (
+              : panel === 'quality'
+                ? [
+                    <PanelItem
+                      key="auto"
+                      active={snapshot.autoQuality}
+                      onClick={() => {
+                        engine.setLevel(-1);
+                        setPanel('none');
+                      }}
+                    >
+                      自动
+                    </PanelItem>,
+                    ...[...snapshot.levels]
+                      .sort((a, b) => b.height - a.height)
+                      .map((level) => (
+                        <PanelItem
+                          key={level.index}
+                          active={!snapshot.autoQuality && snapshot.selectedLevel === level.index}
+                          onClick={() => {
+                            engine.setLevel(level.index);
+                            setPanel('none');
+                          }}
+                        >
+                          {level.label}
+                        </PanelItem>
+                      )),
+                  ]
+                : [
+                    <PanelItem
+                      key="off"
+                      active={captions.selected === 'off'}
+                      onClick={() => {
+                        captions.setSelected('off');
+                        setPanel('none');
+                      }}
+                    >
+                      关闭
+                    </PanelItem>,
+                    ...(playerOptions.source?.captions ?? []).map((track) => (
                       <PanelItem
-                        key={level.index}
-                        active={!snapshot.autoQuality && snapshot.selectedLevel === level.index}
+                        key={track.lang}
+                        active={captions.selected === track.lang}
                         onClick={() => {
-                          engine.setLevel(level.index);
+                          captions.setSelected(track.lang);
                           setPanel('none');
                         }}
                       >
-                        {level.label}
+                        {captions.labelFor(track.lang)}
                       </PanelItem>
                     )),
-                ]}
+                  ]}
           </div>
         </div>
       ) : null}
