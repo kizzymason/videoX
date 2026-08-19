@@ -8,6 +8,7 @@ import { useAuthStore } from './stores/auth';
 import { useUiStore } from './stores/ui';
 import { TabBar } from './components/TabBar';
 import { HomeTab } from './pages/HomeTab';
+import { ShortsTab } from './pages/ShortsTab';
 import { CategoriesTab, CategoryPage, ChannelPage } from './pages/CategoriesTab';
 import { SubscribeTab } from './pages/SubscribeTab';
 import {
@@ -20,20 +21,47 @@ import {
 } from './pages/MineTab';
 import { SearchPage } from './pages/SearchPage';
 
-// 播放页独占 hls.js，懒加载让四个 Tab 的首屏不用等它。
 const WatchPage = React.lazy(() => import('./pages/WatchPage').then((m) => ({ default: m.WatchPage })));
 
-/** 带底部 Tab 的四个主页面。 */
+function applyChrome(dark: boolean) {
+  const color = dark ? '#000000' : '#ffffff';
+  document.documentElement.style.backgroundColor = color;
+  document.body.style.backgroundColor = color;
+  const root = document.getElementById('root');
+  if (root) root.style.backgroundColor = color;
+  let meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.setAttribute('name', 'theme-color');
+    document.head.appendChild(meta);
+  }
+  meta.setAttribute('content', color);
+  let apple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if (!apple) {
+    apple = document.createElement('meta');
+    apple.setAttribute('name', 'apple-mobile-web-app-status-bar-style');
+    document.head.appendChild(apple);
+  }
+  apple.setAttribute('content', dark ? 'black-translucent' : 'default');
+}
+
 function TabLayout() {
+  const { pathname } = useLocation();
+  const shorts = pathname.startsWith('/shorts');
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
+    <div
+      className={
+        shorts
+          ? 'flex min-h-0 flex-1 flex-col bg-black'
+          : 'flex min-h-0 flex-1 flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom))]'
+      }
+    >
       <Outlet />
       <TabBar />
     </div>
   );
 }
 
-/** 二级页面：无 Tab，占满全屏。 */
 function StackLayout() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -69,6 +97,16 @@ export function App() {
     track('pageview');
   }, [location.pathname]);
 
+  React.useEffect(() => {
+    const shorts = location.pathname.startsWith('/shorts');
+    const dark =
+      shorts ||
+      document.documentElement.classList.contains('dark') ||
+      themeMode === 'dark' ||
+      (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    applyChrome(dark);
+  }, [location.pathname, themeMode]);
+
   const { data: site } = useQuery({ queryKey: ['site'], queryFn: contentApi.site, staleTime: 10 * 60_000 });
   React.useEffect(() => {
     if (site && !localStorage.getItem('videox:theme')) setTheme(site.defaultTheme);
@@ -78,6 +116,7 @@ export function App() {
     <Routes>
       <Route element={<TabLayout />}>
         <Route index element={<HomeTab />} />
+        <Route path="shorts" element={<ShortsTab />} />
         <Route path="categories" element={<CategoriesTab />} />
         <Route path="subscribe" element={<SubscribeTab />} />
         <Route path="mine" element={<MineTab />} />
