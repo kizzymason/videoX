@@ -10,6 +10,7 @@ import type {
   TranscodeJobStatus,
   UserRole,
   UserStatus,
+  VideoKind,
   VideoStatus,
   VideoVisibility,
 } from './constants.js';
@@ -183,6 +184,7 @@ export interface VideoSummary {
   status: VideoStatus;
   visibility: VideoVisibility;
   accessLevel: AccessLevel;
+  kind: VideoKind;
   viewCount: number;
   likeCount: number;
   favoriteCount: number;
