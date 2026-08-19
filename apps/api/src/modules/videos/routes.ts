@@ -3,7 +3,6 @@ import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import {
   PLAYABLE_VIDEO_STATUSES,
   playTicketSchema,
-  shortsUsePlayableFallback,
   videoListQuerySchema,
   type PlaybackTicket,
   type VideoSummary,
@@ -52,7 +51,7 @@ videosRouter.get(
       orientation?: 'vertical' | 'horizontal';
     }>(req);
 
-    const result = await listVideos({ ...q, adminView: false });
+    const result = await listVideos({ ...q, adminView: false, kind: 'vod' });
 
     if (req.auth && result.items.length > 0) {
       void recordImpressions(req.auth.id, result.items.map((v) => v.id));
@@ -62,7 +61,7 @@ videosRouter.get(
   }),
 );
 
-/** Shorts：已通过、可播、竖屏优先。竖屏为空时回落到任意可播片。必须挂在 /:idOrSlug 前面。 */
+/** Shorts：只出 kind=shorts。空库存保持空，不回落到点播。必须挂在 /:idOrSlug 前面。 */
 videosRouter.get(
   '/shorts',
   optionalAuth,
@@ -73,14 +72,7 @@ videosRouter.get(
       pageSize: number;
       sort: 'recommended' | 'latest' | 'popular' | 'trending' | 'most_liked' | 'longest' | 'shortest';
     }>(req);
-    const vertical = await listVideos({
-      ...q,
-      adminView: false,
-      orientation: 'vertical',
-    });
-    const result = shortsUsePlayableFallback(vertical.total)
-      ? await listVideos({ ...q, adminView: false })
-      : vertical;
+    const result = await listVideos({ ...q, adminView: false, kind: 'shorts' });
     if (req.auth && result.items.length > 0) {
       void recordImpressions(req.auth.id, result.items.map((v) => v.id));
     }
@@ -132,6 +124,7 @@ videosRouter.get(
       WHERE v.id <> ${video.id}
         AND v.status IN ('ready','partially_ready')
         AND v.visibility = 'public'
+        AND v.kind = ${video.kind}
       ORDER BY score DESC, v.published_at DESC NULLS LAST
       LIMIT ${limit}
     `);
@@ -157,6 +150,7 @@ videosRouter.get(
         status: t.videos.status,
         visibility: t.videos.visibility,
         accessLevel: t.videos.accessLevel,
+        kind: t.videos.kind,
         viewCount: t.videos.viewCount,
         likeCount: t.videos.likeCount,
         favoriteCount: t.videos.favoriteCount,
@@ -315,6 +309,7 @@ videosRouter.get(
       authorId: video.authorId,
       sort: 'latest',
       excludeIds: [video.id],
+      kind: video.kind,
     });
     ok(res, result.items);
   }),
