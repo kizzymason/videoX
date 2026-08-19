@@ -215,6 +215,7 @@ export async function completeUpload(params: {
   tags?: string[];
   accessLevel: 'free' | 'login' | 'vip';
   visibility: 'public' | 'unlisted' | 'private';
+  kind?: 'vod' | 'shorts';
 }): Promise<{ videoId: string; jobId: string }> {
   const session = await getUploadSession(params.uploadId, params.userId);
 
@@ -270,6 +271,7 @@ export async function completeUpload(params: {
       // 新上传先待审：公开意图也压成 unlisted，后台通过才进前台。
       visibility: params.visibility === 'private' ? 'private' : 'unlisted',
       accessLevel: params.accessLevel,
+      kind: params.kind ?? 'vod',
       sourceSizeBytes: stat.size,
       sourceHash: fileHash,
       isEncrypted: params.accessLevel === 'vip',
@@ -339,6 +341,7 @@ export async function cloneFromExisting(params: {
   tags?: string[];
   accessLevel: 'free' | 'login' | 'vip';
   visibility: 'public' | 'unlisted' | 'private';
+  kind?: 'vod' | 'shorts';
 }): Promise<{ videoId: string }> {
   const [source] = await db.select().from(t.videos).where(eq(t.videos.id, params.sourceVideoId)).limit(1);
   if (!source) throw AppError.notFound('源视频不存在');
@@ -361,6 +364,7 @@ export async function cloneFromExisting(params: {
       // 秒传也走闸门：新纪录未审，不直接上前台。
       visibility: params.visibility === 'private' ? 'private' : 'unlisted',
       accessLevel: params.accessLevel,
+      kind: params.kind ?? 'vod',
       // 直接指向同一批产物，不复制文件。
       sourceKey: source.sourceKey,
       sourceSizeBytes: source.sourceSizeBytes,
@@ -399,6 +403,7 @@ export async function finalizeInstantUpload(params: {
   tags?: string[];
   accessLevel: 'free' | 'login' | 'vip';
   visibility: 'public' | 'unlisted' | 'private';
+  kind?: 'vod' | 'shorts';
 }): Promise<{ videoId: string; jobId: string | null; instant: boolean }> {
   const [source] = await db.select().from(t.videos).where(eq(t.videos.id, params.sourceVideoId)).limit(1);
   if (!source) throw AppError.notFound('源视频不存在');
@@ -425,6 +430,7 @@ export async function finalizeInstantUpload(params: {
       status: 'queued',
       visibility: params.visibility === 'private' ? 'private' : 'unlisted',
       accessLevel: params.accessLevel,
+      kind: params.kind ?? 'vod',
       sourceKey: source.sourceKey,
       sourceSizeBytes: source.sourceSizeBytes,
       sourceHash: source.sourceHash,
