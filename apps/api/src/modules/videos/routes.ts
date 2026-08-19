@@ -131,13 +131,7 @@ videosRouter.get(
       WHERE v.id <> ${video.id}
         AND v.status IN ('ready','partially_ready')
         AND v.visibility = 'public'
-        AND v.width is not null AND v.height is not null
-        AND (
-          CASE
-            WHEN ${video.height}::int > ${video.width}::int THEN v.height > v.width
-            ELSE v.width >= v.height
-          END
-        )
+        AND v.kind = 'vod'
       ORDER BY score DESC, v.published_at DESC NULLS LAST
       LIMIT ${limit}
     `);
@@ -316,15 +310,13 @@ videosRouter.get(
       ok(res, []);
       return;
     }
-    const orientation =
-      video.width != null && video.height != null && video.height > video.width ? 'vertical' : 'horizontal';
     const result = await listVideos({
       page: 1,
       pageSize: Math.min(12, Number(req.query.limit ?? 8)),
       authorId: video.authorId,
       sort: 'latest',
       excludeIds: [video.id],
-      orientation,
+      kind: 'vod',
     });
     ok(res, result.items);
   }),
