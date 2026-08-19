@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Crown, LogOut, Monitor, Moon, Sun, User as UserIcon } from 'lucide-react';
 import {
   Avatar,
@@ -15,6 +15,7 @@ import {
   cn,
 } from '@videox/ui';
 import { useAuthStore } from '../../stores/auth';
+import { useAuthModalStore } from '../../stores/auth-modal';
 import { useUiStore } from '../../stores/ui';
 import { SearchBox } from './SearchBox';
 
@@ -23,6 +24,7 @@ export function Topbar() {
   const user = useAuthStore((s) => s.user);
   const initializing = useAuthStore((s) => s.initializing);
   const logout = useAuthStore((s) => s.logout);
+  const openAuth = useAuthModalStore((s) => s.openAuth);
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
 
@@ -93,11 +95,11 @@ export function Topbar() {
           </DropdownMenu>
         ) : (
           <>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/login">登录</Link>
+            <Button variant="ghost" size="sm" onClick={() => openAuth('login', location.pathname)}>
+              登录
             </Button>
-            <Button size="sm" asChild>
-              <Link to="/register">注册</Link>
+            <Button size="sm" onClick={() => openAuth('register', location.pathname)}>
+              注册
             </Button>
           </>
         )}
