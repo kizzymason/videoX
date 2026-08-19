@@ -1,0 +1,140 @@
+# 生产最小闭环。不要用本文件里的默认密钥——漏配会启动失败。
+# 用法：
+#   cp .env.production.example .env
+#   #填 POSTGRES_PASSWORD 和 5 个 openssl rand -hex 32 密钥
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+#
+# 对外只开 80。公网 https 由本机反代 / cloudflared 接，不要再起 Vite。
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-videox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-videox}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - videox_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [videox]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - videox_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [videox]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-videox}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-videox}
+      REDIS_URL: redis://redis:6379
+      API_PUBLIC_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL}
+      SITE_PUBLIC_URL: ${SITE_PUBLIC_URL:?set SITE_PUBLIC_URL}
+      MOBILE_PUBLIC_URL: ${MOBILE_PUBLIC_URL:?set MOBILE_PUBLIC_URL}
+      ADMIN_PUBLIC_URL: ${ADMIN_PUBLIC_URL:?set ADMIN_PUBLIC_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
+      PLAY_TOKEN_SECRET: ${PLAY_TOKEN_SECRET:?set PLAY_TOKEN_SECRET}
+      HLS_KEY_SECRET: ${HLS_KEY_SECRET:?set HLS_KEY_SECRET}
+      COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_LOCAL_ROOT: /data/storage
+      UPLOAD_TMP_DIR: /data/storage/tmp
+    volumes:
+      - videox_storage:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["sh", "-c", "npm run db:migrate && npm run start -w @videox/api"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [videox]
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-videox}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-videox}
+      REDIS_URL: redis://redis:6379
+      API_PUBLIC_URL: ${API_PUBLIC_URL}
+      SITE_PUBLIC_URL: ${SITE_PUBLIC_URL}
+      MOBILE_PUBLIC_URL: ${MOBILE_PUBLIC_URL}
+      ADMIN_PUBLIC_URL: ${ADMIN_PUBLIC_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      PLAY_TOKEN_SECRET: ${PLAY_TOKEN_SECRET}
+      HLS_KEY_SECRET: ${HLS_KEY_SECRET}
+      COOKIE_SECRET: ${COOKIE_SECRET}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_LOCAL_ROOT: /data/storage
+      UPLOAD_TMP_DIR: /data/storage/tmp
+      TRANSCODE_CONCURRENCY: ${TRANSCODE_CONCURRENCY:-2}
+      TRANSCODE_PRESET: ${TRANSCODE_PRESET:-veryfast}
+      TRANSCODE_HWACCEL: ${TRANSCODE_HWACCEL:-none}
+    volumes:
+      - videox_storage:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["npm", "run", "start", "-w", "@videox/worker"]
+    networks: [videox]
+
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [videox]
+
+networks:
+  videox:
+
+volumes:
+  videox_pgdata:
+  videox_redisdata:
+  videox_storage:
