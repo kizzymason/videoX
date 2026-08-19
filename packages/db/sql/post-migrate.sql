@@ -77,3 +77,16 @@ UPDATE videos
     AND height IS NOT NULL
     AND height > width;
 CREATE INDEX IF NOT EXISTS videos_kind_idx ON videos (kind);
+
+-- --- 字幕资产 --------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS video_captions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  video_id uuid NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  lang varchar(16) NOT NULL,
+  format varchar(8) NOT NULL,
+  storage_key varchar(500) NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS video_captions_video_lang_uq ON video_captions (video_id, lang);
+CREATE INDEX IF NOT EXISTS video_captions_video_idx ON video_captions (video_id);
