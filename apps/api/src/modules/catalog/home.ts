@@ -27,12 +27,13 @@ interface CatalogHome {
 export async function getCatalogHome(options: { userId: string | null }): Promise<CatalogHome> {
   const [rec, latestPage, hotRows, categoryRows] = await Promise.all([
     settleRecommend(() => recommendVideos({ userId: options.userId, limit: RAIL_SIZE })),
-    listVideos({ page: 1, pageSize: RAIL_SIZE, sort: 'latest' }),
+    listVideos({ page: 1, pageSize: RAIL_SIZE, sort: 'latest', kind: 'vod' }),
     sqlRows<{ id: string }>(sql`
       SELECT v.id
       FROM videos v
       WHERE v.status IN ('ready','partially_ready')
         AND v.visibility = 'public'
+        AND v.kind = 'vod'
         AND (v.published_at IS NULL OR v.published_at <= now())
         AND coalesce(v.published_at, v.created_at) > now() - interval '7 days'
       ORDER BY v.view_count DESC, v.like_count DESC, coalesce(v.published_at, v.created_at) DESC
@@ -63,6 +64,7 @@ export async function getCatalogHome(options: { userId: string | null }): Promis
       pageSize: CATEGORY_RAIL_SIZE,
       categoryId: category.id,
       sort: 'popular',
+      kind: 'vod',
     });
     if (page.items.length === 0) continue;
     categories.push({
@@ -72,7 +74,7 @@ export async function getCatalogHome(options: { userId: string | null }): Promis
   }
 
   return {
-    recommend: rec.items,
+    recommend: rec.items.filter((v) => v.kind !== 'shorts'),
     latest: latestPage.items,
     hot7d,
     categories,

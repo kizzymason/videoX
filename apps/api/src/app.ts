@@ -22,6 +22,7 @@ import { recommendRouter } from './modules/recommend/routes.js';
 import { analyticsRouter } from './modules/analytics/routes.js';
 import { adminRouter } from './modules/admin/routes.js';
 import { publishGateRouter } from './modules/admin/publish-routes.js';
+import { adminShortsRouter } from './modules/admin/shorts.js';
 import { mediaRouter } from './modules/media/routes.js';
 import { seoRouter } from './modules/seo/routes.js';
 import { staticRouter } from './modules/static/routes.js';
@@ -103,6 +104,7 @@ export function createApp(): Express {
   app.use('/api/recommend', recommendRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/admin', publishGateRouter);
+  app.use('/api/admin/shorts', adminShortsRouter);
   app.use('/api', analyticsRouter);
   app.use('/api', interactionsRouter);
   app.use('/api', catalogRouter);
