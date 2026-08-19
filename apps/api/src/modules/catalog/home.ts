@@ -10,12 +10,12 @@ const RAIL_SIZE = 24;
 const CATEGORY_RAIL_SIZE = 8;
 const CATEGORY_RAILS = 6;
 
-export interface CatalogHomeRail {
+interface CatalogHomeRail {
   category: { id: string; slug: string; name: string };
   items: VideoSummary[];
 }
 
-export interface CatalogHome {
+interface CatalogHome {
   recommend: VideoSummary[];
   latest: VideoSummary[];
   hot7d: VideoSummary[];
