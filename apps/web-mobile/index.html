@@ -29,6 +29,13 @@
           document.documentElement.classList.toggle('dark', dark);
           document.documentElement.classList.toggle('light', !dark);
           document.documentElement.style.backgroundColor = color;
+          var paint = document.getElementById('vx-chrome-paint');
+          if (!paint) {
+            paint = document.createElement('style');
+            paint.id = 'vx-chrome-paint';
+            document.head.appendChild(paint);
+          }
+          paint.textContent = 'html,body,#root{background-color:' + color + '!important}';
           var meta = document.querySelector('meta[name="theme-color"]');
           if (meta) meta.setAttribute('content', color);
           var apple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');

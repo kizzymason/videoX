@@ -5,13 +5,16 @@ import { cn } from '@videox/ui';
 
 export const CARD_TEXT_HEIGHT = 62;
 
-/** 单张封面的宽高比。竖版封面走 3:4，其余按 16:9。 */
-export function posterRatio(video: VideoSummary): number {
-  return video.verticalPosterUrl ? 3 / 4 : 16 / 9;
+/** 列表封面统一 3:2 横图，不再按竖版封面走 3:4。 */
+export const LIST_POSTER_ASPECT = '3 / 2';
+export const LIST_POSTER_RATIO = 3 / 2;
+
+export function posterRatio(_video: VideoSummary): number {
+  return LIST_POSTER_RATIO;
 }
 
-export function cardHeight(video: VideoSummary, columnWidth: number): number {
-  return Math.round(columnWidth / posterRatio(video)) + CARD_TEXT_HEIGHT;
+export function cardHeight(_video: VideoSummary, columnWidth: number): number {
+  return Math.round(columnWidth / LIST_POSTER_RATIO) + CARD_TEXT_HEIGHT;
 }
 
 export function MobileVideoCard({
@@ -23,11 +26,11 @@ export function MobileVideoCard({
   video: VideoSummary;
   className?: string;
   progressPercent?: number;
-  /** 首页横长方形传 `3 / 2`。不传则按封面类型。 */
+  /** 列表封面默认 3:2 横图。 */
   aspect?: string;
 }) {
-  const poster = video.verticalPosterUrl ?? video.posterUrl;
-  const ratio = aspect ?? (video.verticalPosterUrl ? '3 / 4' : '16 / 9');
+  const poster = video.posterUrl ?? video.verticalPosterUrl;
+  const ratio = aspect ?? LIST_POSTER_ASPECT;
 
   return (
     <Link to={`/watch/${video.slug || video.id}`} className={cn('no-tap-highlight flex flex-col', className)}>

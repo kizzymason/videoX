@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
-import { Bookmark, Heart, MessageCircle, Play, Share2, X } from 'lucide-react';
+import { Bookmark, Heart, MessageCircle, Share2, X } from 'lucide-react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { formatCount, type VideoSummary } from '@videox/shared';
 import { cn } from '@videox/ui';
@@ -85,15 +85,7 @@ function ImmersivePage({ video }: { video: VideoSummary }) {
       {poster ? <img src={poster} alt="" className="size-full object-cover" /> : null}
       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/25" />
 
-      <Link
-        to={`/watch/${video.slug || video.id}`}
-        className="absolute inset-0 grid place-items-center"
-        aria-label={`播放 ${video.title}`}
-      >
-        <span className="grid size-16 place-items-center rounded-full bg-white/15 backdrop-blur-sm">
-          <Play className="size-7 translate-x-0.5 fill-white text-white" />
-        </span>
-      </Link>
+      <Link to={`/watch/${video.slug || video.id}`} className="absolute inset-0" aria-label={`播放 ${video.title}`} />
 
       <div className="pb-safe absolute inset-x-0 bottom-0 flex items-end gap-4 p-4">
         <div className="min-w-0 flex-1 space-y-1.5 pb-16">
