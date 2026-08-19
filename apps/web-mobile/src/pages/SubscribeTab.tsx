@@ -9,6 +9,7 @@ import { ApiError, membershipApi } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { track } from '../lib/analytics';
 import { AppHeader } from '../components/AppHeader';
+import { LoggedOutGate } from '../components/LoggedOutGate';
 
 const HIGHLIGHTS = [
   { icon: Crown, title: '全站会员内容', desc: '解锁所有 VIP 专享视频' },
@@ -56,6 +57,15 @@ export function SubscribeTab() {
   };
 
   const remaining = membership?.vipExpiresAt ? daysUntil(membership.vipExpiresAt) : null;
+
+  if (!user) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <AppHeader title="订阅" />
+        <LoggedOutGate subtitle="登录后开通会员" redirect="/subscribe" />
+      </div>
+    );
+  }
 
   return (
     <>
