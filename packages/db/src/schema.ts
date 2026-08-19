@@ -146,7 +146,7 @@ export const videos = pgTable(
     categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
     status: varchar('status', { length: 24 }).$type<VideoStatus>().notNull().default('draft'),
     visibility: varchar('visibility', { length: 16 }).$type<VideoVisibility>().notNull().default('public'),
-    accessLevel: varchar('access_level', { length: 16 }).$type<AccessLevel>().notNull().default('free'),
+    accessLevel: varchar('access_level', { length: 16 }).$type<AccessLevel>().notNull().default('vip'),
     sourceKey: varchar('source_key', { length: 500 }),
     sourceSizeBytes: bigint('source_size_bytes', { mode: 'number' }),
     sourceHash: varchar('source_hash', { length: 64 }),

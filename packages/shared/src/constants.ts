@@ -34,7 +34,7 @@ export const PLAYABLE_VIDEO_STATUSES: readonly VideoStatus[] = ['partially_ready
 export const VIDEO_VISIBILITIES = ['public', 'unlisted', 'private'] as const;
 export type VideoVisibility = (typeof VIDEO_VISIBILITIES)[number];
 
-/** 观看门槛。vip 视频受播放门禁 + HLS 加密保护。 */
+/** 观看门槛。点播只走会员；字段保留兼容旧数据，播放层不再认 free/login。 */
 export const ACCESS_LEVELS = ['free', 'login', 'vip'] as const;
 export type AccessLevel = (typeof ACCESS_LEVELS)[number];
 
@@ -149,8 +149,8 @@ export const SPRITE_TILE_WIDTH = 160;
 export const SPRITE_INTERVAL_SECONDS = 10;
 export const SPRITE_MAX_TILES = 300;
 
-/** 非会员对 vip 视频的试看时长（秒），可被站点设置覆盖。 */
-export const DEFAULT_PREVIEW_SECONDS = 60;
+/** 点播已取消按秒试看；站点设置里的 previewSeconds 默认 0。 */
+export const DEFAULT_PREVIEW_SECONDS = 0;
 
 /** 媒体请求携带播放令牌的查询参数名。播放器续签时按这个键覆写 URL。 */
 export const PLAY_TOKEN_PARAM = 'tk';

@@ -1,8 +1,9 @@
 import * as React from 'react';
+import { Link } from 'react-router-dom';
 import { Bookmark, Heart, Share2, Volume2, VolumeX } from 'lucide-react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { usePlayer, type PlayerEngine, type PlayerSource } from '@videox/player';
-import { formatCount, type VideoSummary } from '@videox/shared';
+import { formatCount, parseShortsTrialDetails, type ShortsTrialQuota, type VideoSummary } from '@videox/shared';
 import { cn } from '@videox/ui';
 import { ApiError, contentApi, socialApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
@@ -130,13 +131,20 @@ function ShortsPage({
   );
 }
 
-function ticketMessage(error: unknown): string {
+function ticketGate(error: unknown): { message: string; subscribe: boolean; trial: ShortsTrialQuota | null } {
   if (error instanceof ApiError) {
-    if (error.isAuthError) return '登录后观看';
-    if (error.needsVip || error.isForbidden) return '会员专享';
-    if (error.message) return error.message;
+    const trial = parseShortsTrialDetails(error.details);
+    if (error.needsVip) {
+      return {
+        message: trial ? `已看完 ${trial.limit} 条免费 Shorts` : '免费试看已用完',
+        subscribe: true,
+        trial,
+      };
+    }
+    if (error.isAuthError) return { message: '登录后观看', subscribe: false, trial: null };
+    if (error.message) return { message: error.message, subscribe: error.isForbidden, trial: null };
   }
-  return '暂无法播放';
+  return { message: '暂无法播放', subscribe: false, trial: null };
 }
 
 /**
@@ -145,13 +153,15 @@ function ticketMessage(error: unknown): string {
  */
 function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: string | null }) {
   const [source, setSource] = React.useState<PlayerSource | null>(null);
-  const [gateMessage, setGateMessage] = React.useState<string | null>(null);
+  const [gate, setGate] = React.useState<{ message: string; subscribe: boolean; trial: ShortsTrialQuota | null } | null>(
+    null,
+  );
   const engineRef = React.useRef<PlayerEngine | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
     setSource(null);
-    setGateMessage(null);
+    setGate(null);
     void contentApi
       .playTicket(video.id)
       .then((ticket) => {
@@ -171,7 +181,7 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        setGateMessage(ticketMessage(error));
+        setGate(ticketGate(error));
       });
     return () => {
       cancelled = true;
@@ -200,17 +210,16 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
   });
   engineRef.current = engine;
 
-  const overlay =
-    gateMessage ??
-    (snapshot.gate.blocked ? '会员专享' : null) ??
-    (snapshot.error ? snapshot.error.message : null);
+  const overlayMessage =
+    gate?.message ?? (snapshot.gate.blocked ? '订阅后即可继续观看' : null) ?? (snapshot.error ? snapshot.error.message : null);
+  const showSubscribe = Boolean(gate?.subscribe || snapshot.gate.blocked);
 
   return (
     <div
       ref={containerRef}
       className="absolute inset-0"
       onClick={() => {
-        if (source && !overlay) engine.togglePlay();
+        if (source && !overlayMessage) engine.togglePlay();
       }}
     >
       <video
@@ -219,9 +228,20 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
         playsInline
         poster={poster ?? undefined}
       />
-      {overlay ? (
-        <div className="pointer-events-none absolute inset-0 grid place-items-center px-8 text-center">
-          <p className="text-sm text-white/85">{overlay}</p>
+      {overlayMessage ? (
+        <div className="absolute inset-0 grid place-items-center bg-black/70 px-8 text-center backdrop-blur-[2px]">
+          <div className="pointer-events-auto flex max-w-xs flex-col items-center gap-3">
+            <p className="text-base font-semibold text-white">{overlayMessage}</p>
+            <p className="text-sm text-white/70">订阅后即可继续观看 Shorts</p>
+            {showSubscribe ? (
+              <Link
+                to="/subscribe"
+                className="rounded-full bg-[oklch(0.79_0.14_78)] px-5 py-2 text-sm font-semibold text-[oklch(0.22_0.06_78)]"
+              >
+                去订阅
+              </Link>
+            ) : null}
+          </div>
         </div>
       ) : !source ? (
         <div className="pointer-events-none absolute inset-0 grid place-items-center">

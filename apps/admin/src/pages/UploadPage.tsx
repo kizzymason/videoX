@@ -58,7 +58,7 @@ export function UploadPage() {
     description: '',
     categoryId: '',
     tags: [],
-    accessLevel: 'free',
+    accessLevel: 'vip',
     visibility: 'public',
     kind: isShorts ? 'shorts' : 'vod',
   });
@@ -275,17 +275,8 @@ export function UploadPage() {
           <Field label="标签">
             <TagInput value={meta.tags} onChange={(tags) => setMeta({ ...meta, tags })} />
           </Field>
-          <Field label="访问权限" hint="会员专享会启用 AES-128 加密">
-            <Select value={meta.accessLevel} onValueChange={(v) => setMeta({ ...meta, accessLevel: v })}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="free">免费</SelectItem>
-                <SelectItem value="login">登录可见</SelectItem>
-                <SelectItem value="vip">会员专享</SelectItem>
-              </SelectContent>
-            </Select>
+          <Field label="访问权限" hint="全站点播与 Shorts 均为会员专享，上传自动加密">
+            <Input value="会员专享" disabled />
           </Field>
           <Field label="可见性">
             <Select value={meta.visibility} onValueChange={(v) => setMeta({ ...meta, visibility: v })}>

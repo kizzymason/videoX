@@ -29,7 +29,7 @@ export function SettingsPage() {
 
   const { data, isLoading } = useQuery({ queryKey: ['site-settings'], queryFn: systemApi.site });
   React.useEffect(() => {
-    if (data) setDraft(data);
+    if (data) setDraft({ ...data, previewSeconds: 0, shortsFreeCount: data.shortsFreeCount ?? 3 });
   }, [data]);
 
   const save = useMutation({
@@ -59,7 +59,7 @@ export function SettingsPage() {
     <div>
       <PageHeader
         title="站点设置"
-        description="标题、主题、注册开关、会员试看与 SEO 模板"
+        description="标题、主题、注册开关、Shorts 试看与 SEO 模板"
         actions={
           <Button size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate(draft)}>
             <Save />
@@ -142,13 +142,16 @@ export function SettingsPage() {
             </Panel>
 
             <Panel title="会员与播放">
-              <Field label="会员视频试看秒数" hint="非会员可看的前 N 秒；设为 0 表示完全不可看。服务端按分片序号硬校验。">
+              <Field
+                label="Shorts 免费试看条数"
+                hint="游客与非会员可完整观看的不同 Shorts 条数。超出后需订阅。同一条再看不占名额。"
+              >
                 <Input
                   type="number"
                   min={0}
-                  max={3600}
-                  value={draft.previewSeconds}
-                  onChange={(e) => patch({ previewSeconds: Number(e.target.value) || 0 })}
+                  max={50}
+                  value={draft.shortsFreeCount}
+                  onChange={(e) => patch({ shortsFreeCount: Number(e.target.value) || 0, previewSeconds: 0 })}
                 />
               </Field>
               <Field label="单账号并发观看数" hint="超过后旧的播放会话会被拒绝，用于防止账号共享">

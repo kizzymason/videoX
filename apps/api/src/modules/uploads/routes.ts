@@ -97,12 +97,13 @@ uploadsRouter.post(
       description?: string;
       categoryId?: string | null;
       tags?: string[];
-      accessLevel: 'free' | 'login' | 'vip';
+      accessLevel: 'vip',
       visibility: 'public' | 'unlisted' | 'private';
       kind?: 'vod' | 'shorts';
     }>(req);
 
     const session = await getUploadSession(req.params.uploadId!, req.auth!.id);
+    const accessLevel = 'vip' as const;
 
     // 秒传路径：init 阶段已判定命中，这里只在同档时克隆产物，跨档按新档重转。
     if (session.status === 'completed' && !session.tempDir && session.fileHash) {
@@ -110,6 +111,7 @@ uploadsRouter.post(
         sourceVideoId: session.videoId ?? '',
         userId: req.auth!.id,
         ...input,
+        accessLevel,
       });
       ok(
         res,
@@ -123,6 +125,7 @@ uploadsRouter.post(
       uploadId: req.params.uploadId!,
       userId: req.auth!.id,
       ...input,
+      accessLevel,
     });
     ok(res, { ...result, instant: false }, '上传完成，已进入转码队列');
   }),

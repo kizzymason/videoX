@@ -90,3 +90,15 @@ CREATE TABLE IF NOT EXISTS video_captions (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS video_captions_video_lang_uq ON video_captions (video_id, lang);
 CREATE INDEX IF NOT EXISTS video_captions_video_idx ON video_captions (video_id);
+
+-- --- 点播全站会员：存量片改为 vip。不改 is_encrypted，避免明文 HLS 被标成加密解不开。
+UPDATE videos SET access_level = 'vip' WHERE access_level IS DISTINCT FROM 'vip';
+
+UPDATE settings
+SET value = jsonb_set(
+  jsonb_set(value, '{previewSeconds}', '0', true),
+  '{shortsFreeCount}',
+  coalesce(value->'shortsFreeCount', '3'::jsonb),
+  true
+)
+WHERE key = 'site';

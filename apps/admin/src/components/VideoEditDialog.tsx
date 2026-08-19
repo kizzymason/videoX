@@ -41,7 +41,7 @@ function toDraft(video: VideoSummary): Draft {
     description: video.description ?? '',
     categoryId: video.category?.id ?? NO_CATEGORY,
     tags: video.tags.map((t) => t.name),
-    accessLevel: video.accessLevel,
+    accessLevel: 'vip',
     visibility: video.visibility,
     posterUrl: video.posterUrl ?? '',
     verticalPosterUrl: video.verticalPosterUrl ?? '',
@@ -72,7 +72,7 @@ export function VideoEditDialog({
         description: draft!.description || null,
         categoryId: draft!.categoryId === NO_CATEGORY ? null : draft!.categoryId,
         tags: draft!.tags,
-        accessLevel: draft!.accessLevel,
+        accessLevel: 'vip',
         visibility: draft!.visibility,
         posterUrl: draft!.posterUrl || null,
         verticalPosterUrl: draft!.verticalPosterUrl || null,
@@ -124,17 +124,8 @@ export function VideoEditDialog({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="访问权限" hint="会员专享会自动启用 AES-128 加密与预览门禁">
-                <Select value={draft.accessLevel} onValueChange={(value) => patch({ accessLevel: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="free">免费</SelectItem>
-                    <SelectItem value="login">登录可见</SelectItem>
-                    <SelectItem value="vip">会员专享</SelectItem>
-                  </SelectContent>
-                </Select>
+              <Field label="访问权限" hint="全站仅会员可播，上传与转码按会员加密档处理">
+                <Input value="会员专享" disabled />
               </Field>
               <Field label="可见性">
                 <Select value={draft.visibility} onValueChange={(value) => patch({ visibility: value })}>

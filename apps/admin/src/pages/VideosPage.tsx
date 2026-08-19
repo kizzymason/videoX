@@ -36,8 +36,6 @@ const STATUS_OPTIONS = [
 
 const ACCESS_OPTIONS = [
   { value: 'all', label: '全部权限' },
-  { value: 'free', label: '免费' },
-  { value: 'login', label: '登录可见' },
   { value: 'vip', label: '会员专享' },
 ];
 
@@ -265,13 +263,11 @@ export function VideosPage() {
           <Button variant="outline" size="sm" disabled={bulk.isPending} onClick={() => void runBulk('retranscode')}>
             重新转码
           </Button>
-          <Select onValueChange={(value) => void runBulk('set_access', { accessLevel: value })}>
+          <Select onValueChange={() => void runBulk('set_access', { accessLevel: 'vip' })}>
             <SelectTrigger size="sm" className="h-8 w-32 text-xs">
               <SelectValue placeholder="设为权限…" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="free">免费</SelectItem>
-              <SelectItem value="login">登录可见</SelectItem>
               <SelectItem value="vip">会员专享</SelectItem>
             </SelectContent>
           </Select>

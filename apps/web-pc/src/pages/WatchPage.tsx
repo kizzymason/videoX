@@ -16,7 +16,7 @@ import {
   cn,
 } from '@videox/ui';
 import { toast } from 'sonner';
-import { contentApi, socialApi } from '../lib/api';
+import { contentApi, socialApi, ApiError } from '../lib/api';
 import { track } from '../lib/analytics';
 import { useAuthStore } from '../stores/auth';
 import { useAuthModalStore } from '../stores/auth-modal';
@@ -50,7 +50,7 @@ export function WatchPage() {
   const ticketQuery = useQuery({
     queryKey: ['play-ticket', video?.id],
     queryFn: () => contentApi.playTicket(video!.id),
-    enabled: Boolean(video?.id) && Boolean(video?.viewer.canPlay || video?.viewer.gateReason === 'vip_required'),
+    enabled: Boolean(video?.id) && Boolean(video?.viewer.canPlay),
     staleTime: 0,
     gcTime: 0,
     retry: false,
@@ -177,7 +177,14 @@ export function WatchPage() {
     );
   }
 
-  const blockedReason = !video.viewer.canPlay ? video.viewer.gateReason : null;
+  const ticketVip = ticketQuery.error instanceof ApiError && ticketQuery.error.needsVip;
+  const blockedReason = !video.viewer.canPlay
+    ? video.viewer.gateReason
+    : ticketVip
+      ? 'vip_required'
+      : ticketQuery.isError
+        ? 'unavailable'
+        : null;
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-6 py-6">
@@ -228,7 +235,7 @@ export function WatchPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-start gap-2">
               <h1 className="flex-1 text-xl font-semibold tracking-tight">{video.title}</h1>
-              {video.accessLevel === 'vip' ? (
+              {video.kind === 'vod' || video.accessLevel === 'vip' ? (
                 <Badge variant="vip">
                   <Crown />
                   会员专享
@@ -394,7 +401,7 @@ function PlayerPlaceholder({
           </div>
         ) : reason === 'vip_required' ? (
           <div className="space-y-3">
-            <p className="text-sm text-white">该内容为会员专享</p>
+            <p className="text-sm text-white">订阅后即可播放</p>
             <Button size="sm" variant="vip" onClick={onUnlock}>
               开通会员
             </Button>

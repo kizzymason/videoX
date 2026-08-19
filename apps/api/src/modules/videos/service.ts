@@ -1,8 +1,8 @@
 import { and, asc, desc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-orm';
 import {
-  DEFAULT_PREVIEW_SECONDS,
   PLAYABLE_VIDEO_STATUSES,
   slugify,
+  evaluateGate,
   type SortOption,
   type CaptionTrack,
   type VideoDetail,
@@ -10,7 +10,6 @@ import {
 } from '@videox/shared';
 import { db, t, sqlRows, uuidArray } from '../../core/db.js';
 import { AppError, ErrorCode } from '../../core/errors.js';
-import { getSiteSettings } from '../settings/service.js';
 import { captionPublicUrl } from '../storage/keys.js';
 
 export type VideoRow = typeof t.videos.$inferSelect;
@@ -321,36 +320,13 @@ export async function loadViewerState(videoId: string, authorId: string | null, 
   };
 }
 
-export interface GateResult {
-  canPlay: boolean;
-  gateReason: VideoDetail['viewer']['gateReason'];
-}
-
-/** 播放门禁判定。是唯一的准入判据，播放票据与 HLS 中间件都调用它。 */
-export function evaluateGate(video: VideoRow, viewer: { userId: string | null; isVip: boolean; isAdmin: boolean }): GateResult {
-  if (viewer.isAdmin) return { canPlay: true, gateReason: null };
-
-  if (!PLAYABLE_VIDEO_STATUSES.includes(video.status)) {
-    return { canPlay: false, gateReason: 'unavailable' };
-  }
-  if (video.visibility === 'private') {
-    return { canPlay: false, gateReason: 'unavailable' };
-  }
-  if (video.accessLevel === 'login' && !viewer.userId) {
-    return { canPlay: false, gateReason: 'login_required' };
-  }
-  if (video.accessLevel === 'vip') {
-    if (!viewer.userId) return { canPlay: false, gateReason: 'login_required' };
-    if (!viewer.isVip) return { canPlay: false, gateReason: 'vip_required' };
-  }
-  return { canPlay: true, gateReason: null };
-}
+export type { GateResult } from '@videox/shared';
+export { evaluateGate };
 
 export async function buildVideoDetail(
   video: VideoRow,
   viewer: { userId: string | null; isVip: boolean; isAdmin: boolean },
 ): Promise<VideoDetail> {
-  const settings = await getSiteSettings();
 
   const [related] = await db
     .select({
@@ -395,7 +371,7 @@ export async function buildVideoDetail(
     spriteUrl: video.spriteUrl,
     spriteVttUrl: video.spriteVttUrl,
     isEncrypted: video.isEncrypted,
-    previewSeconds: settings.previewSeconds || DEFAULT_PREVIEW_SECONDS,
+    previewSeconds: 0,
     viewer: { ...viewerState, canPlay: gate.canPlay, gateReason: gate.gateReason },
     captions,
   };

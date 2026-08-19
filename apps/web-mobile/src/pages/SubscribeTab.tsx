@@ -14,7 +14,7 @@ import { LoggedOutGate } from '../components/LoggedOutGate';
 const HIGHLIGHTS = [
   { icon: Crown, title: '全站会员内容', desc: '解锁所有 VIP 专享视频' },
   { icon: Zap, title: '最高画质', desc: '1080p 及以上码率不限速' },
-  { icon: ShieldCheck, title: '无限制观看', desc: '取消试看时长限制' },
+  { icon: ShieldCheck, title: '无限制观看', desc: '点播与 Shorts 全部解锁，不再受 3 条试看限制' },
 ];
 
 /** 「订阅」Tab = 会员权益 + 卡密激活。本站只走卡密，不接支付。 */
