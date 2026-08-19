@@ -20,7 +20,7 @@ function randomCode(prefix: string): string {
 const CATEGORIES = [
   { slug: 'featured', name: '精选推荐', icon: 'Sparkles', description: '编辑部精挑细选的高质量内容' },
   { slug: 'tech', name: '科技数码', icon: 'Cpu', description: '硬件评测、软件教程与前沿科技' },
-  { slug: 'film', name: '影视剪辑', icon: 'Clapperboard', description: '影视混剪、解说与幕后花絮' },
+  { slug: 'film', name: '影视剪辑', icon: 'Clapperboard', description: '影视混剪、解说与幕后花絫' },
   { slug: 'music', name: '音乐现场', icon: 'Music', description: 'Live 演出、翻唱与原创音乐' },
   { slug: 'game', name: '游戏竞技', icon: 'Gamepad2', description: '实况、攻略与赛事集锦' },
   { slug: 'life', name: '生活方式', icon: 'Coffee', description: '美食、旅行与日常 Vlog' },
@@ -184,6 +184,59 @@ function pick<T>(arr: T[], n: number): T[] {
 
 function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function executeAffected(result: unknown): number {
+  if (Array.isArray(result)) return result.length;
+  if (result && typeof result === 'object') {
+    const r = result as { rowCount?: number | null; rows?: unknown[] };
+    if (typeof r.rowCount === 'number') return r.rowCount;
+    if (Array.isArray(r.rows)) return r.rows.length;
+  }
+  return 0;
+}
+
+/** 已入库却无 HLS / 无 rendition 的假 ready 行必须降级，否则首页会按可播展示。 */
+async function demoteUnplayableSeedVideos(db: ReturnType<typeof drizzle>) {
+  const demoteResult = await db.execute(sql`
+    UPDATE videos
+    SET status = 'draft', published_at = NULL, updated_at = now()
+    WHERE status IN ('ready', 'partially_ready')
+      AND (hls_dir IS NULL OR btrim(hls_dir) = '')
+      AND coalesce(jsonb_array_length(renditions), 0) = 0
+    RETURNING id
+  `);
+  const demoted = executeAffected(demoteResult);
+  console.log(`  已将 ${demoted} 条无 HLS 的假 ready 视频降为 draft。`);
+
+  const bannerResult = await db.execute(sql`
+    UPDATE banners
+    SET is_active = false
+    WHERE video_id IN (
+      SELECT id FROM videos
+      WHERE status = 'draft'
+        AND (hls_dir IS NULL OR btrim(hls_dir) = '')
+        AND coalesce(jsonb_array_length(renditions), 0) = 0
+    )
+  `);
+  console.log(`  已停用 ${executeAffected(bannerResult)} 条指向不可播草稿的轮播。`);
+
+  await db.execute(sql`
+    UPDATE categories SET video_count = (
+      SELECT count(*)::int FROM videos
+      WHERE videos.category_id = categories.id
+        AND videos.status IN ('ready', 'partially_ready')
+        AND videos.visibility = 'public'
+    )
+  `);
+  await db.execute(sql`
+    UPDATE users SET video_count = (
+      SELECT count(*)::int FROM videos
+      WHERE videos.author_id = users.id
+        AND videos.status IN ('ready', 'partially_ready')
+        AND videos.visibility = 'public'
+    )
+  `);
 }
 
 async function main() {
@@ -369,17 +422,17 @@ async function main() {
       const duration = randInt(90, 3600);
       const views = randInt(120, 480_000);
       const likes = Math.floor(views * (0.02 + Math.random() * 0.08));
-      const daysAgo = randInt(0, 120);
       // 每 5 个里放 1 个会员视频，方便验证门禁与加密链路。
       const accessLevel = i % 5 === 4 ? ('vip' as const) : ('free' as const);
       const hue = (i * 37) % 360;
       return {
         slug: `demo-${String(i + 1).padStart(3, '0')}`,
         title,
-        description: `${title}。这是一条用于演示的示例内容，包含完整的元数据、分类与标签，可直接用于验证列表、搜索、推荐与播放门禁。`,
+        description: `${title}。这是一条用于演示的示例内容，包含完整的元数据、分类与标签，仅用于验证列表、搜索与推荐，不包含可播放片源。`,
         authorId: author.id,
         categoryId: category.id,
-        status: 'ready' as const,
+        // 无片源、无 HLS，不能标 ready，否则首页会按 PLAYABLE_VIDEO_STATUSES 假装可播。
+        status: 'draft' as const,
         visibility: 'public' as const,
         accessLevel,
         posterUrl: `/static/placeholder/cover?h=${hue}&t=${encodeURIComponent(title.slice(0, 12))}`,
@@ -397,7 +450,7 @@ async function main() {
         totalWatchSeconds: views * Math.floor(duration * (0.3 + Math.random() * 0.5)),
         completionRate: 0.3 + Math.random() * 0.5,
         qualityScore: 0.4 + Math.random() * 0.6,
-        publishedAt: new Date(Date.now() - daysAgo * 86_400_000),
+        publishedAt: null,
       };
     });
 
@@ -416,29 +469,34 @@ async function main() {
     `);
     await db.execute(sql`
       UPDATE categories SET video_count = sub.c
-      FROM (SELECT category_id, count(*)::int AS c FROM videos WHERE category_id IS NOT NULL GROUP BY category_id) sub
+      FROM (
+        SELECT category_id, count(*)::int AS c
+        FROM videos
+        WHERE category_id IS NOT NULL
+          AND status IN ('ready', 'partially_ready')
+          AND visibility = 'public'
+        GROUP BY category_id
+      ) sub
       WHERE categories.id = sub.category_id
     `);
     await db.execute(sql`
       UPDATE users SET video_count = sub.c
-      FROM (SELECT author_id, count(*)::int AS c FROM videos WHERE author_id IS NOT NULL GROUP BY author_id) sub
+      FROM (
+        SELECT author_id, count(*)::int AS c
+        FROM videos
+        WHERE author_id IS NOT NULL
+          AND status IN ('ready', 'partially_ready')
+          AND visibility = 'public'
+        GROUP BY author_id
+      ) sub
       WHERE users.id = sub.author_id
     `);
 
     console.log('写入轮播图…');
-    await db.insert(t.banners).values(
-      videoRows.slice(0, 4).map((v, i) => ({
-        title: v.title,
-        subtitle: '编辑推荐 · 点击立即观看',
-        imageUrl: `/static/placeholder/banner?h=${(i * 67) % 360}&t=${encodeURIComponent(v.title.slice(0, 16))}`,
-        mobileImageUrl: `/static/placeholder/banner?h=${(i * 67) % 360}&r=16x9&t=${encodeURIComponent(v.title.slice(0, 10))}`,
-        videoId: v.id,
-        linkUrl: null,
-        sortOrder: i,
-        isActive: true,
-      })),
-    );
+    console.log('  演示视频无片源、无 HLS，跳过「点击立即观看」轮播写入。');
   }
+
+  await demoteUnplayableSeedVideos(db);
 
   console.log('写入演示兑换码…');
   const existingCodes = await db.select({ id: t.redeemCodes.id }).from(t.redeemCodes).limit(1);
