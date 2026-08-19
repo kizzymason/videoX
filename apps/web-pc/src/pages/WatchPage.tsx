@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bookmark, Crown, Heart, Share2, UserPlus, UserCheck } from 'lucide-react';
+import { Bookmark, Heart, Share2, UserPlus, UserCheck } from 'lucide-react';
 import { DesktopPlayer } from '@videox/player/desktop';
 import type { PlayerSource } from '@videox/player';
 import { formatCount, formatDate, type VideoDetail } from '@videox/shared';
@@ -235,12 +235,6 @@ export function WatchPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-start gap-2">
               <h1 className="flex-1 text-xl font-semibold tracking-tight">{video.title}</h1>
-              {video.kind === 'vod' || video.accessLevel === 'vip' ? (
-                <Badge variant="vip">
-                  <Crown />
-                  会员专享
-                </Badge>
-              ) : null}
             </div>
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
@@ -402,8 +396,12 @@ function PlayerPlaceholder({
         ) : reason === 'vip_required' ? (
           <div className="space-y-3">
             <p className="text-sm text-white">订阅后即可播放</p>
-            <Button size="sm" variant="vip" onClick={onUnlock}>
-              开通会员
+            <Button
+              size="sm"
+              className="bg-black text-white ring-1 ring-white/25 hover:bg-black/80"
+              onClick={onUnlock}
+            >
+              开通会员观看
             </Button>
           </div>
         ) : (

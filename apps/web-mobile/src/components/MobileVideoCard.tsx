@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { Crown } from 'lucide-react';
 import { formatCount, formatDuration, type VideoSummary } from '@videox/shared';
 import { cn } from '@videox/ui';
 
@@ -42,11 +41,6 @@ export function MobileVideoCard({
         <span className="absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white tabular-nums">
           {formatDuration(video.durationSeconds)}
         </span>
-        {video.kind === 'vod' || video.accessLevel === 'vip' ? (
-          <span className="absolute top-1.5 left-1.5 grid size-5 place-items-center rounded bg-vip text-vip-foreground">
-            <Crown className="size-3" />
-          </span>
-        ) : null}
         {progressPercent !== undefined && progressPercent > 0 ? (
           <span className="absolute inset-x-0 bottom-0 h-[3px] bg-white/25">
             <span className="block h-full bg-white" style={{ width: `${Math.min(100, progressPercent)}%` }} />

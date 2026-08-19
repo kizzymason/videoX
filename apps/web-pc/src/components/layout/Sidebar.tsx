@@ -2,7 +2,7 @@ import { NavLink, Link } from 'react-router-dom';
 import {
   Clock,
   Compass,
-  Crown,
+  Flame,
   Heart,
   Home,
   LayoutGrid,
@@ -112,7 +112,7 @@ export function Sidebar() {
       </nav>
 
       <div className={cn('border-t border-sidebar-border', collapsed ? 'p-0 py-2' : 'p-2')}>
-        <NavItem to="/membership" label="开通会员" icon={Crown} collapsed={collapsed} accent />
+        <NavItem to="/membership" label="开通会员" icon={Flame} collapsed={collapsed} />
         <NavItem to="/settings" label="设置" icon={Settings} collapsed={collapsed} />
       </div>
     </aside>
@@ -146,14 +146,12 @@ function NavItem({
   icon: Icon,
   collapsed,
   end,
-  accent,
 }: {
   to: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   collapsed: boolean;
   end?: boolean;
-  accent?: boolean;
 }) {
   const link = (
     <NavLink
@@ -166,7 +164,6 @@ function NavItem({
           isActive
             ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
             : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground',
-          accent && 'text-vip hover:text-vip',
         )
       }
     >

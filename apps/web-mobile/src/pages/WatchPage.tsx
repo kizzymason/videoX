@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bookmark, Crown, Heart, MessageCircle, Share2 } from 'lucide-react';
+import { Bookmark, Heart, MessageCircle, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MobilePlayer } from '@videox/player/mobile';
 import type { PlayerSource } from '@videox/player';
@@ -177,7 +177,11 @@ export function WatchPage() {
               ) : showVipGate ? (
                 <div className="space-y-3">
                   <p className="text-sm text-white">订阅后即可播放</p>
-                  <Button size="sm" variant="vip" onClick={() => navigate('/subscribe')}>
+                  <Button
+                    size="sm"
+                    className="bg-black text-white ring-1 ring-white/25 hover:bg-black/80"
+                    onClick={() => navigate('/subscribe')}
+                  >
                     开通会员观看
                   </Button>
                 </div>
@@ -193,12 +197,6 @@ export function WatchPage() {
         <div className="space-y-3 px-4 py-3">
           <div className="flex items-start gap-2">
             <h1 className="flex-1 text-[15px] leading-snug font-medium">{video.title}</h1>
-            {video.kind === 'vod' || video.accessLevel === 'vip' ? (
-              <Badge variant="vip" className="shrink-0">
-                <Crown />
-                会员
-              </Badge>
-            ) : null}
           </div>
           <p className="text-xs text-muted-foreground tabular-nums">
             {formatCount(video.viewCount)} 次播放
