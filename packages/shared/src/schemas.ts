@@ -11,6 +11,7 @@ import {
   STORAGE_DRIVERS,
   USER_ROLES,
   USER_STATUSES,
+  VIDEO_KINDS,
   VIDEO_STATUSES,
   VIDEO_VISIBILITIES,
 } from './constants.js';
@@ -92,7 +93,9 @@ export const videoListQuerySchema = paginationSchema.extend({
   sort: z.enum(SORT_OPTIONS).default('latest'),
   minDuration: z.coerce.number().int().min(0).optional(),
   maxDuration: z.coerce.number().int().min(0).optional(),
-  /** vertical = Shorts 信息流，只出高大于宽的已通过可播片。 */
+  /** vod | shorts 目录类型。方向过滤仍可选，不作为类型。 */
+  kind: z.enum(VIDEO_KINDS).optional(),
+  /** vertical/horizontal 仅作额外宽高过滤，不是 VOD/Shorts 类型。 */
   orientation: z.enum(['vertical', 'horizontal']).optional(),
 });
 
@@ -103,6 +106,7 @@ export const createVideoSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
   accessLevel: z.enum(ACCESS_LEVELS).default('free'),
   visibility: z.enum(VIDEO_VISIBILITIES).default('public'),
+  kind: z.enum(VIDEO_KINDS).default('vod'),
   posterUrl: z.string().max(500).nullable().optional(),
   verticalPosterUrl: z.string().max(500).nullable().optional(),
   publishedAt: z.string().datetime().nullable().optional(),
@@ -112,9 +116,10 @@ export const updateVideoSchema = createVideoSchema.partial();
 
 export const bulkVideoActionSchema = z.object({
   ids: z.array(idSchema).min(1).max(200),
-  action: z.enum(['publish', 'unpublish', 'archive', 'delete', 'retranscode', 'set_access', 'set_category']),
+  action: z.enum(['publish', 'unpublish', 'archive', 'delete', 'retranscode', 'set_access', 'set_category', 'set_kind']),
   accessLevel: z.enum(ACCESS_LEVELS).optional(),
   categoryId: idSchema.nullable().optional(),
+  kind: z.enum(VIDEO_KINDS).optional(),
 });
 
 // --------------------------------------------------------------------------
@@ -137,6 +142,7 @@ export const uploadCompleteSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
   accessLevel: z.enum(ACCESS_LEVELS).default('free'),
   visibility: z.enum(VIDEO_VISIBILITIES).default('public'),
+  kind: z.enum(VIDEO_KINDS).default('vod'),
 });
 
 // --------------------------------------------------------------------------
