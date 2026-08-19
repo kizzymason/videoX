@@ -109,6 +109,7 @@ export const contentApi = {
 
   recommend: (query: { limit?: number; exclude?: string; immersive?: boolean }) =>
     api.get<VideoSummary[]>('/recommend/feed', { ...query }),
+  shorts: (query: VideoListQuery = {}) => api.get<Paginated<VideoSummary>>('/videos/shorts', { ...query }),
 };
 
 export const socialApi = {
