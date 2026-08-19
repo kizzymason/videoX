@@ -288,7 +288,7 @@ mediaRouter.get(
   '/assets/:videoId/:file',
   asyncHandler(async (req, res) => {
     const { videoId, file } = req.params as { videoId: string; file: string };
-    if (!/^[\w.-]+\.(jpg|jpeg|png|webp|avif|vtt|mp4)$/.test(file)) {
+    if (!/^[\w.-]+\.(jpg|jpeg|png|webp|avif|vtt|srt|mp4)$/.test(file)) {
       throw AppError.badRequest('非法的资源路径');
     }
 
