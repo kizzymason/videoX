@@ -6,6 +6,7 @@ import { formatCount, type VideoSummary } from '@videox/shared';
 import { cn } from '@videox/ui';
 import { contentApi } from '../lib/api';
 import { track } from '../lib/analytics';
+import { prefetchWatchPage } from '../lib/prefetch-watch';
 
 /**
  * 沉浸式竖屏流。整屏一页，用原生 scroll-snap 做翻页——JS 模拟的翻页在低端
@@ -85,7 +86,12 @@ function ImmersivePage({ video }: { video: VideoSummary }) {
       {poster ? <img src={poster} alt="" className="size-full object-cover" /> : null}
       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-black/25" />
 
-      <Link to={`/watch/${video.slug || video.id}`} className="absolute inset-0" aria-label={`播放 ${video.title}`} />
+      <Link
+        to={`/watch/${video.slug || video.id}`}
+        onPointerDown={prefetchWatchPage}
+        className="absolute inset-0"
+        aria-label={`播放 ${video.title}`}
+      />
 
       <div className="pb-safe absolute inset-x-0 bottom-0 flex items-end gap-4 p-4">
         <div className="min-w-0 flex-1 space-y-1.5 pb-16">
