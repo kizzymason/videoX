@@ -30,7 +30,7 @@ export function AppHeader({ title, back, showSearch, right, transparent, classNa
             type="button"
             aria-label="返回"
             onClick={() => navigate(-1)}
-            className="no-tap-highlight grid size-9 place-items-center rounded-full active:bg-accent"
+            className="vx-press no-tap-highlight grid size-9 place-items-center rounded-full transition-colors duration-200 active:bg-accent"
           >
             <ChevronLeft className="size-5" />
           </button>
@@ -46,7 +46,7 @@ export function AppHeader({ title, back, showSearch, right, transparent, classNa
           <Link
             to="/search"
             aria-label="搜索"
-            className="no-tap-highlight grid size-9 place-items-center rounded-full active:bg-accent"
+            className="vx-press no-tap-highlight grid size-9 place-items-center rounded-full transition-colors duration-200 active:bg-accent"
           >
             <Search className="size-5" />
           </Link>

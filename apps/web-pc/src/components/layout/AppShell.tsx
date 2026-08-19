@@ -23,7 +23,9 @@ export function AppShell() {
         <div className={cn('flex min-h-screen flex-col transition-[padding] duration-200', collapsed ? 'pl-16' : 'pl-60')}>
           <Topbar />
           <main className="flex-1">
-            <Outlet />
+            <div key={location.pathname} className="vx-page-enter">
+              <Outlet />
+            </div>
           </main>
           <Footer />
         </div>

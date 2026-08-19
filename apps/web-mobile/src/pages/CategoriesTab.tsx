@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useParams } from 'react-router-dom';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { cn } from '@videox/ui';
 import { contentApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
@@ -25,6 +25,7 @@ export function CategoriesTab() {
     initialPageParam: 1,
     getNextPageParam: nextPageParam,
     enabled: Boolean(slug),
+    placeholderData: keepPreviousData,
   });
 
   const videos = flatten(query.data?.pages);
@@ -40,7 +41,7 @@ export function CategoriesTab() {
               type="button"
               onClick={() => setActiveSlug(category.slug)}
               className={cn(
-                'no-tap-highlight relative block w-full px-2 py-3.5 text-center text-[13px] transition-colors',
+                'no-tap-highlight relative block w-full px-2 py-3.5 text-center text-[13px] transition-colors duration-200',
                 category.slug === slug ? 'bg-background font-medium text-foreground' : 'text-muted-foreground',
               )}
             >
@@ -57,6 +58,7 @@ export function CategoriesTab() {
             videos={videos}
             loading={query.isLoading}
             loadingMore={query.isFetchingNextPage}
+            fetching={query.isFetching && !query.isFetchingNextPage && videos.length > 0}
             hasMore={query.hasNextPage}
             onEndReached={() => void query.fetchNextPage()}
             className="pt-3"
@@ -78,6 +80,7 @@ export function CategoryPage() {
     queryFn: ({ pageParam }) => contentApi.videos({ page: pageParam, pageSize: 20, categorySlug: slug, sort: 'latest' }),
     initialPageParam: 1,
     getNextPageParam: nextPageParam,
+    placeholderData: keepPreviousData,
   });
 
   const videos = flatten(query.data?.pages);
@@ -90,6 +93,7 @@ export function CategoryPage() {
           videos={videos}
           loading={query.isLoading}
           loadingMore={query.isFetchingNextPage}
+          fetching={query.isFetching && !query.isFetchingNextPage && videos.length > 0}
           hasMore={query.hasNextPage}
           onEndReached={() => void query.fetchNextPage()}
           className="pt-3"
@@ -112,6 +116,7 @@ export function ChannelPage() {
     queryFn: ({ pageParam }) => contentApi.channelVideos(username, pageParam, 20),
     initialPageParam: 1,
     getNextPageParam: nextPageParam,
+    placeholderData: keepPreviousData,
   });
 
   const videos = flatten(query.data?.pages);
@@ -142,6 +147,7 @@ export function ChannelPage() {
           videos={videos}
           loading={query.isLoading}
           loadingMore={query.isFetchingNextPage}
+          fetching={query.isFetching && !query.isFetchingNextPage && videos.length > 0}
           hasMore={query.hasNextPage}
           onEndReached={() => void query.fetchNextPage()}
         />

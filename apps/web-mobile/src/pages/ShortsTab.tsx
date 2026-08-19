@@ -4,7 +4,7 @@ import { Bookmark, Heart, Share2, Volume2, VolumeX } from 'lucide-react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { usePlayer, type PlayerEngine, type PlayerSource } from '@videox/player';
 import { formatCount, parseShortsTrialDetails, type ShortsTrialQuota, type VideoSummary } from '@videox/shared';
-import { cn } from '@videox/ui';
+import { Spinner } from '@videox/ui';
 import { ApiError, contentApi, socialApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
 import { track } from '../lib/analytics';
@@ -14,7 +14,7 @@ import { track } from '../lib/analytics';
  * 进入视口（~80%）才取 play-ticket + usePlayer 起播；离开即卸载引擎，全 feed 只活一个。
  * 顶/底安全区都铺黑，离开由 App.applyChrome 卸回亮色。封面满屏，播放中不挂中间播放按钮。
  */
-export function ShortsTab() {
+export function ShortsTab({ active = true }: { active?: boolean }) {
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const query = useInfiniteQuery({
     queryKey: ['shorts'],
@@ -25,6 +25,10 @@ export function ShortsTab() {
 
   const videos = flatten(query.data?.pages);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (!active) setActiveId(null);
+  }, [active]);
 
   const onScroll = React.useCallback(() => {
     const el = containerRef.current;
@@ -46,12 +50,14 @@ export function ShortsTab() {
           <ShortsPage
             key={video.id}
             video={video}
-            active={activeId === video.id}
+            active={active && activeId === video.id}
             onActiveChange={onActiveChange}
           />
         ))}
         {query.isLoading ? (
-          <div className="grid h-full place-items-center text-sm text-white/60">加载中…</div>
+          <div className="grid h-full place-items-center">
+            <Spinner className="size-6 text-white" />
+          </div>
         ) : null}
       </div>
     </div>
@@ -268,8 +274,8 @@ function ShortsAction({
   onClick: () => void;
 }) {
   return (
-    <button type="button" onClick={onClick} className="no-tap-highlight flex flex-col items-center gap-0.5">
-      <span className={cn('grid size-10 place-items-center')}>
+    <button type="button" onClick={onClick} className="vx-press no-tap-highlight flex flex-col items-center gap-0.5">
+      <span className="grid size-10 place-items-center rounded-full active:bg-white/15">
         <Icon className="size-6" />
       </span>
       <span className="text-[11px] tabular-nums">{label}</span>

@@ -82,7 +82,7 @@ export function VideoCard({ video, progressPercent, className, layout = 'grid' }
             muted
             loop
             playsInline
-            className="absolute inset-0 size-full object-cover"
+            className="absolute inset-0 size-full object-cover duration-200 animate-in fade-in-0"
           />
         ) : null}
 

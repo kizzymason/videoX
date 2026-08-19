@@ -29,7 +29,7 @@ export function Topbar() {
   const setTheme = useUiStore((s) => s.setTheme);
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-background/85 px-6 backdrop-blur-md">
+    <header className="vx-chrome-topbar sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-background/85 px-6 backdrop-blur-md">
       <SearchBox className="max-w-xl flex-1" />
 
       <div className="ml-auto flex items-center gap-2">

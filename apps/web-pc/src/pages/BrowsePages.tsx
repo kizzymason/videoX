@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { LayoutGrid, Search as SearchIcon } from 'lucide-react';
 import type { SortOption } from '@videox/shared';
 import { EmptyState, Skeleton, cn } from '@videox/ui';
@@ -33,6 +33,7 @@ export function ExplorePage() {
         .join(',');
     },
     staleTime: 0,
+    placeholderData: keepPreviousData,
   });
 
   const videos = query.data?.pages.flat() ?? [];
@@ -40,7 +41,12 @@ export function ExplorePage() {
   return (
     <PageContainer>
       <PageHeader title="发现" description={`已为你计算 ${videos.length} 条个性化推荐`} />
-      <VideoGrid videos={videos} loading={query.isLoading} loadingMore={query.isFetchingNextPage} />
+      <VideoGrid
+        videos={videos}
+        loading={query.isLoading}
+        loadingMore={query.isFetchingNextPage}
+        fetching={query.isFetching && !query.isFetchingNextPage && videos.length > 0}
+      />
       <InfiniteFooter
         hasNextPage={query.hasNextPage}
         isFetchingNextPage={query.isFetchingNextPage}
@@ -140,6 +146,7 @@ export function CategoryPage() {
     queryFn: ({ pageParam }) => contentApi.videos({ page: pageParam, pageSize: 24, categorySlug: slug, sort }),
     initialPageParam: 1,
     getNextPageParam: nextPageParam,
+    placeholderData: keepPreviousData,
   });
 
   const videos = flatten(query.data?.pages);
@@ -151,7 +158,12 @@ export function CategoryPage() {
         description={category?.description ?? undefined}
         action={<SortTabs value={sort} onChange={setSort} />}
       />
-      <VideoGrid videos={videos} loading={query.isLoading} loadingMore={query.isFetchingNextPage} />
+      <VideoGrid
+        videos={videos}
+        loading={query.isLoading}
+        loadingMore={query.isFetchingNextPage}
+        fetching={query.isFetching && !query.isFetchingNextPage && videos.length > 0}
+      />
       <InfiniteFooter
         hasNextPage={query.hasNextPage}
         isFetchingNextPage={query.isFetchingNextPage}
@@ -200,6 +212,7 @@ export function SearchPage() {
     initialPageParam: 1,
     getNextPageParam: nextPageParam,
     enabled: q.length > 0,
+    placeholderData: keepPreviousData,
   });
 
   const videos = flatten(query.data?.pages);
@@ -274,6 +287,7 @@ export function SearchPage() {
         videos={videos}
         loading={query.isLoading}
         loadingMore={query.isFetchingNextPage}
+        fetching={query.isFetching && !query.isFetchingNextPage && videos.length > 0}
         emptyTitle="没有找到相关视频"
         emptyDescription="换个关键词，或者放宽筛选条件试试"
       />

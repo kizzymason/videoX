@@ -276,9 +276,15 @@ export function WatchPage() {
         <section className="px-3 pb-8">
           <h2 className="px-1 pb-2.5 text-sm font-semibold">相关推荐</h2>
           <div className="grid grid-cols-2 gap-x-2.5 gap-y-4">
-            {related.map((item) => (
-              <MobileVideoCard key={item.id} video={item} />
-            ))}
+            {relatedQuery.isLoading && related.length === 0
+              ? Array.from({ length: 4 }, (_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="aspect-[3/2] w-full rounded-xl" />
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
+                ))
+              : related.map((item) => <MobileVideoCard key={item.id} video={item} />)}
           </div>
         </section>
       </div>
@@ -308,7 +314,7 @@ function ActionButton({
     <button
       type="button"
       onClick={onClick}
-      className="no-tap-highlight flex flex-col items-center gap-1 rounded-lg py-1.5 active:bg-accent"
+      className="vx-press no-tap-highlight flex flex-col items-center gap-1 rounded-lg py-1.5 transition-colors duration-200 active:bg-accent"
     >
       <Icon className={cn('size-5', active ? 'fill-current text-foreground' : 'text-muted-foreground')} />
       <span className="text-[11px] text-muted-foreground tabular-nums">{label}</span>
