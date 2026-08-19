@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { StorageProfile } from '@videox/shared';
 import { db, t } from '../../core/db.js';
 import { env } from '../../config/env.js';
@@ -195,5 +195,20 @@ export async function testStorageProfile(
     const message = error instanceof Error ? error.message : '测试连接失败';
     logger.warn({ err: error, profileId: id }, '存储测试连接失败');
     return { ok: false, message };
+  }
+}
+
+/** 仪表盘 totals.storageBytes：片源 + HLS 产物账本合计。失败返回 0，不把概览打挂。 */
+export async function getStorageUsage(): Promise<number> {
+  try {
+    const [row] = await db
+      .select({
+        bytes: sql<number>`coalesce(sum(coalesce(${t.videos.sourceSizeBytes}, 0) + coalesce(${t.videos.outputBytes}, 0)), 0)::bigint`,
+      })
+      .from(t.videos);
+    return Number(row?.bytes ?? 0);
+  } catch (error) {
+    logger.warn({ err: error }, '统计存储用量失败');
+    return 0;
   }
 }
