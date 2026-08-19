@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { UPLOAD_CHUNK_SIZE, uploadCompleteSchema, uploadInitSchema } from '@videox/shared';
 import { AppError } from '../../core/errors.js';
 import { asyncHandler, ok } from '../../core/respond.js';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAdmin, requireAuth } from '../../middleware/auth.js';
 import { body, validate } from '../../middleware/validate.js';
 import {
   abortUpload,
@@ -16,7 +16,7 @@ import {
 
 export const uploadsRouter: Router = Router();
 
-uploadsRouter.use(requireAuth);
+uploadsRouter.use(requireAuth, requireAdmin);
 
 uploadsRouter.post(
   '/init',
