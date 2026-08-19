@@ -50,7 +50,10 @@ function emptySnapshot(): PlayerSnapshot {
   };
 }
 
-/** 只在 URL 已经带 tk 参数时覆写，避免把令牌泄漏给无关域名。 */
+/**
+ * 只改已经带 tk 的 playlist / 密钥 URL。
+ * 分片 URL 不再带票（稳定可缓存）；分片鉴权走 x-play-token 或目录 cookie。
+ */
 function applyToken(url: string, token: string): string {
   if (!token) return url;
   try {
@@ -255,8 +258,7 @@ export class PlayerEngine {
     };
 
     /**
-     * 令牌是随 manifest 一起烤进分片 URL 的，续签后必须把新令牌换进去。
-     * xhrSetup 拿不到可写的 URL，所以这里包一层 loader 在发请求前改写 context.url。
+     * playlist URL 上的 tk 续签后要换新票；分片 URL 不带 tk，靠请求头带同一张目录票。
      */
     class TokenLoader extends BaseLoader {
       override load(
@@ -270,6 +272,10 @@ export class PlayerEngine {
     }
 
     return {
+      xhrSetup(xhr) {
+        const token = getToken();
+        if (token) xhr.setRequestHeader('x-play-token', token);
+      },
       // 解封装与解密放到 worker 线程，主线程只做渲染，滚动时不掉帧。
       enableWorker: true,
       // 播放列表解析完立刻预取首片，不等 play() 调用。
