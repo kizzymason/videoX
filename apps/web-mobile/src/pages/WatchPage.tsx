@@ -52,6 +52,8 @@ export function WatchPage() {
       previewSeconds: ticket.previewSeconds,
       resumeSeconds: ticket.resumeSeconds,
       spriteVttUrl: ticket.spriteVttUrl,
+      // 字幕跟票据无关，挂在详情上以免续签时丢掉
+      captions: video.captions,
       poster: video.posterUrl,
       title: video.title,
       durationSeconds: video.durationSeconds,

@@ -1,5 +1,6 @@
 import * as React from 'react';
 import {
+  Captions,
   Gauge,
   Maximize,
   Minimize,
@@ -18,6 +19,7 @@ import { PLAYBACK_RATES } from '../../core/engine.js';
 import { usePlayer, type UsePlayerOptions } from '../../react/use-player.js';
 import { ProgressBar } from '../shared/progress-bar.js';
 import { ErrorVeil, GateVeil, LoadingVeil } from '../shared/overlays.js';
+import { useCaptions } from '../shared/use-captions.js';
 
 export interface DesktopPlayerProps extends UsePlayerOptions {
   poster?: string | null;
@@ -47,10 +49,12 @@ export function DesktopPlayer({
   ...playerOptions
 }: DesktopPlayerProps) {
   const { engine, snapshot, videoRef, containerRef, spriteCues } = usePlayer(playerOptions);
+  const captions = useCaptions(playerOptions.source?.captions, videoRef);
+  const hasCaptions = (playerOptions.source?.captions?.length ?? 0) > 0;
 
   const [controlsVisible, setControlsVisible] = React.useState(true);
   const [scrubbing, setScrubbing] = React.useState(false);
-  const [menu, setMenu] = React.useState<'none' | 'rate' | 'quality'>('none');
+  const [menu, setMenu] = React.useState<'none' | 'rate' | 'quality' | 'captions'>('none');
   const hideTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const keepVisible = React.useCallback(() => {
@@ -102,7 +106,21 @@ export function DesktopPlayer({
         poster={poster ?? undefined}
         onClick={() => engine.togglePlay()}
         crossOrigin="use-credentials"
-      />
+      >
+        {captions.tracksReady
+          ? captions.tracks.map((track) => (
+              <track
+                key={track.lang}
+                kind="subtitles"
+                src={track.src}
+                srcLang={track.lang}
+                label={captions.labelFor(track.lang)}
+              />
+            ))
+          : null}
+      </video>
+      {/* 白字薄黑影，不要 karaoke 底框。cue 只能画在 video 里，叠在进度条上方靠原生定位。 */}
+      <style>{`video::cue{color:#fff;background:transparent;text-shadow:0 1px 2px rgba(0,0,0,.85),0 0 6px rgba(0,0,0,.4)}`}</style>
 
       {/* 封面在首帧出来之前顶上，避免黑屏空窗 */}
       {poster && !snapshot.hasFirstFrame ? (
@@ -189,6 +207,41 @@ export function DesktopPlayer({
 
           {title ? (
             <span className="mr-2 max-w-[38%] truncate text-[13px] text-white/60">{title}</span>
+          ) : null}
+
+          {/* 字幕：没轨就不露按钮，避免空菜单 */}
+          {hasCaptions ? (
+            <Menu
+              open={menu === 'captions'}
+              onOpenChange={(open) => setMenu(open ? 'captions' : 'none')}
+              trigger={
+                <ControlButton label="字幕" asSpan>
+                  <Captions className="size-5" />
+                </ControlButton>
+              }
+            >
+              <MenuItem
+                active={captions.selected === 'off'}
+                onClick={() => {
+                  captions.setSelected('off');
+                  setMenu('none');
+                }}
+              >
+                关闭
+              </MenuItem>
+              {(playerOptions.source?.captions ?? []).map((track) => (
+                <MenuItem
+                  key={track.lang}
+                  active={captions.selected === track.lang}
+                  onClick={() => {
+                    captions.setSelected(track.lang);
+                    setMenu('none');
+                  }}
+                >
+                  {captions.labelFor(track.lang)}
+                </MenuItem>
+              ))}
+            </Menu>
           ) : null}
 
           {/* 倍速 */}
