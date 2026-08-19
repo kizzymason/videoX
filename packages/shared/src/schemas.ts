@@ -49,7 +49,10 @@ const passwordSchema = z
   .regex(/[0-9]/, '密码需包含数字');
 
 export const registerSchema = z.object({
-  email: z.string().email('邮箱格式不正确').max(160),
+  email: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : typeof value === 'string' ? value.trim() : value),
+    z.string().email('邮箱格式不正确').max(160).optional(),
+  ),
   username: usernameSchema,
   password: passwordSchema,
   displayName: z.string().min(1).max(32).optional(),
