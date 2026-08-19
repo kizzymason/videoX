@@ -98,6 +98,7 @@ async function recall(userId: string | null, excludeIds: string[], limit: number
       FROM videos v
       WHERE v.status IN ('ready','partially_ready') AND v.visibility = 'public'
         AND (v.published_at IS NULL OR v.published_at <= now())
+        AND coalesce(v.kind,'vod') = 'vod'
         AND NOT (v.id = ANY(${uuidArray(excludeIds)}))
       ORDER BY (v.view_count + v.like_count * 5)
                / power(extract(epoch FROM (now() - coalesce(v.published_at, v.created_at))) / 3600 + 2, 1.2) DESC
@@ -113,6 +114,7 @@ async function recall(userId: string | null, excludeIds: string[], limit: number
       FROM videos v
       WHERE v.status IN ('ready','partially_ready') AND v.visibility = 'public'
         AND (v.published_at IS NULL OR v.published_at <= now())
+        AND coalesce(v.kind,'vod') = 'vod'
         AND NOT (v.id = ANY(${uuidArray(excludeIds)}))
     ),
     tag_hits AS (
