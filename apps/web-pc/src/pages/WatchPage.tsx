@@ -197,6 +197,7 @@ export function WatchPage() {
                 poster={video.posterUrl}
                 title={video.title}
                 autoplay
+                muted={false}
                 loggedIn={Boolean(user)}
                 renewTicket={async (id) => {
                   const renewed = await contentApi.renewTicket(id);

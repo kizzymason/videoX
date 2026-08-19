@@ -32,7 +32,7 @@ export function CategoriesTab() {
 
   return (
     <>
-      <AppHeader title="分类" showSearch />
+      <AppHeader title="频道" showSearch />
       <div className="flex min-h-0 flex-1">
         <div className="tab-scroll w-[88px] shrink-0 border-r border-border bg-muted/30">
           {(categories ?? []).map((category) => (
@@ -87,7 +87,7 @@ export function CategoryPage() {
 
   return (
     <>
-      <AppHeader back title={category?.name ?? '分类'} showSearch />
+      <AppHeader back title={category?.name ?? '频道'} showSearch />
       <PullToRefresh onRefresh={() => query.refetch()}>
         <MasonryFeed
           videos={videos}

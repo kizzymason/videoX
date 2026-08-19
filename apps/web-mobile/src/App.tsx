@@ -12,6 +12,7 @@ import { FavoritesPage, FollowingPage, HistoryPage, ProfilePage } from './pages/
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { SearchPage } from './pages/SearchPage';
+import { AuthGatePage } from './pages/AuthGatePage';
 import { prefetchWatchPage } from './lib/prefetch-watch';
 
 const WatchPage = React.lazy(() => import('./pages/WatchPage').then((m) => ({ default: m.WatchPage })));
@@ -168,6 +169,7 @@ export function App() {
         <Route path="channel/:username" element={<ChannelPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
+        <Route path="auth-required" element={<AuthGatePage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route
           path="watch/:idOrSlug"

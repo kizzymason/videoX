@@ -9,12 +9,12 @@ import { Topbar } from './Topbar';
 export function AppShell() {
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
   const location = useLocation();
+  const fullBleed = location.pathname.startsWith('/shorts');
 
   React.useEffect(() => {
     track('pageview');
-    // 路由切换后滚回顶部，SPA 里不这么做会保留上一页的滚动位置。
-    window.scrollTo({ top: 0 });
-  }, [location.pathname, location.search]);
+    if (!fullBleed) window.scrollTo({ top: 0 });
+  }, [fullBleed, location.pathname, location.search]);
 
   return (
     <TooltipProvider>
@@ -22,12 +22,16 @@ export function AppShell() {
         <Sidebar />
         <div className={cn('flex min-h-screen flex-col transition-[padding] duration-200', collapsed ? 'pl-16' : 'pl-60')}>
           <Topbar />
-          <main className="flex-1">
-            <div key={location.pathname} className="vx-page-enter">
+          <main className={cn('flex-1', fullBleed && 'min-h-0 overflow-hidden')}>
+            {fullBleed ? (
               <Outlet />
-            </div>
+            ) : (
+              <div key={location.pathname} className="vx-page-enter">
+                <Outlet />
+              </div>
+            )}
           </main>
-          <Footer />
+          {fullBleed ? null : <Footer />}
         </div>
       </div>
     </TooltipProvider>

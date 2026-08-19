@@ -97,6 +97,7 @@ export class PlayerEngine {
   private resumeTarget = 0;
   private destroyed = false;
   private detachFns: Array<() => void> = [];
+  private suppressMutePersist = false;
 
   constructor(options: PlayerEngineOptions = {}) {
     this.options = options;
@@ -137,12 +138,15 @@ export class PlayerEngine {
     this.video = video;
 
     video.volume = this.snapshot.volume;
-    video.muted = this.snapshot.muted || Boolean(this.options.muted);
+    video.muted = this.options.muted ?? this.snapshot.muted;
     video.playbackRate = this.snapshot.playbackRate;
     video.preload = 'auto';
-    // 移动端必须内联播放，否则 iOS 会强制拉起系统全屏播放器。
+    // 移动端必须内联播放，否则 iOS Safari 会强制拉起系统全屏播放器。
     video.setAttribute('playsinline', '');
     video.setAttribute('webkit-playsinline', '');
+    // attach 时改 muted 发生在监听器挂上之前，立刻写回 snapshot，避免按钮显示「有声」但片是静音。
+    this.patch({ volume: video.volume, muted: video.muted });
+    if (this.options.muted !== undefined) prefs.setMuted(video.muted);
 
     const on = <K extends keyof HTMLVideoElementEventMap>(
       type: K,
@@ -175,7 +179,7 @@ export class PlayerEngine {
     on('ratechange', () => this.patch({ playbackRate: video.playbackRate }));
     on('volumechange', () => {
       prefs.setVolume(video.volume);
-      prefs.setMuted(video.muted);
+      if (!this.suppressMutePersist) prefs.setMuted(video.muted);
       this.patch({ volume: video.volume, muted: video.muted });
     });
     on('progress', () => this.patch({ bufferedTo: this.bufferedEnd() }));
@@ -568,11 +572,14 @@ export class PlayerEngine {
     } catch (err) {
       // 自动播放被策略拦截时，静音重试一次是浏览器普遍认可的兜底。
       if ((err as Error)?.name === 'NotAllowedError' && !video.muted) {
+        this.suppressMutePersist = true;
         video.muted = true;
         try {
           await video.play();
         } catch {
           this.patch({ paused: true });
+        } finally {
+          this.suppressMutePersist = false;
         }
       }
     }

@@ -29,8 +29,8 @@ export function Topbar() {
   const setTheme = useUiStore((s) => s.setTheme);
 
   return (
-    <header className="vx-chrome-topbar sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-background/85 px-6 backdrop-blur-md">
-      <SearchBox className="max-w-xl flex-1" />
+    <header className="vx-chrome-topbar sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background/85 px-6 backdrop-blur-md">
+      <SearchBox className="max-w-2xl flex-1" />
 
       <div className="ml-auto flex items-center gap-2">
         <div className="flex items-center rounded-lg border border-border p-0.5">
@@ -48,11 +48,11 @@ export function Topbar() {
               title={label}
               onClick={() => setTheme(value)}
               className={cn(
-                'grid size-7 place-items-center rounded-md transition-colors',
+                'grid size-8 place-items-center rounded-md transition-colors',
                 theme === value ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              <Icon className="size-3.5" />
+              <Icon className="size-4" />
             </button>
           ))}
         </div>
@@ -94,14 +94,13 @@ export function Topbar() {
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
-          <>
-            <Button variant="ghost" size="sm" onClick={() => openAuth('login', location.pathname)}>
-              登录
-            </Button>
-            <Button size="sm" onClick={() => openAuth('register', location.pathname)}>
-              注册
-            </Button>
-          </>
+          <Button
+            size="sm"
+            className="rounded-md bg-foreground px-4 text-background hover:bg-foreground/90"
+            onClick={() => openAuth('login', location.pathname)}
+          >
+            登录
+          </Button>
         )}
       </div>
     </header>
