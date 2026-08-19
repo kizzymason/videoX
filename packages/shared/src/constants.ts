@@ -38,6 +38,10 @@ export type VideoVisibility = (typeof VIDEO_VISIBILITIES)[number];
 export const ACCESS_LEVELS = ['free', 'login', 'vip'] as const;
 export type AccessLevel = (typeof ACCESS_LEVELS)[number];
 
+/** 内容形态。目录用 orientation/kind 分流；无独立 kind 列，探测前用占位宽高。 */
+export const VIDEO_KINDS = ['shorts', 'vod'] as const;
+export type VideoKind = (typeof VIDEO_KINDS)[number];
+
 export const TRANSCODE_JOB_STATUSES = [
   'queued',
   'probing',
