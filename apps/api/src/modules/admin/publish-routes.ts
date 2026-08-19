@@ -6,7 +6,7 @@ import { db, t } from '../../core/db.js';
 import { AppError } from '../../core/errors.js';
 import { asyncHandler, ok } from '../../core/respond.js';
 import { requireAdmin, requireAuth } from '../../middleware/auth.js';
-import { params, validate } from '../../middleware/validate.js';
+import { body, params, validate } from '../../middleware/validate.js';
 import { refreshCategoryCounts, requireVideo } from '../videos/service.js';
 import { audit } from './audit.js';
 import { invalidateMediaCache } from '../media/routes.js';
@@ -16,6 +16,7 @@ export const publishGateRouter: Router = Router();
 publishGateRouter.use(requireAuth, requireAdmin);
 
 const idParam = z.object({ id: z.string().min(1).max(64) });
+const rejectBody = z.object({ reason: z.string().trim().max(500).optional() });
 
 publishGateRouter.post(
   '/videos/:id/approve',
@@ -42,9 +43,10 @@ publishGateRouter.post(
 
 publishGateRouter.post(
   '/videos/:id/reject',
-  validate({ params: idParam }),
+  validate({ params: idParam, body: rejectBody }),
   asyncHandler(async (req, res) => {
     const { id } = params<{ id: string }>(req);
+    const { reason } = body<{ reason?: string }>(req);
     const video = await requireVideo(id);
 
     const [updated] = await db
@@ -55,7 +57,7 @@ publishGateRouter.post(
 
     await refreshCategoryCounts([video.categoryId]);
     invalidateMediaCache(video.id);
-    await audit(req, 'video.reject', { type: 'video', id: video.id });
+    await audit(req, 'video.reject', { type: 'video', id: video.id }, reason ? { reason } : undefined);
     ok(res, updated, '已拒绝，视频不进入前台');
   }),
 );
