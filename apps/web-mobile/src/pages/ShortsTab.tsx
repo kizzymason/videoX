@@ -8,6 +8,10 @@ import { contentApi, socialApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
 import { track } from '../lib/analytics';
 
+/**
+ * Shorts：全屏竖滑。数据走 GET /api/videos/shorts。
+ * 顶/底安全区都铺黑，离开由 App.applyChrome 卸回亮色。封面满屏，不挂中间播放按钮。
+ */
 export function ShortsTab() {
   const query = useInfiniteQuery({
     queryKey: ['shorts'],
@@ -27,6 +31,8 @@ export function ShortsTab() {
 
   return (
     <div className="fixed inset-0 z-30 bg-black text-white">
+      {/* 顶部安全区实色，跟底栏同进同出 */}
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-50 h-[env(safe-area-inset-top)] bg-black" />
       <div className="pt-safe pointer-events-none absolute inset-x-0 top-0 z-10 px-3 py-2">
         <p className="text-sm font-medium text-white">Shorts</p>
       </div>
@@ -76,8 +82,16 @@ function ShortsPage({ video }: { video: VideoSummary }) {
           ) : null}
         </div>
         <div className="pointer-events-auto flex shrink-0 flex-col items-center gap-4 text-white">
-          <ShortsAction icon={Heart} label={formatCount(video.likeCount)} onClick={() => void socialApi.like(video.id).catch(() => undefined)} />
-          <ShortsAction icon={Bookmark} label="收藏" onClick={() => void socialApi.favorite(video.id).catch(() => undefined)} />
+          <ShortsAction
+            icon={Heart}
+            label={formatCount(video.likeCount)}
+            onClick={() => void socialApi.like(video.id).catch(() => undefined)}
+          />
+          <ShortsAction
+            icon={Bookmark}
+            label="收藏"
+            onClick={() => void socialApi.favorite(video.id).catch(() => undefined)}
+          />
           <ShortsAction
             icon={Share2}
             label="分享"
