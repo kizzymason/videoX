@@ -12,6 +12,7 @@ import { sanitizeKey } from '../storage/driver.js';
 import { getSiteSettings } from '../settings/service.js';
 import { evaluateGate, findVideoByIdOrSlug } from '../videos/service.js';
 import {
+  PLAY_TOKEN_COOKIE,
   PLAY_TOKEN_PARAM,
   registerStream,
   requirePlayToken,
@@ -25,6 +26,17 @@ import {
 } from './manifest.js';
 
 export const mediaRouter: Router = Router();
+
+function setDirectoryPlayCookie(res: Response, videoId: string, token: string, exp: number): void {
+  const maxAge = Math.max(0, exp * 1000 - Date.now());
+  res.cookie(PLAY_TOKEN_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: env.isProd,
+    path: `/media/hls/${videoId}/`,
+    maxAge,
+  });
+}
 
 /** 微缓存：同一视频的元数据在 HLS 请求里被反复读取，缓存 10 秒显著降低库压。 */
 const videoCache = new Map<string, { row: Awaited<ReturnType<typeof findVideoByIdOrSlug>>; expiresAt: number }>();
@@ -151,7 +163,8 @@ mediaRouter.get(
       throw AppError.notFound('播放列表尚未生成，请稍后再试');
     }
 
-    const token = String(req.query[PLAY_TOKEN_PARAM] ?? '');
+    const token = String(req.query[PLAY_TOKEN_PARAM] ?? req.headers['x-play-token'] ?? '');
+    setDirectoryPlayCookie(res, videoId, token, claims.exp);
     res.set(MANIFEST_CACHE_HEADERS);
     setCors(res);
     res.type('application/vnd.apple.mpegurl').send(injectTokenIntoPlaylist(playlist, token));
@@ -186,7 +199,8 @@ mediaRouter.get(
       throw AppError.notFound('该清晰度暂不可用');
     }
 
-    const token = String(req.query[PLAY_TOKEN_PARAM] ?? '');
+    const token = String(req.query[PLAY_TOKEN_PARAM] ?? req.headers['x-play-token'] ?? '');
+    setDirectoryPlayCookie(res, videoId, token, claims.exp);
     res.set(MANIFEST_CACHE_HEADERS);
     setCors(res);
     res

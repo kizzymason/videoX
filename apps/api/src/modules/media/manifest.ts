@@ -1,15 +1,22 @@
 import { PLAY_TOKEN_PARAM } from './play-token.js';
 
 /**
- * 给 m3u8 中的每一条相对 URI 追加播放凭证。
+ * 给 m3u8 里的 playlist / 密钥 URI 追加同一张目录票。
  *
- * 这样做的意义在于：即便有人拿到了 master.m3u8 的内容，里面的分片地址也是
- * 带签名且会过期的，无法长期外链。播放器在续签时会重新拉取 manifest。
+ * 分片（.m4s/.ts/.mp4/.m4a）不加 query，URL 稳定后才能被缓存。
+ * 分片鉴权走 cookie 或 x-play-token，不再各签各的。
  */
+function isHlsSegmentUri(uri: string): boolean {
+  const pathPart = uri.split('#')[0]!.split('?')[0]!;
+  return /\.(m4s|ts|mp4|m4a)$/i.test(pathPart);
+}
+
 export function injectTokenIntoPlaylist(playlist: string, token: string): string {
   const append = (uri: string): string => {
     // 绝对地址（CDN 直链）不动，签名由 CDN 侧策略负责。
     if (/^https?:\/\//i.test(uri)) return uri;
+    // 分片保持裸 URL，热分片才能命中缓存。
+    if (isHlsSegmentUri(uri)) return uri;
     const [pathPart, hashPart] = uri.split('#');
     const separator = pathPart.includes('?') ? '&' : '?';
     const withToken = `${pathPart}${separator}${PLAY_TOKEN_PARAM}=${encodeURIComponent(token)}`;
@@ -90,9 +97,9 @@ export const MANIFEST_CACHE_HEADERS = {
 } as const;
 
 /**
- * 分片本身内容不可变，可以长缓存；但因为 URL 上带了会过期的 token，
- * 实际有效期不会超过 token 寿命，所以标成 private 且时长取较小值。
+ * 分片内容不可变，且 URL 不再带票，允许共享缓存。
+ * 鉴权在 cookie / 请求头，不靠 query。
  */
 export const SEGMENT_CACHE_HEADERS = {
-  'Cache-Control': 'private, max-age=600, immutable',
+  'Cache-Control': 'public, max-age=3600, immutable',
 } as const;

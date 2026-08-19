@@ -2,7 +2,8 @@
  * HLS 防盗链令牌。
  *
  * 令牌形如 `v1.<payload>.<signature>`，payload 是 base64url 后的紧凑字段串。
- * 每一个 manifest / 分片 / 密钥请求都会重新校验，不存在「进门后随便逛」的窗口。
+ * 票签的是 `/hls/:videoId/*` 这一路，不是每个 .m4s/.ts。
+ * master / playlist / 密钥仍要验这张票；分片复用同一张未过期的目录票。
  *
  * 该模块只能在 Node 环境使用（依赖 node:crypto），因此单独作为
  * `@videox/shared/play-token` 子路径导出，避免被浏览器构建拉进去。
@@ -26,6 +27,8 @@ export interface PlayTokenClaims {
   nonce: string;
   /** 授权范围：full = 完整播放，preview = 仅试看片段 */
   scope: 'full' | 'preview';
+  /** 目录通配，如 /hls/<videoId>/*，一张票覆盖该视频全部 HLS 路径 */
+  path: string;
 }
 
 export type PlayTokenFailure =
@@ -35,7 +38,8 @@ export type PlayTokenFailure =
   | 'expired'
   | 'video_mismatch'
   | 'ip_mismatch'
-  | 'ua_mismatch';
+  | 'ua_mismatch'
+  | 'path_mismatch';
 
 export type PlayTokenVerification =
   | { ok: true; claims: PlayTokenClaims }
@@ -70,6 +74,23 @@ export function hashUserAgent(userAgent: string | undefined | null): string {
     .slice(0, 16);
 }
 
+/** 一张票覆盖该视频 HLS 目录下的 master / 分档列表 / 分片 / 密钥。 */
+export function playTokenDirectory(videoId: string): string {
+  return `/hls/${videoId}/*`;
+}
+
+/** tokenPath `/hls/id/*` 覆盖 `/hls/id` 及其子路径，不覆盖其它 videoId。 */
+export function pathMatchesPlayToken(tokenPath: string, requestPath: string): boolean {
+  if (!tokenPath || !requestPath) return false;
+  if (tokenPath === requestPath) return true;
+  if (tokenPath.endsWith('/*')) {
+    const prefix = tokenPath.slice(0, -1);
+    const dir = tokenPath.slice(0, -2);
+    return requestPath === dir || requestPath.startsWith(prefix);
+  }
+  return false;
+}
+
 function serializeClaims(claims: PlayTokenClaims): string {
   return [
     claims.videoId,
@@ -79,17 +100,28 @@ function serializeClaims(claims: PlayTokenClaims): string {
     claims.uaHash,
     claims.nonce,
     claims.scope,
+    claims.path,
   ].join('|');
 }
 
 function parseClaims(raw: string): PlayTokenClaims | null {
   const parts = raw.split('|');
-  if (parts.length !== 7) return null;
-  const [videoId, userId, exp, ipPrefix, uaHash, nonce, scope] = parts;
+  // 7 段是旧票（无 path），按 videoId 补目录，滚动发布时旧票仍能用。
+  if (parts.length !== 7 && parts.length !== 8) return null;
+  const [videoId, userId, exp, ipPrefix, uaHash, nonce, scope, pathPart] = parts;
   const expNum = Number(exp);
   if (!videoId || !userId || !Number.isFinite(expNum)) return null;
   if (scope !== 'full' && scope !== 'preview') return null;
-  return { videoId, userId, exp: expNum, ipPrefix, uaHash, nonce, scope };
+  return {
+    videoId,
+    userId,
+    exp: expNum,
+    ipPrefix,
+    uaHash,
+    nonce,
+    scope,
+    path: pathPart || playTokenDirectory(videoId),
+  };
 }
 
 function sign(payload: string, secret: string): string {
@@ -124,6 +156,7 @@ export function signPlayToken(input: SignPlayTokenInput): SignedPlayToken {
     uaHash: hashUserAgent(input.userAgent),
     nonce: randomBytes(6).toString('base64url'),
     scope: input.scope ?? 'full',
+    path: playTokenDirectory(input.videoId),
   };
   const payload = b64urlEncode(serializeClaims(claims));
   const signature = sign(`${PLAY_TOKEN_VERSION}.${payload}`, input.secret);
@@ -145,6 +178,8 @@ export interface VerifyPlayTokenInput {
   ipPrefixParts?: number;
   /** 允许的时钟偏移（秒） */
   clockSkewSeconds?: number;
+  /** 传入则令牌 path 必须覆盖该 HLS 路径（目录票） */
+  expectedPath?: string;
 }
 
 export function verifyPlayToken(input: VerifyPlayTokenInput): PlayTokenVerification {
@@ -184,6 +219,9 @@ export function verifyPlayToken(input: VerifyPlayTokenInput): PlayTokenVerificat
   }
   if (claims.uaHash && hashUserAgent(input.userAgent) !== claims.uaHash) {
     return { ok: false, reason: 'ua_mismatch' };
+  }
+  if (input.expectedPath && !pathMatchesPlayToken(claims.path, input.expectedPath)) {
+    return { ok: false, reason: 'path_mismatch' };
   }
 
   return { ok: true, claims };

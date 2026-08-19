@@ -5,6 +5,8 @@ import {
   hashUserAgent,
   normalizeIpPrefix,
   playTokenRemainingRatio,
+  pathMatchesPlayToken,
+  playTokenDirectory,
   signPlayToken,
   verifyPlayToken,
 } from '@videox/shared/play-token';
@@ -61,6 +63,15 @@ describe('playToken 签发与校验', () => {
 
   it('ttl 有 30 秒下限，避免签出立刻就过期的票', () => {
     expect(sign({ ttlSeconds: 1 }).ttlSeconds).toBe(30);
+  });
+
+  it('票签的是 /hls/:videoId/*，同一张票覆盖该视频下任意分片路径', () => {
+    const { token, claims } = sign();
+    expect(claims.path).toBe('/hls/video-1/*');
+    expect(verify(token, { expectedPath: '/hls/video-1/master.m3u8' }).ok).toBe(true);
+    expect(verify(token, { expectedPath: '/hls/video-1/360p/seg0.ts' }).ok).toBe(true);
+    expect(verify(token, { expectedPath: '/hls/video-1/720p/init.mp4' }).ok).toBe(true);
+    expect(verify(token, { expectedPath: '/hls/video-1/key' }).ok).toBe(true);
   });
 });
 
@@ -127,6 +138,12 @@ describe('playToken 拒绝非法请求', () => {
     const result = verify(token, { userAgent: 'curl/8.5.0' });
     expect(result).toEqual({ ok: false, reason: 'ua_mismatch' });
   });
+
+  it('拿 A 视频的目录票去请求 B 视频路径会被拒', () => {
+    const { token } = sign({ videoId: 'video-A' });
+    const result = verify(token, { expectedVideoId: 'video-A', expectedPath: '/hls/video-B/360p/seg0.ts' });
+    expect(result).toEqual({ ok: false, reason: 'path_mismatch' });
+  });
 });
 
 describe('playToken 辅助函数', () => {
@@ -136,6 +153,13 @@ describe('playToken 辅助函数', () => {
     expect(normalizeIpPrefix('2001:db8:85a3:1:2:3:4:5', 3)).toBe('2001:db8:85a3:1');
     expect(normalizeIpPrefix('203.0.113.42', 0)).toBe('');
     expect(normalizeIpPrefix(null, 3)).toBe('');
+  });
+
+  it('pathMatchesPlayToken 按目录通配，不串视频', () => {
+    expect(playTokenDirectory('video-1')).toBe('/hls/video-1/*');
+    expect(pathMatchesPlayToken('/hls/video-1/*', '/hls/video-1/360p/a.ts')).toBe(true);
+    expect(pathMatchesPlayToken('/hls/video-1/*', '/hls/video-1')).toBe(true);
+    expect(pathMatchesPlayToken('/hls/video-1/*', '/hls/video-2/360p/a.ts')).toBe(false);
   });
 
   it('hashUserAgent 稳定且定长', () => {
