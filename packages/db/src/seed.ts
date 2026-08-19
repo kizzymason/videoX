@@ -20,7 +20,7 @@ function randomCode(prefix: string): string {
 const CATEGORIES = [
   { slug: 'featured', name: '精选推荐', icon: 'Sparkles', description: '编辑部精挑细选的高质量内容' },
   { slug: 'tech', name: '科技数码', icon: 'Cpu', description: '硬件评测、软件教程与前沿科技' },
-  { slug: 'film', name: '影视剪辑', icon: 'Clapperboard', description: '影视混剪、解说与幕后花絫' },
+  { slug: 'film', name: '影视剪辑', icon: 'Clapperboard', description: '影视混剪、解说与幕后花絮' },
   { slug: 'music', name: '音乐现场', icon: 'Music', description: 'Live 演出、翻唱与原创音乐' },
   { slug: 'game', name: '游戏竞技', icon: 'Gamepad2', description: '实况、攻略与赛事集锦' },
   { slug: 'life', name: '生活方式', icon: 'Coffee', description: '美食、旅行与日常 Vlog' },
@@ -336,7 +336,7 @@ async function main() {
       systemPrompt:
         '你是一个视频内容运营专家。你会收到一批视频的标题、简介、分类、标签与基础互动数据，请为每个视频评估它作为首页推荐位的价值。',
       userPromptTemplate:
-        '请对下面的视频列表打分。评分范围 0-100，综合考虑：标题吸引力、内容稀缺度、与分类的匹配度、互动数据的健康度。\n\n严格只返回 JSON 数组，每项形如 {"id":"<视频ID>","score":<0-100 的数字>,"reason":"<不超过 30 字的中文理由>"}，不要输出任何额外文字。\n\n视频列表：\n{{videos}}',
+        '请对下面的视频列表打分。评分范围 0-100，综合考虑：标题吸引力、内容稀缺度、与分类的匹配度、互动数据的健康度。\n\n严格只返回 JSON 数组，每项形如 {"id":"<\u89c6\u9891ID>","score":<0-100 的数字>,"reason":"<\u4e0d\u8d85\u8fc7 30 字的中文理由>"}，不要输出任何额外文字。\n\n视频列表：\n{{videos}}',
       temperature: 0.2,
       batchSize: 10,
       isActive: true,
