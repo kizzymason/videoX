@@ -78,6 +78,7 @@ export function VideosPage() {
         visibility: visibility === 'all' ? undefined : visibility,
         categoryId: categoryId === 'all' ? undefined : categoryId,
         sort: 'latest',
+        kind: 'vod',
       }),
     placeholderData: keepPreviousData,
   });

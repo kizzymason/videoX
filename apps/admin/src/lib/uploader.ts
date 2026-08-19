@@ -31,6 +31,7 @@ export interface UploadMeta {
   tags?: string[];
   accessLevel: string;
   visibility: string;
+  kind: 'shorts' | 'vod';
 }
 
 async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
@@ -139,6 +140,7 @@ export async function runUpload(
       tags: meta.tags?.length ? meta.tags : undefined,
       accessLevel: meta.accessLevel,
       visibility: meta.visibility,
+      kind: meta.kind,
     });
 
     update({

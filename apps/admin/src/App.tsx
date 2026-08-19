@@ -6,6 +6,7 @@ import { useUiStore } from './stores/ui';
 import { AppShell } from './components/layout/AppShell';
 import { LoginPage } from './pages/LoginPage';
 import { VideosPage } from './pages/VideosPage';
+import { ShortsPage } from './pages/ShortsPage';
 import { TranscodePage } from './pages/TranscodePage';
 import { CommentsPage } from './pages/CommentsPage';
 import { CategoriesPage, TagsPage } from './pages/CategoriesPage';
@@ -65,6 +66,7 @@ export function App() {
           <Route index element={<DashboardPage />} />
           <Route path="insights" element={<InsightsPage />} />
           <Route path="videos" element={<VideosPage />} />
+          <Route path="shorts" element={<ShortsPage />} />
           <Route path="upload" element={<UploadPage />} />
           <Route path="transcode" element={<TranscodePage />} />
           <Route path="comments" element={<CommentsPage />} />
