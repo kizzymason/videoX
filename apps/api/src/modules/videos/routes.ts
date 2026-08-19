@@ -134,7 +134,7 @@ videosRouter.get(
 
     const ids = rows.map((r) => r.id);
     if (ids.length === 0) {
-      ok(res, [] satisfies VideoSummary[];
+      ok(res, [] satisfies VideoSummary[]);
       return;
     }
 
