@@ -1,4 +1,4 @@
-/** 竖屏片：高大于宽。宽高未知的不进 Shorts。 */
+/** 竖屏片：高大于宽。宽高未知的不进竖屏过滤。 */
 export function isVerticalVideo(video: {
   width: number | null;
   height: number | null;
@@ -6,10 +6,17 @@ export function isVerticalVideo(video: {
   return video.width != null && video.height != null && video.height > video.width;
 }
 
+export function isHorizontalVideo(video: {
+  width: number | null;
+  height: number | null;
+}): boolean {
+  return video.width != null && video.height != null && video.width >= video.height;
+}
+
 /**
- * 竖屏优先。竖屏可播条数为 0 时，Shorts 回落到任意已通过可播片。
- * 预览/冷启动没有竖屏种子时信息流不能空；一旦有竖屏，仍只出竖屏。
+ * Catalog type is videos.kind (vod | shorts), not width/height orientation.
+ * Empty Shorts inventory stays empty; never fall back to playable VOD.
  */
-export function shortsUsePlayableFallback(verticalTotal: number): boolean {
-  return verticalTotal === 0;
+export function shortsUsePlayableFallback(_verticalTotal: number): boolean {
+  return false;
 }

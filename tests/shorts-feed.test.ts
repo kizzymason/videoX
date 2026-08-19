@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isVerticalVideo, shortsUsePlayableFallback } from '@videox/shared';
+import { VIDEO_KINDS, isVerticalVideo, shortsUsePlayableFallback } from '@videox/shared';
 
 describe('Shorts 竖屏判定', () => {
   it('高大于宽才算竖屏', () => {
@@ -14,13 +14,17 @@ describe('Shorts 竖屏判定', () => {
   });
 });
 
-describe('Shorts 空竖屏回落', () => {
-  it('竖屏一条都没有时回落到可播片', () => {
-    expect(shortsUsePlayableFallback(0)).toBe(true);
-  });
-
-  it('有竖屏时仍只出竖屏', () => {
+describe('Shorts 空库存不回落', () => {
+  it('shortsUsePlayableFallback 始终为 false（目录用 kind，不用方向）', () => {
+    expect(shortsUsePlayableFallback(0)).toBe(false);
     expect(shortsUsePlayableFallback(1)).toBe(false);
     expect(shortsUsePlayableFallback(12)).toBe(false);
+  });
+});
+
+describe('VIDEO_KINDS', () => {
+  it('包含 vod 与 shorts', () => {
+    expect(VIDEO_KINDS).toContain('vod');
+    expect(VIDEO_KINDS).toContain('shorts');
   });
 });
