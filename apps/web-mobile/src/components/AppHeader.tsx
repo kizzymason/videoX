@@ -20,7 +20,7 @@ export function AppHeader({ title, back, showSearch, right, transparent, classNa
     <header
       className={cn(
         'pt-safe sticky top-0 z-30',
-        transparent ? 'bg-transparent' : 'border-b border-border bg-background/95 backdrop-blur-lg',
+        transparent ? 'bg-transparent' : 'border-b border-border bg-background',
         className,
       )}
     >

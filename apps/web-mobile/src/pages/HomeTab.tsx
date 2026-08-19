@@ -50,7 +50,7 @@ export function HomeTab() {
 
   return (
     <>
-      <header className="pt-safe sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur-lg">
+      <header className="pt-safe sticky top-0 z-30 border-b border-border bg-background">
         <div className="flex items-center gap-2 px-4 pt-4 pb-3">
           <h1 className="text-[20px] font-semibold tracking-tight">videoX</h1>
           <div className="flex-1" />
@@ -112,11 +112,11 @@ export function HomeTab() {
           {query.isLoading
             ? Array.from({ length: 6 }, (_, i) => (
                 <div key={i} className="overflow-hidden rounded-xl bg-muted">
-                  <div className="aspect-square" />
+                  <div className="aspect-[3/2]" />
                   <div className="h-10" />
                 </div>
               ))
-            : videos.map((video) => <MobileVideoCard key={video.id} video={video} aspect="1 / 1" />)}
+            : videos.map((video) => <MobileVideoCard key={video.id} video={video} aspect="3 / 2" />)}
         </div>
         <div ref={sentinelRef} className="h-8" />
       </PullToRefresh>
