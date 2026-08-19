@@ -32,6 +32,13 @@ function applyChrome(dark: boolean) {
   document.body.style.backgroundColor = color;
   const app = document.getElementById('root');
   if (app) app.style.backgroundColor = color;
+  let paint = document.getElementById('vx-chrome-paint');
+  if (!paint) {
+    paint = document.createElement('style');
+    paint.id = 'vx-chrome-paint';
+    document.head.appendChild(paint);
+  }
+  paint.textContent = `html,body,#root{background-color:${color}!important}`;
   let meta = document.querySelector('meta[name="theme-color"]');
   if (!meta) {
     meta = document.createElement('meta');
@@ -59,6 +66,11 @@ function TabLayout() {
           : 'flex min-h-0 flex-1 flex-col bg-background pb-[calc(3.5rem+env(safe-area-inset-bottom))]'
       }
     >
+      <div
+        aria-hidden
+        className={shorts ? 'fixed inset-x-0 top-0 z-40 bg-black' : 'fixed inset-x-0 top-0 z-40 bg-background'}
+        style={{ height: 'env(safe-area-inset-top, 0px)' }}
+      />
       <Outlet />
       <TabBar />
     </div>
@@ -100,7 +112,7 @@ export function App() {
     track('pageview');
   }, [location.pathname]);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const shorts = location.pathname.startsWith('/shorts');
     const dark =
       shorts ||
