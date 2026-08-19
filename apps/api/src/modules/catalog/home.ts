@@ -36,7 +36,7 @@ export async function getCatalogHome(options: { userId: string | null }): Promis
         AND (v.published_at IS NULL OR v.published_at <= now())
         AND coalesce(v.published_at, v.created_at) > now() - interval '7 days'
         AND v.kind = 'vod'
-        AND v.width is not null AND v.height is not null AND v.width >= v.height
+        AND (v.width is null OR v.height is null OR v.width >= v.height)
       ORDER BY v.view_count DESC, v.like_count DESC, coalesce(v.published_at, v.created_at) DESC
       LIMIT ${RAIL_SIZE}
     `),

@@ -55,7 +55,7 @@ videosRouter.get(
       kind?: 'vod' | 'shorts';
     }>(req);
 
-    // 首页点播目录不混 Shorts：忽略客户端 orientation/kind，强制横屏 + vod。
+    // 首页点播目录不混 Shorts：强制 kind=vod。横屏过滤对未知宽高放行（采集入库常无探测尺寸）。
     const result = await listVideos({ ...q, adminView: false, orientation: 'horizontal', kind: 'vod' });
 
     if (req.auth && result.items.length > 0) {

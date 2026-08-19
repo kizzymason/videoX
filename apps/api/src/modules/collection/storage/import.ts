@@ -99,8 +99,9 @@ export async function fromExternalImport(params: {
       hlsDir,
       posterUrl: typeof metadata.coverUrl === 'string' ? metadata.coverUrl : null,
       durationSeconds: typeof metadata.duration === 'number' ? Math.round(metadata.duration) : 0,
-      width: typeof metadata.width === 'number' ? metadata.width : null,
-      height: typeof metadata.height === 'number' ? metadata.height : null,
+      // 源站列表通常不带分辨率；缺省按 16:9 点播，避免首页横屏过滤把片子筛掉。
+      width: typeof metadata.width === 'number' ? metadata.width : 1920,
+      height: typeof metadata.height === 'number' ? metadata.height : 1080,
       publishedAt: params.autoPublish ? new Date() : null,
     })
     .returning();
