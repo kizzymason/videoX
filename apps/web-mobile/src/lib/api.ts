@@ -54,7 +54,7 @@ export const api = new ApiClient({
 export { ApiError };
 
 export const authApi = {
-  register: (body: { email: string; username: string; password: string; displayName?: string }) =>
+  register: (body: { username: string; password: string; email?: string; displayName?: string }) =>
     api.post<AuthSession>('/auth/register', body),
   login: (body: { identifier: string; password: string; remember?: boolean }) =>
     api.post<AuthSession>('/auth/login', body),

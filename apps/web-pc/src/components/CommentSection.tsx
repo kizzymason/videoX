@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Flag, Heart, MessageSquare, Pin, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -18,6 +18,7 @@ import {
 import { socialApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
 import { useAuthStore } from '../stores/auth';
+import { useAuthModalStore } from '../stores/auth-modal';
 import { InfiniteFooter } from './InfiniteFooter';
 
 const SORTS = [
@@ -129,14 +130,14 @@ function CommentComposer({
   onCancel?: () => void;
 }) {
   const [content, setContent] = React.useState('');
-  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const openAuth = useAuthModalStore((s) => s.openAuth);
 
   if (!user) {
     return (
       <div className="flex items-center justify-between gap-4 rounded-xl border border-border px-4 py-3 text-sm text-muted-foreground">
         登录后参与评论
-        <Button size="sm" onClick={() => navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`)}>
+        <Button size="sm" onClick={() => openAuth('login', location.pathname)}>
           登录
         </Button>
       </div>

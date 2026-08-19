@@ -8,7 +8,7 @@ interface AuthState {
   initializing: boolean;
   bootstrap: () => Promise<void>;
   login: (identifier: string, password: string, remember?: boolean) => Promise<void>;
-  register: (input: { email: string; username: string; password: string; displayName?: string }) => Promise<void>;
+  register: (input: { username: string; password: string; email?: string; displayName?: string }) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: CurrentUser | null) => void;
   refreshUser: () => Promise<void>;

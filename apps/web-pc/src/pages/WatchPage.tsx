@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { contentApi, socialApi } from '../lib/api';
 import { track } from '../lib/analytics';
 import { useAuthStore } from '../stores/auth';
+import { useAuthModalStore } from '../stores/auth-modal';
 import { useUiStore } from '../stores/ui';
 import { VideoCard, VideoCardSkeleton } from '../components/video/VideoCard';
 import { CommentSection } from '../components/CommentSection';
@@ -29,6 +30,7 @@ export function WatchPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const openAuth = useAuthModalStore((s) => s.openAuth);
   const autoplayNext = useUiStore((s) => s.autoplayNext);
   const setAutoplayNext = useUiStore((s) => s.setAutoplayNext);
 
@@ -145,8 +147,7 @@ export function WatchPage() {
 
   const requireLogin = (action: () => void) => {
     if (!user) {
-      toast.error('请先登录');
-      navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`);
+      openAuth('login', location.pathname);
       return;
     }
     action();
@@ -209,14 +210,14 @@ export function WatchPage() {
                 onEnded={handleEnded}
                 onNext={related[0] ? () => navigate(`/watch/${related[0]!.slug || related[0]!.id}`) : undefined}
                 onUnlock={() => navigate('/membership')}
-                onLogin={() => navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`)}
+                onLogin={() => openAuth('login', location.pathname)}
               />
             ) : (
               <PlayerPlaceholder
                 poster={video.posterUrl}
                 reason={blockedReason}
                 loading={ticketQuery.isLoading}
-                onLogin={() => navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`)}
+                onLogin={() => openAuth('login', location.pathname)}
                 onUnlock={() => navigate('/membership')}
               />
             )}
