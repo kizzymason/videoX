@@ -46,9 +46,9 @@ export const users = pgTable(
   'users',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    email: varchar('email', { length: 160 }).notNull(),
-    /** 小写化的邮箱，唯一索引建在它上面，避免大小写重复注册 */
-    emailNormalized: varchar('email_normalized', { length: 160 }).notNull(),
+    email: varchar('email', { length: 160 }),
+    /** 小写化的邮箱，唯一索引建在它上面；未填邮箱时为 null，允许多个空值 */
+    emailNormalized: varchar('email_normalized', { length: 160 }),
     username: varchar('username', { length: 32 }).notNull(),
     usernameNormalized: varchar('username_normalized', { length: 32 }).notNull(),
     passwordHash: text('password_hash').notNull(),

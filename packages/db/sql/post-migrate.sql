@@ -63,3 +63,7 @@ CREATE INDEX IF NOT EXISTS redeem_codes_unused_idx
 CREATE INDEX IF NOT EXISTS subscriptions_active_idx
   ON subscriptions (user_id, expires_at DESC)
   WHERE status = 'active';
+
+-- --- 注册：邮箱改为可选 ----------------------------------------------------
+ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+ALTER TABLE users ALTER COLUMN email_normalized DROP NOT NULL;

@@ -5,6 +5,7 @@ import { db, t, sqlRows } from '../../core/db.js';
 import { AppError, ErrorCode } from '../../core/errors.js';
 import { createRefreshToken, hashRefreshToken, signAccessToken } from './tokens.js';
 import { getSiteSettings } from '../settings/service.js';
+import { normalizeRegisterEmail, resolveDisplayName } from './register-input.js';
 
 // OWASP 推荐的 argon2id 参数，在 19MB 内存下单次约 50ms。
 const ARGON2_OPTIONS = { memoryCost: 19456, timeCost: 2, parallelism: 1 } as const;
@@ -15,7 +16,7 @@ export function toCurrentUser(user: UserRow): CurrentUser {
   const isVip = user.role === 'admin' || (user.vipExpiresAt !== null && user.vipExpiresAt.getTime() > Date.now());
   return {
     id: user.id,
-    email: user.email,
+    email: user.email ?? '',
     username: user.username,
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
@@ -65,7 +66,7 @@ export async function issueSession(user: UserRow, ctx: SessionContext) {
 }
 
 export async function registerUser(input: {
-  email: string;
+  email?: string;
   username: string;
   password: string;
   displayName?: string;
@@ -75,20 +76,22 @@ export async function registerUser(input: {
     throw new AppError({ message: '站点当前已关闭注册', code: ErrorCode.REGISTRATION_CLOSED, status: 403 });
   }
 
-  const emailNormalized = input.email.trim().toLowerCase();
+  const { email, emailNormalized } = normalizeRegisterEmail(input.email);
   const usernameNormalized = input.username.trim().toLowerCase();
 
   const existing = await db
     .select({ id: t.users.id, email: t.users.emailNormalized, username: t.users.usernameNormalized })
     .from(t.users)
     .where(
-      sql`${t.users.emailNormalized} = ${emailNormalized} OR ${t.users.usernameNormalized} = ${usernameNormalized}`,
+      emailNormalized
+        ? sql`${t.users.emailNormalized} = ${emailNormalized} OR ${t.users.usernameNormalized} = ${usernameNormalized}`
+        : eq(t.users.usernameNormalized, usernameNormalized),
     )
     .limit(1);
 
   if (existing.length > 0) {
     const hit = existing[0]!;
-    throw AppError.conflict(hit.email === emailNormalized ? '该邮箱已被注册' : '该用户名已被占用');
+    throw AppError.conflict(emailNormalized && hit.email === emailNormalized ? '该邮箱已被注册' : '该用户名已被占用');
   }
 
   const passwordHash = await hashPassword(input.password);
@@ -96,12 +99,12 @@ export async function registerUser(input: {
   const [user] = await db
     .insert(t.users)
     .values({
-      email: input.email.trim(),
+      email,
       emailNormalized,
       username: input.username.trim(),
       usernameNormalized,
       passwordHash,
-      displayName: input.displayName?.trim() || input.username.trim(),
+      displayName: resolveDisplayName(input.username, input.displayName),
     })
     .returning();
 
