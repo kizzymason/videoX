@@ -18,18 +18,22 @@ export function MobileVideoCard({
   video,
   className,
   progressPercent,
+  aspect,
 }: {
   video: VideoSummary;
   className?: string;
   progressPercent?: number;
+  /** 首页正方形瀑布流传 `1 / 1`。不传则按封面类型。 */
+  aspect?: string;
 }) {
   const poster = video.verticalPosterUrl ?? video.posterUrl;
+  const ratio = aspect ?? (video.verticalPosterUrl ? '3 / 4' : '16 / 9');
 
   return (
     <Link to={`/watch/${video.slug || video.id}`} className={cn('no-tap-highlight flex flex-col', className)}>
       <div
         className="relative w-full overflow-hidden rounded-xl bg-muted"
-        style={{ aspectRatio: video.verticalPosterUrl ? '3 / 4' : '16 / 9' }}
+        style={{ aspectRatio: ratio }}
       >
         {poster ? (
           <img src={poster} alt={video.title} loading="lazy" decoding="async" className="size-full object-cover" />
