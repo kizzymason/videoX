@@ -6,12 +6,16 @@ export function isVerticalVideo(video: {
   return video.width != null && video.height != null && video.height > video.width;
 }
 
-/** 点播：宽大于等于高。宽高未知的不进首页点播列表。 */
+/**
+ * 点播列表：已知竖屏才排除。
+ * 采集/热链入库经常没有探测宽高，未知尺寸按点收录，避免首页推荐/最新/热门空窗。
+ */
 export function isHorizontalVideo(video: {
   width: number | null;
   height: number | null;
 }): boolean {
-  return video.width != null && video.height != null && video.width >= video.height;
+  if (video.width == null || video.height == null) return true;
+  return video.width >= video.height;
 }
 
 /**

@@ -20,6 +20,12 @@ describe('点播横屏判定', () => {
     expect(isHorizontalVideo({ width: 1080, height: 1080 })).toBe(true);
     expect(isHorizontalVideo({ width: 1080, height: 1920 })).toBe(false);
   });
+
+  it('宽高未知的按点播收录，避免采集入库后首页空窗', () => {
+    expect(isHorizontalVideo({ width: null, height: null })).toBe(true);
+    expect(isHorizontalVideo({ width: null, height: 1080 })).toBe(true);
+    expect(isHorizontalVideo({ width: 1920, height: null })).toBe(true);
+  });
 });
 
 describe('Shorts 不回落点播', () => {

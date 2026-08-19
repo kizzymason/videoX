@@ -182,7 +182,10 @@ export function buildVideoFilters(options: ListVideosOptions): SQL[] {
   if (options.orientation === 'vertical') {
     filters.push(sql`${t.videos.width} is not null and ${t.videos.height} is not null and ${t.videos.height} > ${t.videos.width}`);
   } else if (options.orientation === 'horizontal') {
-    filters.push(sql`${t.videos.width} is not null and ${t.videos.height} is not null and ${t.videos.width} >= ${t.videos.height}`);
+    // 已知竖屏才排除。宽高为空（采集热链常见）仍进点播首页，不能再把列表筛空。
+    filters.push(
+      sql`(${t.videos.width} is null or ${t.videos.height} is null or ${t.videos.width} >= ${t.videos.height})`,
+    );
   }
   if (options.excludeIds?.length) {
     filters.push(sql`${t.videos.id} <> all(${uuidArray(options.excludeIds)})`);
