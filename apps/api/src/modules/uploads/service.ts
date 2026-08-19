@@ -14,6 +14,7 @@ import { getTranscodeQueue } from '../../core/queue.js';
 import { getStorage } from '../storage/service.js';
 import { StorageKeys } from '../storage/keys.js';
 import { generateUniqueSlug, syncVideoTags, refreshCategoryCounts } from '../videos/service.js';
+import { canReuseInstantAssets } from './access-level.js';
 
 export type UploadSessionRow = typeof t.uploadSessions.$inferSelect;
 
@@ -328,7 +329,7 @@ export async function enqueueTranscode(videoId: string, sourceKey: string, encry
   return job!.id;
 }
 
-/** 秒传：复用已有视频的转码产物，直接生成一条 ready 的新记录。 */
+/** 秒传：复用已有视频的转码产物，直接生成一条 ready 的新记录。仅同档同加密可走。 */
 export async function cloneFromExisting(params: {
   sourceVideoId: string;
   userId: string;
@@ -341,6 +342,9 @@ export async function cloneFromExisting(params: {
 }): Promise<{ videoId: string }> {
   const [source] = await db.select().from(t.videos).where(eq(t.videos.id, params.sourceVideoId)).limit(1);
   if (!source) throw AppError.notFound('源视频不存在');
+  if (!canReuseInstantAssets(source, params.accessLevel)) {
+    throw AppError.conflict('不能跨会员档秒传');
+  }
 
   const title = params.title?.trim() || source.title;
   const slug = await generateUniqueSlug(title);
@@ -381,6 +385,69 @@ export async function cloneFromExisting(params: {
   await refreshCategoryCounts([params.categoryId ?? null]);
 
   return { videoId: video!.id };
+}
+
+/**
+ * 秒传收口：同档克隆 HLS；跨档复用源文件按新档入队重转，绝不把会员加密片标成免费可播。
+ */
+export async function finalizeInstantUpload(params: {
+  sourceVideoId: string;
+  userId: string;
+  title?: string;
+  description?: string;
+  categoryId?: string | null;
+  tags?: string[];
+  accessLevel: 'free' | 'login' | 'vip';
+  visibility: 'public' | 'unlisted' | 'private';
+}): Promise<{ videoId: string; jobId: string | null; instant: boolean }> {
+  const [source] = await db.select().from(t.videos).where(eq(t.videos.id, params.sourceVideoId)).limit(1);
+  if (!source) throw AppError.notFound('源视频不存在');
+
+  if (canReuseInstantAssets(source, params.accessLevel)) {
+    const { videoId } = await cloneFromExisting(params);
+    return { videoId, jobId: null, instant: true };
+  }
+
+  if (!source.sourceKey) {
+    throw AppError.conflict('跨档无法秒传，且找不到可重转的源文件，请重新上传');
+  }
+
+  const title = params.title?.trim() || source.title;
+  const slug = await generateUniqueSlug(title);
+  const [video] = await db
+    .insert(t.videos)
+    .values({
+      slug,
+      title,
+      description: params.description ?? source.description,
+      authorId: params.userId,
+      categoryId: params.categoryId ?? null,
+      status: 'queued',
+      visibility: params.visibility === 'private' ? 'private' : 'unlisted',
+      accessLevel: params.accessLevel,
+      sourceKey: source.sourceKey,
+      sourceSizeBytes: source.sourceSizeBytes,
+      sourceHash: source.sourceHash,
+      isEncrypted: params.accessLevel === 'vip',
+    })
+    .returning();
+
+  await db
+    .update(t.videos)
+    .set({ hlsDir: StorageKeys.hlsDir(video!.id) })
+    .where(eq(t.videos.id, video!.id));
+
+  if (params.tags?.length) await syncVideoTags(video!.id, params.tags);
+  await refreshCategoryCounts([params.categoryId ?? null]);
+
+  const jobId = await enqueueTranscode(video!.id, source.sourceKey, params.accessLevel === 'vip');
+
+  await db
+    .update(t.users)
+    .set({ videoCount: sql`${t.users.videoCount} + 1` })
+    .where(eq(t.users.id, params.userId));
+
+  return { videoId: video!.id, jobId, instant: false };
 }
 
 export async function abortUpload(uploadId: string, userId: string): Promise<void> {

@@ -6,8 +6,8 @@ import { requireAuth, requireAdmin } from '../../middleware/auth.js';
 import { body, validate } from '../../middleware/validate.js';
 import {
   abortUpload,
-  cloneFromExisting,
   completeUpload,
+  finalizeInstantUpload,
   getUploadSession,
   initUpload,
   receiveChunk,
@@ -103,14 +103,18 @@ uploadsRouter.post(
 
     const session = await getUploadSession(req.params.uploadId!, req.auth!.id);
 
-    // 秒传路径：init 阶段已判定命中，这里只需要克隆产物。
+    // 秒传路径：init 阶段已判定命中，这里只在同档时克隆产物，跨档按新档重转。
     if (session.status === 'completed' && !session.tempDir && session.fileHash) {
-      const { videoId } = await cloneFromExisting({
+      const result = await finalizeInstantUpload({
         sourceVideoId: session.videoId ?? '',
         userId: req.auth!.id,
         ...input,
       });
-      ok(res, { videoId, jobId: null, instant: true }, '秒传完成');
+      ok(
+        res,
+        { videoId: result.videoId, jobId: result.jobId, instant: result.instant },
+        result.instant ? '秒传完成' : '档位不同，已按新档入队转码',
+      );
       return;
     }
 
