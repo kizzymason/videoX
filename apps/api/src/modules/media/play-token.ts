@@ -5,6 +5,7 @@ import {
   type PlayTokenClaims,
   type PlayTokenFailure,
 } from '@videox/shared/play-token';
+import { PLAY_TOKEN_PARAM } from '@videox/shared';
 import { env } from '../../config/env.js';
 import { AppError, ErrorCode } from '../../core/errors.js';
 import { getRedis } from '../../core/redis.js';
@@ -19,11 +20,12 @@ const FAILURE_MESSAGES: Record<PlayTokenFailure, string> = {
   video_mismatch: '播放凭证与目标视频不匹配',
   ip_mismatch: '网络环境已变化，请刷新页面重新获取播放凭证',
   ua_mismatch: '播放凭证与当前浏览器不匹配',
+  path_mismatch: '播放凭证与请求路径不匹配',
 };
 
-import { PLAY_TOKEN_PARAM } from '@videox/shared';
-
 export { PLAY_TOKEN_PARAM };
+
+export const PLAY_TOKEN_COOKIE = 'vx_play';
 
 export function issuePlayToken(params: {
   req: Request;
@@ -45,18 +47,31 @@ export function issuePlayToken(params: {
 }
 
 /**
- * 硬校验。任何一个 manifest / 分片 / 密钥请求都会走这里，
- * 校验失败一律 403，不泄露具体资源是否存在。
+ * 硬校验。master / playlist / 密钥必须带票；分片复用同一张目录票
+ * （query / x-play-token / 目录 cookie），不再给每个分片单独签名。
  */
+function readPlayToken(req: Request): string | null {
+  if (typeof req.query[PLAY_TOKEN_PARAM] === 'string' && req.query[PLAY_TOKEN_PARAM]) {
+    return req.query[PLAY_TOKEN_PARAM] as string;
+  }
+  if (typeof req.headers['x-play-token'] === 'string' && req.headers['x-play-token']) {
+    return req.headers['x-play-token'];
+  }
+  const cookie = req.cookies?.[PLAY_TOKEN_COOKIE];
+  if (typeof cookie === 'string' && cookie) return cookie;
+  return null;
+}
+
 export function requirePlayToken(req: Request, expectedVideoId: string): PlayTokenClaims {
-  const token =
-    (typeof req.query[PLAY_TOKEN_PARAM] === 'string' ? (req.query[PLAY_TOKEN_PARAM] as string) : null) ??
-    (typeof req.headers['x-play-token'] === 'string' ? req.headers['x-play-token'] : null);
+  const token = readPlayToken(req);
+  const hlsIdx = req.path.indexOf('/hls/');
+  const requestPath = hlsIdx >= 0 ? req.path.slice(hlsIdx) : `/hls/${expectedVideoId}`;
 
   const result = verifyPlayToken({
     token,
     secret: env.PLAY_TOKEN_SECRET,
     expectedVideoId,
+    expectedPath: requestPath,
     ip: clientIp(req),
     userAgent: String(req.headers['user-agent'] ?? ''),
     ipPrefixParts: env.PLAY_TOKEN_IP_PREFIX_PARTS,
