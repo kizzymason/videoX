@@ -5,7 +5,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Readable } from 'node:stream';
-import type { UploadSession } from '@videox/shared';
+import { expectedDimensionsForKind, type UploadSession, type VideoKind } from '@videox/shared';
 import { db, t, uuidArray } from '../../core/db.js';
 import { env } from '../../config/env.js';
 import { AppError, ErrorCode } from '../../core/errors.js';
@@ -41,10 +41,6 @@ function chunkPath(uploadId: string, index: number): string {
   return path.join(sessionDir(uploadId), `part-${String(index).padStart(6, '0')}`);
 }
 
-/**
- * 初始化上传。若同一份文件（SHA-256 相同）此前已成功转码过，
- * 直接复用它的产物完成「秒传」，只新建一条视频记录指向同一批 HLS 文件。
- */
 export async function initUpload(input: {
   userId: string;
   filename: string;
@@ -75,7 +71,6 @@ export async function initUpload(input: {
           receivedChunks: Array.from({ length: input.totalChunks }, (_, i) => i),
           tempDir: '',
           status: 'completed',
-          // 记住命中的源视频：complete 阶段要靠它克隆产物，否则秒传无从下手。
           videoId: existing.id,
         })
         .returning();
@@ -83,7 +78,6 @@ export async function initUpload(input: {
     }
   }
 
-  // 断点续传：同一用户 + 同一文件指纹的未完成会话直接复用。
   if (input.fileHash) {
     const [pending] = await db
       .select()
@@ -98,7 +92,6 @@ export async function initUpload(input: {
       .limit(1);
 
     if (pending) {
-      // 以磁盘为准重建已收分片清单，避免进程崩溃后状态漂移。
       const onDisk = await scanReceivedChunks(pending.id, pending.totalChunks);
       const [updated] = await db
         .update(t.uploadSessions)
@@ -153,10 +146,6 @@ export async function getUploadSession(uploadId: string, userId: string): Promis
   return row;
 }
 
-/**
- * 接收单个分片。写入临时文件后校验 SHA-256，不匹配直接删除让客户端重传，
- * 避免坏分片被合并进最终文件。
- */
 export async function receiveChunk(params: {
   uploadId: string;
   userId: string;
@@ -202,10 +191,6 @@ export async function receiveChunk(params: {
   return { received, complete: received.length === session.totalChunks };
 }
 
-/**
- * 合并分片并入队转码。
- * 合并过程是流式追加，不会把整个文件读进内存。
- */
 export async function completeUpload(params: {
   uploadId: string;
   userId: string;
@@ -215,6 +200,7 @@ export async function completeUpload(params: {
   tags?: string[];
   accessLevel: 'free' | 'login' | 'vip';
   visibility: 'public' | 'unlisted' | 'private';
+  kind?: VideoKind;
 }): Promise<{ videoId: string; jobId: string }> {
   const session = await getUploadSession(params.uploadId, params.userId);
 
@@ -267,12 +253,12 @@ export async function completeUpload(params: {
       authorId: params.userId,
       categoryId: params.categoryId ?? null,
       status: 'queued',
-      // 新上传先待审：公开意图也压成 unlisted，后台通过才进前台。
       visibility: params.visibility === 'private' ? 'private' : 'unlisted',
       accessLevel: params.accessLevel,
       sourceSizeBytes: stat.size,
       sourceHash: fileHash,
       isEncrypted: params.accessLevel === 'vip',
+      ...(expectedDimensionsForKind(params.kind) ?? {}),
     })
     .returning();
 
@@ -293,7 +279,6 @@ export async function completeUpload(params: {
     .set({ status: 'completed', videoId: video!.id, fileHash, updatedAt: new Date() })
     .where(eq(t.uploadSessions.id, params.uploadId));
 
-  // 分片已经合并并上传，临时目录可以清掉了。
   await fsp.rm(dir, { recursive: true, force: true }).catch(() => undefined);
 
   const jobId = await enqueueTranscode(video!.id, sourceKey, params.accessLevel === 'vip');
@@ -329,7 +314,6 @@ export async function enqueueTranscode(videoId: string, sourceKey: string, encry
   return job!.id;
 }
 
-/** 秒传：复用已有视频的转码产物，直接生成一条 ready 的新记录。仅同档同加密可走。 */
 export async function cloneFromExisting(params: {
   sourceVideoId: string;
   userId: string;
@@ -358,10 +342,8 @@ export async function cloneFromExisting(params: {
       authorId: params.userId,
       categoryId: params.categoryId ?? null,
       status: 'ready',
-      // 秒传也走闸门：新纪录未审，不直接上前台。
       visibility: params.visibility === 'private' ? 'private' : 'unlisted',
       accessLevel: params.accessLevel,
-      // 直接指向同一批产物，不复制文件。
       sourceKey: source.sourceKey,
       sourceSizeBytes: source.sourceSizeBytes,
       sourceHash: source.sourceHash,
@@ -387,9 +369,6 @@ export async function cloneFromExisting(params: {
   return { videoId: video!.id };
 }
 
-/**
- * 秒传收口：同档克隆 HLS；跨档复用源文件按新档入队重转，绝不把会员加密片标成免费可播。
- */
 export async function finalizeInstantUpload(params: {
   sourceVideoId: string;
   userId: string;
@@ -399,6 +378,7 @@ export async function finalizeInstantUpload(params: {
   tags?: string[];
   accessLevel: 'free' | 'login' | 'vip';
   visibility: 'public' | 'unlisted' | 'private';
+  kind?: VideoKind;
 }): Promise<{ videoId: string; jobId: string | null; instant: boolean }> {
   const [source] = await db.select().from(t.videos).where(eq(t.videos.id, params.sourceVideoId)).limit(1);
   if (!source) throw AppError.notFound('源视频不存在');
@@ -429,6 +409,7 @@ export async function finalizeInstantUpload(params: {
       sourceSizeBytes: source.sourceSizeBytes,
       sourceHash: source.sourceHash,
       isEncrypted: params.accessLevel === 'vip',
+      ...(expectedDimensionsForKind(params.kind) ?? {}),
     })
     .returning();
 
@@ -459,7 +440,6 @@ export async function abortUpload(uploadId: string, userId: string): Promise<voi
     .where(eq(t.uploadSessions.id, uploadId));
 }
 
-/** 清理超过 24 小时未完成的上传，回收磁盘。 */
 export async function pruneStaleUploads(): Promise<number> {
   const stale = await db
     .select({ id: t.uploadSessions.id })
