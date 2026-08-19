@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Crown, Play } from 'lucide-react';
+import { Crown } from 'lucide-react';
 import { formatCount, formatDuration, type VideoSummary } from '@videox/shared';
 import { cn } from '@videox/ui';
 
@@ -23,7 +23,7 @@ export function MobileVideoCard({
   video: VideoSummary;
   className?: string;
   progressPercent?: number;
-  /** 首页正方形瀑布流传 `1 / 1`。不传则按封面类型。 */
+  /** 首页横长方形传 `3 / 2`。不传则按封面类型。 */
   aspect?: string;
 }) {
   const poster = video.verticalPosterUrl ?? video.posterUrl;
@@ -31,17 +31,10 @@ export function MobileVideoCard({
 
   return (
     <Link to={`/watch/${video.slug || video.id}`} className={cn('no-tap-highlight flex flex-col', className)}>
-      <div
-        className="relative w-full overflow-hidden rounded-xl bg-muted"
-        style={{ aspectRatio: ratio }}
-      >
+      <div className="relative w-full overflow-hidden rounded-xl bg-muted" style={{ aspectRatio: ratio }}>
         {poster ? (
           <img src={poster} alt={video.title} loading="lazy" decoding="async" className="size-full object-cover" />
-        ) : (
-          <div className="grid size-full place-items-center text-muted-foreground">
-            <Play className="size-5" />
-          </div>
-        )}
+        ) : null}
 
         <span className="absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white tabular-nums">
           {formatDuration(video.durationSeconds)}
