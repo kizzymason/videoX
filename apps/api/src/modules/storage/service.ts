@@ -12,10 +12,9 @@ type ProfileRow = typeof t.storageProfiles.$inferSelect;
 
 let cached: { profileId: string; storage: Storage } | null = null;
 
-function configFromRow(row: ProfileRow): DriverConfig {
-  const cfg = (row.config ?? {}) as Record<string, unknown>;
+function configFromFields(driver: DriverConfig['driver'], cfg: Record<string, unknown>): DriverConfig {
   return {
-    driver: row.driver,
+    driver,
     root: typeof cfg.root === 'string' ? cfg.root : undefined,
     endpoint: typeof cfg.endpoint === 'string' ? cfg.endpoint : undefined,
     region: typeof cfg.region === 'string' ? cfg.region : undefined,
@@ -25,6 +24,10 @@ function configFromRow(row: ProfileRow): DriverConfig {
     forcePathStyle: typeof cfg.forcePathStyle === 'boolean' ? cfg.forcePathStyle : undefined,
     publicBaseUrl: typeof cfg.publicBaseUrl === 'string' ? cfg.publicBaseUrl : undefined,
   };
+}
+
+function configFromRow(row: ProfileRow): DriverConfig {
+  return configFromFields(row.driver, (row.config ?? {}) as Record<string, unknown>);
 }
 
 function envFallbackConfig(): DriverConfig {
@@ -176,7 +179,7 @@ export async function testStorageProfile(
   }
 
   const config: DriverConfig = override
-    ? { driver: override.driver, ...(mergedConfig as DriverConfig), driver: override.driver }
+    ? configFromFields(override.driver, mergedConfig)
     : configFromRow({ ...existing, config: mergedConfig });
 
   const probe = `videox-probe/${Date.now()}-${Math.random().toString(36).slice(2)}.txt`;
