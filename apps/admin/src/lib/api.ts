@@ -301,6 +301,7 @@ export const uploadApi = {
       tags?: string[];
       accessLevel: string;
       visibility: string;
+      kind: 'shorts' | 'vod';
     },
   ) => api.post<{ videoId: string; jobId: string | null; instant: boolean }>(`/uploads/${id}/complete`, body),
   abort: (id: string) => api.post<null>(`/uploads/${id}/abort`),
