@@ -23,12 +23,15 @@ import { SearchPage } from './pages/SearchPage';
 
 const WatchPage = React.lazy(() => import('./pages/WatchPage').then((m) => ({ default: m.WatchPage })));
 
+/** 顶/底安全区跟底栏同色。Shorts 进则暗、离则亮，并压过 useTheme 的 color-scheme。 */
 function applyChrome(dark: boolean) {
   const color = dark ? '#000000' : '#ffffff';
-  document.documentElement.style.backgroundColor = color;
+  const root = document.documentElement;
+  root.style.backgroundColor = color;
+  root.style.colorScheme = dark ? 'dark' : 'light';
   document.body.style.backgroundColor = color;
-  const root = document.getElementById('root');
-  if (root) root.style.backgroundColor = color;
+  const app = document.getElementById('root');
+  if (app) app.style.backgroundColor = color;
   let meta = document.querySelector('meta[name="theme-color"]');
   if (!meta) {
     meta = document.createElement('meta');
