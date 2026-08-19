@@ -10,6 +10,7 @@ import { query, validate } from '../../middleware/validate.js';
 import { cached } from '../../core/redis.js';
 import { listVideos } from '../videos/service.js';
 import { getSiteSettings } from '../settings/service.js';
+import { getCatalogHome } from './home.js';
 
 export const catalogRouter: Router = Router();
 
@@ -136,6 +137,16 @@ catalogRouter.get(
       allowRegistration: settings.allowRegistration,
       previewSeconds: settings.previewSeconds,
     });
+  }),
+);
+
+/** 发现页组合。recommend 挂了仍出 latest / 7 日热门 / 分类精选，只出已通过可播。 */
+catalogRouter.get(
+  '/home',
+  optionalAuth,
+  asyncHandler(async (req, res) => {
+    const data = await getCatalogHome({ userId: req.auth?.id ?? null });
+    ok(res, data);
   }),
 );
 
