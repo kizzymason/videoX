@@ -3,6 +3,7 @@ import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import {
   PLAYABLE_VIDEO_STATUSES,
   playTicketSchema,
+  shortsUsePlayableFallback,
   videoListQuerySchema,
   type PlaybackTicket,
   type VideoSummary,
@@ -61,7 +62,7 @@ videosRouter.get(
   }),
 );
 
-/** Shorts：已通过、可播、竖屏。必须挂在 /:idOrSlug 前面。 */
+/** Shorts：已通过、可播、竖屏优先。竖屏为空时回落到任意可播片。必须挂在 /:idOrSlug 前面。 */
 videosRouter.get(
   '/shorts',
   optionalAuth,
@@ -72,11 +73,14 @@ videosRouter.get(
       pageSize: number;
       sort: 'recommended' | 'latest' | 'popular' | 'trending' | 'most_liked' | 'longest' | 'shortest';
     }>(req);
-    const result = await listVideos({
+    const vertical = await listVideos({
       ...q,
       adminView: false,
       orientation: 'vertical',
     });
+    const result = shortsUsePlayableFallback(vertical.total)
+      ? await listVideos({ ...q, adminView: false })
+      : vertical;
     if (req.auth && result.items.length > 0) {
       void recordImpressions(req.auth.id, result.items.map((v) => v.id));
     }
