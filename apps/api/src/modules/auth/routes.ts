@@ -41,7 +41,7 @@ authRouter.post(
   authLimiter,
   validate({ body: registerSchema }),
   asyncHandler(async (req, res) => {
-    const input = body<{ email: string; username: string; password: string; displayName?: string }>(req);
+    const input = body<{ email?: string; username: string; password: string; displayName?: string }>(req);
     const user = await registerUser(input);
     const ctx = sessionContext(req);
     const { access, refresh } = await issueSession(user, ctx);
