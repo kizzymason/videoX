@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Search, TrendingUp, X } from 'lucide-react';
 import { useDebouncedValue, useLocalStorage } from '@videox/ui';
@@ -17,6 +17,11 @@ export function SearchPage() {
   const debounced = useDebouncedValue(input.trim(), 220);
   const [history, setHistory] = useLocalStorage<string[]>('videox:search-history', []);
 
+  const { data: categories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: contentApi.categories,
+    staleTime: 10 * 60_000,
+  });
   const { data: hot } = useQuery({ queryKey: ['hot'], queryFn: contentApi.hotKeywords, staleTime: 5 * 60_000 });
   const { data: suggestions } = useQuery({
     queryKey: ['suggest', debounced],
@@ -47,7 +52,7 @@ export function SearchPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="pt-safe sticky top-0 z-30 border-b border-border bg-background">
-        <div className="flex h-12 items-center gap-2 px-2">
+        <div className="flex items-center gap-2 px-2 pt-3 pb-1">
           <button
             type="button"
             aria-label="返回"
@@ -56,6 +61,9 @@ export function SearchPage() {
           >
             <ChevronLeft className="size-5" />
           </button>
+          <h1 className="text-[20px] font-semibold tracking-tight">videoX</h1>
+        </div>
+        <div className="flex items-center gap-2 px-3 pt-2 pb-3">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -88,7 +96,6 @@ export function SearchPage() {
         </div>
       </div>
 
-      {/* 输入中：优先展示联想 */}
       {debounced.length > 0 && debounced !== q && suggestions ? (
         <div className="tab-scroll flex-1 divide-y divide-border">
           {suggestions.tags.map((tag) => (
@@ -132,6 +139,24 @@ export function SearchPage() {
         </div>
       ) : (
         <div className="tab-scroll flex-1 space-y-6 px-4 pt-4">
+          {categories && categories.length > 0 ? (
+            <section className="space-y-2.5">
+              <h2 className="text-sm font-semibold">分类</h2>
+              <div className="grid grid-cols-2 gap-2.5">
+                {categories.map((category) => (
+                  <Link
+                    key={category.id}
+                    to={`/category/${category.slug}`}
+                    className="no-tap-highlight rounded-xl bg-muted/70 px-3.5 py-3.5 active:bg-muted"
+                  >
+                    <p className="truncate text-[14px] font-medium">{category.name}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground tabular-nums">{category.videoCount} 部</p>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {history.length > 0 ? (
             <section className="space-y-2.5">
               <div className="flex items-center justify-between">
