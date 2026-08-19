@@ -1,16 +1,18 @@
 import * as React from 'react';
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronRight,
   Clock,
   Crown,
   Heart,
+  Lock,
   LogOut,
   Monitor,
   Moon,
   Sun,
   Trash2,
+  User,
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -23,7 +25,6 @@ import {
   Button,
   Field,
   Input,
-  Switch,
   cn,
 } from '@videox/ui';
 import { ApiError, socialApi } from '../lib/api';
@@ -73,30 +74,37 @@ export function MineTab() {
             <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
           </Link>
         ) : (
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-border p-4">
-            <div>
-              <p className="font-medium">未登录</p>
-              <p className="text-xs text-muted-foreground">登录后同步历史、收藏与会员</p>
+          <div className="flex flex-col items-center gap-3 px-2 py-8 text-center">
+            <Avatar className="size-16">
+              <AvatarFallback className="bg-muted">
+                <User className="size-7 text-muted-foreground" />
+              </AvatarFallback>
+            </Avatar>
+            <div className="space-y-1">
+              <p className="text-base font-semibold">登录 videoX</p>
+              <p className="text-xs text-muted-foreground">同步历史、收藏与会员</p>
             </div>
-            <Button asChild>
-              <Link to="/login?redirect=/mine">登录</Link>
+            <Button asChild className="mt-1 h-11 w-full max-w-xs rounded-full">
+              <Link to="/login?redirect=/mine">登录 / 注册</Link>
             </Button>
           </div>
         )}
 
-        <Link
-          to="/subscribe"
-          className="flex items-center gap-3 rounded-2xl bg-[linear-gradient(135deg,oklch(0.28_0.03_78),oklch(0.18_0.01_285))] p-4 text-white"
-        >
-          <Crown className="size-5 text-vip" />
-          <div className="flex-1">
-            <p className="text-sm font-medium">{user?.isVip ? '会员生效中' : '开通会员'}</p>
-            <p className="text-xs text-white/65">
-              {user?.isVip && user.vipExpiresAt ? `有效期至 ${formatDate(user.vipExpiresAt)}` : '卡密即时激活'}
-            </p>
-          </div>
-          <ChevronRight className="size-4 text-white/60" />
-        </Link>
+        {user ? (
+          <Link
+            to="/subscribe"
+            className="flex items-center gap-3 rounded-2xl bg-[linear-gradient(135deg,oklch(0.28_0.03_78),oklch(0.18_0.01_285))] p-4 text-white"
+          >
+            <Crown className="size-5 text-vip" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">{user.isVip ? '会员生效中' : '开通会员'}</p>
+              <p className="text-xs text-white/65">
+                {user.isVip && user.vipExpiresAt ? `有效期至 ${formatDate(user.vipExpiresAt)}` : '卡密即时激活'}
+              </p>
+            </div>
+            <ChevronRight className="size-4 text-white/60" />
+          </Link>
+        ) : null}
 
         {continueWatching && continueWatching.length > 0 ? (
           <section className="space-y-2.5">
@@ -118,15 +126,20 @@ export function MineTab() {
           {ENTRIES.map(({ to, label, icon: Icon }, index) => (
             <Link
               key={to}
-              to={to}
+              to={user ? to : `/login?redirect=${encodeURIComponent(to)}`}
               className={cn(
                 'flex items-center gap-3 px-4 py-3.5 active:bg-accent',
                 index > 0 && 'border-t border-border',
+                !user && 'text-muted-foreground',
               )}
             >
               <Icon className="size-4 text-muted-foreground" />
-              <span className="flex-1 text-sm">{label}</span>
-              <ChevronRight className="size-4 text-muted-foreground" />
+              <span className="flex-1 text-sm text-foreground">{label}</span>
+              {user ? (
+                <ChevronRight className="size-4 text-muted-foreground" />
+              ) : (
+                <Lock className="size-4 text-muted-foreground" />
+              )}
             </Link>
           ))}
         </section>
@@ -399,122 +412,6 @@ export function ProfilePage() {
           保存
         </Button>
       </div>
-    </>
-  );
-}
-
-export function LoginPage() {
-  const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const redirect = params.get('redirect') ?? '/mine';
-  const user = useAuthStore((s) => s.user);
-  const login = useAuthStore((s) => s.login);
-  const register = useAuthStore((s) => s.register);
-
-  const [mode, setMode] = React.useState<'login' | 'register'>('login');
-  const [form, setForm] = React.useState({ identifier: '', password: '', email: '', username: '' });
-  const [remember, setRemember] = React.useState(true);
-  const [error, setError] = React.useState('');
-  const [pending, setPending] = React.useState(false);
-
-  if (user) return <Navigate to={redirect} replace />;
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError('');
-    setPending(true);
-    try {
-      if (mode === 'login') {
-        await login(form.identifier.trim(), form.password, remember);
-      } else {
-        await register({ email: form.email.trim(), username: form.username.trim(), password: form.password });
-      }
-      navigate(redirect, { replace: true });
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '操作失败');
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <>
-      <AppHeader back title={mode === 'login' ? '登录' : '注册'} />
-      <form onSubmit={submit} className="tab-scroll flex-1 space-y-4 px-5 pt-6">
-        {mode === 'login' ? (
-          <>
-            <Field label="邮箱或用户名">
-              <Input
-                value={form.identifier}
-                onChange={(e) => setForm((f) => ({ ...f, identifier: e.target.value }))}
-                autoComplete="username"
-                required
-                className="h-11"
-              />
-            </Field>
-            <Field label="密码" error={error}>
-              <Input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                autoComplete="current-password"
-                required
-                className="h-11"
-              />
-            </Field>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Switch checked={remember} onCheckedChange={setRemember} />
-              记住我 30 天
-            </label>
-          </>
-        ) : (
-          <>
-            <Field label="邮箱">
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                autoComplete="email"
-                required
-                className="h-11"
-              />
-            </Field>
-            <Field label="用户名">
-              <Input
-                value={form.username}
-                onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-                required
-                className="h-11"
-              />
-            </Field>
-            <Field label="密码" hint="至少 8 位" error={error}>
-              <Input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                autoComplete="new-password"
-                minLength={8}
-                required
-                className="h-11"
-              />
-            </Field>
-          </>
-        )}
-
-        <Button type="submit" size="lg" className="h-12 w-full" disabled={pending}>
-          {pending ? '处理中…' : mode === 'login' ? '登录' : '注册'}
-        </Button>
-        <button
-          type="button"
-          onClick={() => {
-            setMode(mode === 'login' ? 'register' : 'login');
-            setError('');
-          }}
-          className="w-full text-center text-sm text-muted-foreground"
-        >
-          {mode === 'login' ? '还没有账号？去注册' : '已有账号？去登录'}
-        </button>
-      </form>
     </>
   );
 }
