@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Crown, Gift, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
@@ -7,14 +6,15 @@ import { daysUntil, formatDate, formatPrice } from '@videox/shared';
 import { Badge, Button, Card, CardContent, Input, Skeleton, cn } from '@videox/ui';
 import { ApiError, membershipApi } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
+import { useAuthModalStore } from '../stores/auth-modal';
 import { useSeo } from '../hooks/use-seo';
 import { PageContainer, PageHeader } from '../components/Page';
 
 export function MembershipPage() {
   useSeo({ title: '会员中心', description: '开通会员，解锁全站会员专享内容' });
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const openAuth = useAuthModalStore((s) => s.openAuth);
   const refreshUser = useAuthStore((s) => s.refreshUser);
   const [code, setCode] = React.useState('');
 
@@ -52,7 +52,7 @@ export function MembershipPage() {
     const value = code.trim();
     if (!value) return;
     if (!user) {
-      navigate('/login?redirect=/membership');
+      openAuth('login', '/membership');
       return;
     }
     redeemMutation.mutate(value);
