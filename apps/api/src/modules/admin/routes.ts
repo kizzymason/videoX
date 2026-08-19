@@ -312,3 +312,252 @@ adminRouter.post(
     ok(res, { affected }, `已处理 ${affected} 条`);
   }),
 );
+
+/** 转码队列总览 */
+adminRouter.get(
+  '/transcode/jobs',
+  validate({ query: paginationSchema }),
+  asyncHandler(async (req, res) => {
+    const { page, pageSize } = query<{ page: number; pageSize: number }>(req);
+    const [rows, countRows] = await Promise.all([
+      db
+        .select({
+          id: t.transcodeJobs.id,
+          videoId: t.transcodeJobs.videoId,
+          videoTitle: t.videos.title,
+          status: t.transcodeJobs.status,
+          progress: t.transcodeJobs.progress,
+          stage: t.transcodeJobs.stage,
+          currentRendition: t.transcodeJobs.currentRendition,
+          completedRenditions: t.transcodeJobs.completedRenditions,
+          errorMessage: t.transcodeJobs.errorMessage,
+          attempts: t.transcodeJobs.attempts,
+          startedAt: t.transcodeJobs.startedAt,
+          finishedAt: t.transcodeJobs.finishedAt,
+          createdAt: t.transcodeJobs.createdAt,
+        })
+        .from(t.transcodeJobs)
+        .leftJoin(t.videos, eq(t.videos.id, t.transcodeJobs.videoId))
+        .orderBy(desc(t.transcodeJobs.createdAt))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize),
+      db.select({ total: sql<number>`count(*)::int` }).from(t.transcodeJobs),
+    ]);
+
+    ok(
+      res,
+      paginated(
+        rows.map((r) => ({
+          ...r,
+          videoTitle: r.videoTitle ?? '(已删除)',
+          startedAt: r.startedAt?.toISOString() ?? null,
+          finishedAt: r.finishedAt?.toISOString() ?? null,
+          createdAt: r.createdAt.toISOString(),
+        })),
+        Number(countRows[0]?.total ?? 0),
+        page,
+        pageSize,
+      ),
+    );
+  }),
+);
+
+/**
+ * 转码进度 SSE。前端开一条长连接，服务端每 2 秒推一次进行中的任务快照。
+ * 相比 WebSocket，SSE 在只需单向推送时更简单、也能自动重连。
+ */
+adminRouter.get(
+  '/transcode/stream',
+  asyncHandler(async (req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write('retry: 3000\n\n');
+
+    let closed = false;
+    req.on('close', () => {
+      closed = true;
+    });
+
+    const push = async () => {
+      if (closed) return;
+      const rows = await db
+        .select({
+          id: t.transcodeJobs.id,
+          videoId: t.transcodeJobs.videoId,
+          videoTitle: t.videos.title,
+          status: t.transcodeJobs.status,
+          progress: t.transcodeJobs.progress,
+          stage: t.transcodeJobs.stage,
+          currentRendition: t.transcodeJobs.currentRendition,
+          completedRenditions: t.transcodeJobs.completedRenditions,
+          errorMessage: t.transcodeJobs.errorMessage,
+        })
+        .from(t.transcodeJobs)
+        .leftJoin(t.videos, eq(t.videos.id, t.transcodeJobs.videoId))
+        .where(sql`${t.transcodeJobs.status} not in ('completed','canceled')`)
+        .orderBy(desc(t.transcodeJobs.createdAt))
+        .limit(30);
+
+      if (!closed) res.write(`data: ${JSON.stringify(rows)}\n\n`);
+    };
+
+    await push();
+    const timer = setInterval(() => {
+      void push().catch(() => undefined);
+    }, 2000);
+
+    req.on('close', () => {
+      clearInterval(timer);
+      res.end();
+    });
+  }),
+);
+
+adminRouter.post(
+  '/transcode/jobs/:id/cancel',
+  validate({ params: idParam }),
+  asyncHandler(async (req, res) => {
+    const { id } = params<{ id: string }>(req);
+    const [job] = await db.select().from(t.transcodeJobs).where(eq(t.transcodeJobs.id, id)).limit(1);
+    if (!job) throw AppError.notFound('任务不存在');
+
+    const queueJob = await getTranscodeQueue().getJob(job.queueJobId ?? job.id);
+    await queueJob?.remove().catch(() => undefined);
+
+    await db
+      .update(t.transcodeJobs)
+      .set({ status: 'canceled', finishedAt: new Date() })
+      .where(eq(t.transcodeJobs.id, id));
+
+    await audit(req, 'transcode.cancel', { type: 'job', id });
+    ok(res, null, '任务已取消');
+  }),
+);
+
+// ==========================================================================
+// 用户管理
+// ==========================================================================
+
+adminRouter.get(
+  '/users',
+  validate({ query: userAdminQuerySchema }),
+  asyncHandler(async (req, res) => {
+    const q = query<{
+      page: number;
+      pageSize: number;
+      q?: string;
+      role?: 'user' | 'vip' | 'admin';
+      status?: 'active' | 'banned';
+      vipOnly?: boolean;
+    }>(req);
+
+    const filters = [];
+    if (q.q) {
+      filters.push(
+        sql`(${t.users.username} ILIKE ${'%' + q.q + '%'} OR ${t.users.email} ILIKE ${'%' + q.q + '%'} OR ${t.users.displayName} ILIKE ${'%' + q.q + '%'}` + `)`,
+      );
+    }
+    if (q.role) filters.push(eq(t.users.role, q.role));
+    if (q.status) filters.push(eq(t.users.status, q.status));
+    if (q.vipOnly) filters.push(sql`${t.users.vipExpiresAt} > now()`);
+
+    const where = filters.length > 0 ? and(...filters) : undefined;
+
+    const [rows, countRows] = await Promise.all([
+      db
+        .select({
+          id: t.users.id,
+          email: t.users.email,
+          username: t.users.username,
+          displayName: t.users.displayName,
+          avatarUrl: t.users.avatarUrl,
+          role: t.users.role,
+          status: t.users.status,
+          vipExpiresAt: t.users.vipExpiresAt,
+          videoCount: t.users.videoCount,
+          followerCount: t.users.followerCount,
+          lastLoginAt: t.users.lastLoginAt,
+          createdAt: t.users.createdAt,
+        })
+        .from(t.users)
+        .where(where)
+        .orderBy(desc(t.users.createdAt))
+        .limit(q.pageSize)
+        .offset((q.page - 1) * q.pageSize),
+      db.select({ total: sql<number>`count(*)::int` }).from(t.users).where(where),
+    ]);
+
+    ok(
+      res,
+      paginated(
+        rows.map((r) => ({
+          ...r,
+          isVip: r.role === 'admin' || (r.vipExpiresAt !== null && r.vipExpiresAt.getTime() > Date.now()),
+          vipExpiresAt: r.vipExpiresAt?.toISOString() ?? null,
+          lastLoginAt: r.lastLoginAt?.toISOString() ?? null,
+          createdAt: r.createdAt.toISOString(),
+        })),
+        Number(countRows[0]?.total ?? 0),
+        q.page,
+        q.pageSize,
+      ),
+    );
+  }),
+);
+
+adminRouter.patch(
+  '/users/:id',
+  validate({ params: idParam, body: updateUserAdminSchema }),
+  asyncHandler(async (req, res) => {
+    const { id } = params<{ id: string }>(req);
+    const input = body<Record<string, unknown>>(req);
+
+    if (id === req.auth!.id && input.role && input.role !== 'admin') {
+      throw AppError.badRequest('不能取消自己的管理员权限');
+    }
+
+    const [updated] = await db
+      .update(t.users)
+      .set({ ...input, updatedAt: new Date() })
+      .where(eq(t.users.id, id))
+      .returning({ id: t.users.id, role: t.users.role, status: t.users.status });
+    if (!updated) throw AppError.notFound('用户不存在');
+
+    // 封禁后立刻踢下线。
+    if (input.status === 'banned') {
+      await db
+        .update(t.refreshTokens)
+        .set({ revokedAt: new Date() })
+        .where(eq(t.refreshTokens.userId, id));
+    }
+
+    await audit(req, 'user.update', { type: 'user', id }, input);
+    ok(res, updated, '用户已更新');
+  }),
+);
+
+adminRouter.post(
+  '/users/grant-vip',
+  validate({ body: grantVipSchema }),
+  asyncHandler(async (req, res) => {
+    const input = body<{ userId: string; days: number; note?: string }>(req);
+    const result = await grantVip({ ...input, operatorId: req.auth!.id });
+    await audit(req, 'user.grant_vip', { type: 'user', id: input.userId }, { days: input.days });
+    ok(res, result, `已赠送 ${input.days} 天会员`);
+  }),
+);
+
+adminRouter.post(
+  '/users/:id/revoke-vip',
+  validate({ params: idParam }),
+  asyncHandler(async (req, res) => {
+    const { id } = params<{ id: string }>(req);
+    await revokeVip(id);
+    await audit(req, 'user.revoke_vip', { type: 'user', id });
+    ok(res, null, '会员权益已收回');
+  }),
+);
