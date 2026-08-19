@@ -1,32 +1,43 @@
 import { SORT_OPTIONS, type SortOption } from '@videox/shared';
 import { cn } from '@videox/ui';
 
-const LABELS: Record<SortOption, string> = {
+const LABELS: Record<string, string> = {
   recommended: '推荐',
   latest: '最新',
-  popular: '最热',
+  popular: '热门',
+  most_liked: '好评',
   trending: '飙升',
-  most_liked: '最多点赞',
   longest: '时长最长',
   shortest: '时长最短',
 };
 
-export function SortTabs({ value, onChange }: { value: string; onChange: (value: SortOption) => void }) {
+export function SortTabs({
+  value,
+  onChange,
+  options = SORT_OPTIONS,
+}: {
+  value: string;
+  onChange: (value: SortOption) => void;
+  options?: readonly SortOption[] | SortOption[];
+}) {
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      {SORT_OPTIONS.map((option) => (
+    <div className="flex items-center gap-6">
+      {options.map((option) => (
         <button
           key={option}
           type="button"
           onClick={() => onChange(option)}
           className={cn(
-            'rounded-lg px-3 py-1.5 text-sm transition-colors',
+            'relative pb-2 text-sm transition-colors duration-150',
             value === option
-              ? 'bg-primary font-medium text-primary-foreground'
-              : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+              ? 'font-medium text-foreground'
+              : 'text-muted-foreground hover:text-foreground',
           )}
         >
-          {LABELS[option]}
+          {LABELS[option] ?? option}
+          {value === option ? (
+            <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-foreground" />
+          ) : null}
         </button>
       ))}
     </div>

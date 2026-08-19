@@ -16,6 +16,26 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>videoX</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('videox:theme');
+          var dark =
+            stored === 'dark' ||
+            ((stored === 'system' || !stored) &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (location.pathname.indexOf('/shorts') === 0) dark = true;
+          var color = dark ? '#000000' : '#ffffff';
+          document.documentElement.classList.toggle('dark', dark);
+          document.documentElement.classList.toggle('light', !dark);
+          document.documentElement.style.backgroundColor = color;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', color);
+          var apple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+          if (apple) apple.setAttribute('content', dark ? 'black-translucent' : 'default');
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body class="bg-background text-foreground antialiased overscroll-y-none">
     <div id="root"></div>

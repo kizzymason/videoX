@@ -1,26 +1,25 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Flame, Sparkles } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { cn } from '@videox/ui';
 import { contentApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
-import { AppHeader } from '../components/AppHeader';
+import { useAuthStore } from '../stores/auth';
 import { PullToRefresh } from '../components/PullToRefresh';
-import { MasonryFeed } from '../components/MasonryFeed';
-import { ImmersiveFeed } from '../components/ImmersiveFeed';
+import { MobileVideoCard } from '../components/MobileVideoCard';
 
 const FEEDS = [
   { key: 'recommend', label: '推荐' },
   { key: 'latest', label: '最新' },
-  { key: 'popular', label: '最热' },
+  { key: 'popular', label: '热门' },
 ] as const;
 
 export function HomeTab() {
   const [feed, setFeed] = React.useState<(typeof FEEDS)[number]['key']>('recommend');
-  const [immersive, setImmersive] = React.useState(false);
+  const user = useAuthStore((s) => s.user);
+  const sentinelRef = React.useRef<HTMLDivElement | null>(null);
 
-  const { data: banners } = useQuery({ queryKey: ['banners'], queryFn: contentApi.banners, staleTime: 5 * 60_000 });
   const { data: categories } = useQuery({
     queryKey: ['categories'],
     queryFn: contentApi.categories,
@@ -37,95 +36,90 @@ export function HomeTab() {
 
   const videos = flatten(query.data?.pages);
 
-  if (immersive) return <ImmersiveFeed onExit={() => setImmersive(false)} />;
+  React.useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && query.hasNextPage && !query.isFetchingNextPage) {
+        void query.fetchNextPage();
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [query.hasNextPage, query.isFetchingNextPage, query.fetchNextPage]);
 
   return (
     <>
-      <AppHeader
-        showSearch
-        title={
-          <div className="flex flex-1 items-center gap-1 overflow-x-auto px-1 scrollbar-none">
-            {FEEDS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setFeed(item.key)}
-                className={cn(
-                  'no-tap-highlight shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors',
-                  feed === item.key ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground',
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        }
-        right={
-          <button
-            type="button"
-            aria-label="沉浸模式"
-            onClick={() => setImmersive(true)}
+      <header className="pt-safe sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur-lg">
+        <div className="flex h-12 items-center gap-2 px-3">
+          <h1 className="text-[17px] font-semibold tracking-tight">videoX</h1>
+          <div className="flex-1" />
+          <Link
+            to="/search"
+            aria-label="搜索"
             className="no-tap-highlight grid size-9 place-items-center rounded-full active:bg-accent"
           >
-            <Flame className="size-5" />
-          </button>
-        }
-      />
+            <Search className="size-5" />
+          </Link>
+          <Link
+            to={user ? '/mine' : '/login'}
+            aria-label="我的"
+            className="no-tap-highlight size-8 overflow-hidden rounded-full bg-muted"
+          >
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt="" className="size-full object-cover" />
+            ) : (
+              <span className="grid size-full place-items-center text-[11px] text-muted-foreground">
+                {(user?.displayName ?? '我').slice(0, 1)}
+              </span>
+            )}
+          </Link>
+        </div>
+        <div className="flex items-end gap-5 overflow-x-auto px-3 scrollbar-none">
+          {FEEDS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setFeed(item.key)}
+              className={cn(
+                'no-tap-highlight shrink-0 pb-2 text-sm transition-colors duration-150',
+                feed === item.key ? 'font-medium text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              {item.label}
+              {feed === item.key ? (
+                <span className="mx-auto mt-1 block h-0.5 w-5 rounded-full bg-foreground" />
+              ) : (
+                <span className="mt-1 block h-0.5" />
+              )}
+            </button>
+          ))}
+          {(categories ?? []).slice(0, 8).map((category) => (
+            <Link
+              key={category.id}
+              to={`/category/${category.slug}`}
+              className="no-tap-highlight shrink-0 pb-2 text-sm text-muted-foreground"
+            >
+              {category.name}
+              <span className="mt-1 block h-0.5" />
+            </Link>
+          ))}
+        </div>
+      </header>
 
       <PullToRefresh onRefresh={() => query.refetch()}>
-        <MasonryFeed
-          videos={videos}
-          loading={query.isLoading}
-          loadingMore={query.isFetchingNextPage}
-          hasMore={query.hasNextPage}
-          onEndReached={() => void query.fetchNextPage()}
-          header={
-            <div className="space-y-4 pt-3 pb-4">
-              {banners && banners.length > 0 ? <BannerStrip banners={banners} /> : null}
-              {categories && categories.length > 0 ? (
-                <div className="-mx-3 flex gap-2 overflow-x-auto px-3 scrollbar-none">
-                  {categories.slice(0, 14).map((category) => (
-                    <Link
-                      key={category.id}
-                      to={`/category/${category.slug}`}
-                      className="no-tap-highlight shrink-0 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground"
-                    >
-                      {category.name}
-                    </Link>
-                  ))}
+        <div className="grid grid-cols-2 gap-x-2 gap-y-5 px-3 pt-3 pb-4">
+          {query.isLoading
+            ? Array.from({ length: 6 }, (_, i) => (
+                <div key={i} className="overflow-hidden rounded-xl bg-muted">
+                  <div className="aspect-video" />
+                  <div className="h-10" />
                 </div>
-              ) : null}
-            </div>
-          }
-        />
+              ))
+            : videos.map((video) => <MobileVideoCard key={video.id} video={video} />)}
+        </div>
+        <div ref={sentinelRef} className="h-8" />
       </PullToRefresh>
     </>
-  );
-}
-
-function BannerStrip({ banners }: { banners: { id: string; title: string; imageUrl: string; mobileImageUrl: string | null; videoId: string | null; linkUrl: string | null }[] }) {
-  return (
-    <div className="-mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 scrollbar-none">
-      {banners.map((banner) => (
-        <Link
-          key={banner.id}
-          to={banner.videoId ? `/watch/${banner.videoId}` : (banner.linkUrl ?? '/')}
-          className="relative aspect-[2/1] w-[85%] shrink-0 snap-start overflow-hidden rounded-2xl bg-muted"
-        >
-          <img
-            src={banner.mobileImageUrl ?? banner.imageUrl}
-            alt={banner.title}
-            className="size-full object-cover"
-            loading="lazy"
-          />
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3">
-            <p className="flex items-center gap-1.5 text-sm font-medium text-white">
-              <Sparkles className="size-3.5" />
-              {banner.title}
-            </p>
-          </div>
-        </Link>
-      ))}
-    </div>
   );
 }
