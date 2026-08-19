@@ -27,6 +27,7 @@ import type {
   TranscodeJobStatus,
   UserRole,
   UserStatus,
+  CaptionFormat,
   VideoKind,
   VideoStatus,
   VideoVisibility,
@@ -649,3 +650,19 @@ export const videoRetention = pgTable(
 );
 
 export type AlgoWeightsRow = AlgoWeights;
+
+export const videoCaptions = pgTable(
+  'video_captions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
+    lang: varchar('lang', { length: 16 }).notNull(),
+    format: varchar('format', { length: 8 }).$type<CaptionFormat>().notNull(),
+    storageKey: varchar('storage_key', { length: 500 }).notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('video_captions_video_lang_uq').on(t.videoId, t.lang),
+    index('video_captions_video_idx').on(t.videoId),
+  ],
+);
