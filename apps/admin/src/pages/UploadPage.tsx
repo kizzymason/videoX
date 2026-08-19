@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, CloudUpload, FileVideo, Trash2, TriangleAlert, X, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -46,6 +46,8 @@ const PHASE_LABEL: Record<UploadTask['phase'], string> = {
 
 export function UploadPage() {
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const isShorts = searchParams.get('kind') === 'shorts';
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: catalogApi.categories, staleTime: 5 * 60_000 });
 
   const [tasks, setTasks] = React.useState<UploadTask[]>([]);
@@ -148,8 +150,12 @@ export function UploadPage() {
   return (
     <div>
       <PageHeader
-        title="视频上传"
-        description={`分片大小 ${formatBytes(CHUNK_SIZE)}，支持断点续传与秒传`}
+        title={isShorts ? '上传 Shorts' : '视频上传'}
+        description={
+          isShorts
+            ? `独立竖屏内容。分片大小 ${formatBytes(CHUNK_SIZE)}，支持断点续传与秒传`
+            : `分片大小 ${formatBytes(CHUNK_SIZE)}，支持断点续传与秒传`
+        }
         actions={
           <>
             {tasks.length > 0 ? (
@@ -218,7 +224,13 @@ export function UploadPage() {
               </div>
               <ul className="space-y-2">
                 {tasks.map((task) => (
-                  <TaskRow key={task.id} task={task} onCancel={() => cancel(task.id)} onRemove={() => removeTask(task.id)} />
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    manageTo={isShorts ? '/shorts' : '/videos'}
+                    onCancel={() => cancel(task.id)}
+                    onRemove={() => removeTask(task.id)}
+                  />
                 ))}
               </ul>
             </>
@@ -295,7 +307,17 @@ export function UploadPage() {
   );
 }
 
-function TaskRow({ task, onCancel, onRemove }: { task: UploadTask; onCancel: () => void; onRemove: () => void }) {
+function TaskRow({
+  task,
+  manageTo,
+  onCancel,
+  onRemove,
+}: {
+  task: UploadTask;
+  manageTo: string;
+  onCancel: () => void;
+  onRemove: () => void;
+}) {
   const active = task.phase === 'hashing' || task.phase === 'uploading' || task.phase === 'processing';
   const remaining = task.file.size * (1 - task.progress / 100);
 
@@ -344,8 +366,8 @@ function TaskRow({ task, onCancel, onRemove }: { task: UploadTask; onCancel: () 
             ) : null}
             {task.error ? <span className="text-destructive">{task.error}</span> : null}
             {task.videoId ? (
-              <Link to="/videos" className="underline underline-offset-2 hover:text-foreground">
-                去视频管理查看
+              <Link to={manageTo} className="underline underline-offset-2 hover:text-foreground">
+                {manageTo === '/shorts' ? '去 Shorts 管理查看' : '去视频管理查看'}
               </Link>
             ) : null}
           </div>
