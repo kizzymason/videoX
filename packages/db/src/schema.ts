@@ -666,3 +666,4 @@ export const videoCaptions = pgTable(
     index('video_captions_video_idx').on(t.videoId),
   ],
 );
+
