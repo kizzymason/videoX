@@ -10,6 +10,7 @@ import { getStorage } from '../storage/service.js';
 import { sanitizeKey } from '../storage/driver.js';
 import { getSiteSettings } from '../settings/service.js';
 import { evaluateGate, findVideoByIdOrSlug } from '../videos/service.js';
+import { HotlinkProxyService } from '../collection/storage/hotlink-proxy.js';
 import {
   PLAY_TOKEN_COOKIE,
   PLAY_TOKEN_PARAM,
@@ -58,10 +59,21 @@ export function invalidateMediaCache(videoId: string): void {
  *
  * 秒传克隆出来的视频有自己的 id，但 hls_dir 指向源视频那一份产物，
  * 不能按自己的 id 去找文件；AES 密钥同样由产物归属者派生，否则解不开。
+ *
+ * 采集转存视频的 hlsDir 形如 hls/collected/{site}/{externalId}，
+ * 不是 uuid 目录，返回相对路径段让上层拼出正确 key。
  */
 function mediaOwnerId(video: { id: string; hlsDir: string | null }): string {
-  const match = /^hls\/([0-9a-f-]{36})\/?$/i.exec(video.hlsDir ?? '');
+  const dir = video.hlsDir ?? '';
+  const collected = /^hls\/(collected\/[\w.-]+\/[\w.-]+)\/?$/i.exec(dir);
+  if (collected) return collected[1]!;
+  const match = /^hls\/([0-9a-f-]{36})\/?$/i.exec(dir);
   return match?.[1] ?? video.id;
+}
+
+/** 热链入库的采集视频：hlsDir 形如 collected/{site}/{externalId}（无 hls/ 前缀）。 */
+function isHotlinkVideo(video: { hlsDir: string | null }): boolean {
+  return /^collected\//i.test(video.hlsDir ?? '');
 }
 
 /**
@@ -137,6 +149,25 @@ mediaRouter.get(
       streamSessionKey(claims),
       settings.maxConcurrentStreams || env.MAX_CONCURRENT_STREAMS,
     );
+
+    // 热链采集视频：不代理视频流，向源站换最新 m3u8 地址后 302。
+    // 分片由用户浏览器直接从源站 CDN 拉取（源站 Referer 零检查、地址可多用户共享）。
+    if (isHotlinkVideo(video)) {
+      const [collected] = await db
+        .select({ id: t.collectedVideos.id })
+        .from(t.collectedVideos)
+        .where(eq(t.collectedVideos.videoId, video.id))
+        .limit(1);
+
+      if (collected) {
+        const hotlink = HotlinkProxyService.getInstance();
+        const { url } = await hotlink.getPlayUrl(collected.id);
+        setCors(res);
+        res.redirect(302, url);
+        return;
+      }
+      throw AppError.notFound('热链视频源记录缺失');
+    }
 
     const storage = await getStorage();
     const key = `hls/${mediaOwnerId(video)}/master.m3u8`;

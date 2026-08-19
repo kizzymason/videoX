@@ -26,6 +26,7 @@ import { captionRouter } from './modules/admin/caption-routes.js';
 import { mediaRouter } from './modules/media/routes.js';
 import { seoRouter } from './modules/seo/routes.js';
 import { staticRouter } from './modules/static/routes.js';
+import { collectionRouter } from './modules/collection/routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -105,6 +106,7 @@ export function createApp(): Express {
   app.use('/api/admin', adminRouter);
   app.use('/api/admin', publishGateRouter);
   app.use('/api/admin', captionRouter);
+  app.use('/api/collection', collectionRouter);
   app.use('/api', analyticsRouter);
   app.use('/api', interactionsRouter);
   app.use('/api', catalogRouter);

@@ -667,3 +667,132 @@ export const videoCaptions = pgTable(
   ],
 );
 
+// ========================================================================
+// 采集系统相关表（新增）
+// ========================================================================
+
+/** 
+ * 号池管理表
+ * 存储目标网站的会员账号 token 信息
+ */
+export const accountPools = pgTable('account_pools',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    targetSite: varchar('target_site').notNull(), // 'yitongkan'
+    uid: varchar('uid').notNull(),
+    token: varchar('token').notNull(),
+    username: varchar('username'),
+    isVip: boolean('is_vip').notNull().default(false),
+    vipExpiresAt: timestamp('vip_expires_at', { withTimezone: true }),
+    status: varchar('status', { length: 16 }).notNull().default('active'), // active | inactive | banned
+    usageCount: integer('usage_count').notNull().default(0),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    lastCheckAt: timestamp('last_check_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(now),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(now),
+  },
+  (t) => [
+    index('account_pools_target_site_idx').on(t.targetSite),
+    index('account_pools_target_uid_idx').on(t.targetSite, t.uid),
+    index('account_pools_status_idx').on(t.status),
+    index('account_pools_vip_idx').on(t.isVip),
+  ]
+);
+
+/** 
+ * 采集任务队列表
+ * BullMQ job 的持久化层（用于 UI 展示和审计）
+ */
+export const collectionJobs = pgTable('collection_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    taskId: varchar('task_id').notNull(), // 业务任务 ID（如 gv_list_page_1）
+    type: varchar('type', { length: 32 }).notNull(), // list_crawl | detail_fetch | play_url_refresh
+    targetSite: varchar('target_site').notNull(),
+    status: varchar('status', { length: 16 }).notNull().default('queued'), // queued | running | completed | failed
+    priority: integer('priority').notNull().default(0), // 越高越优先
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    retryCount: integer('retry_count').notNull().default(0),
+    maxRetries: integer('max_retries').notNull().default(3),
+    nextRunAt: timestamp('next_run_at', { withTimezone: true }).notNull().default(now),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(now),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(now),
+  },
+  (t) => [
+    index('collection_jobs_status_idx').on(t.status),
+    index('collection_jobs_next_run_idx').on(t.nextRunAt),
+    index('collection_jobs_type_idx').on(t.type),
+    index('collection_jobs_target_site_idx').on(t.targetSite),
+  ]
+);
+
+/** 
+ * 采集日志表
+ * 记录每个任务的详细执行日志
+ */
+export const collectionLogs = pgTable('collection_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    jobId: uuid('job_id').references(() => collectionJobs.id, { onDelete: 'cascade' }),
+    level: varchar('level', { length: 10 }).notNull(), // info | warn | error
+    message: text('message').notNull(),
+    context: jsonb('context').$type<Record<string, unknown>>(),
+    accountId: uuid('account_id').references(() => accountPools.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(now),
+  },
+  (t) => [
+    index('collection_logs_job_idx').on(t.jobId),
+    index('collection_logs_level_idx').on(t.level),
+    index('collection_logs_created_idx').on(t.createdAt),
+  ]
+);
+
+/** 
+ * 采集配置表
+ * 全局 + 各站点的可配置参数
+ */
+export const collectionConfigs = pgTable('collection_configs',
+  {
+    key: varchar('key', { length: 60 }).primaryKey(), // site:yitongkan | strategy:storage | schedule:daily
+    value: jsonb('value').$type<Record<string, unknown>>().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(now),
+  }
+);
+
+/** 
+ * 已采集视频索引表
+ * 去重 + 状态追踪 + 与本地 videos 表的关联
+ */
+export const collectedVideos = pgTable('collected_videos',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    externalId: varchar('external_id').notNull(), // 外部网站视频 ID
+    targetSite: varchar('target_site').notNull(),
+    sourceKey: varchar('source_key', { length: 500 }), // 对应 videos.sourceKey
+    videoId: uuid('video_id').references(() => videos.id, { onDelete: 'set null' }),
+    title: varchar('title', { length: 200 }).notNull(),
+    kind: varchar('kind', { length: 16 }).notNull(), // gv | mv | tv
+    page: integer('page').notNull().default(1),
+    fetchUrl: varchar('fetch_url', { length: 500 }),
+    status: varchar('status', { length: 16 }).notNull().default('pending'), // pending | imported | updating | archived
+    importMode: varchar('import_mode', { length: 20 }), // hotlink | r2_transfer | none
+    localVideoUrl: varchar('local_video_url', { length: 500 }), // 如果有转存
+    externalPlayUrl: varchar('external_play_url', { length: 500 }), // 原始播放地址
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(), // 完整元数据快照
+    lastFetchedAt: timestamp('last_fetched_at', { withTimezone: true }),
+    importedAt: timestamp('imported_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(now),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex('collected_videos_external_site_uq').on(t.externalId, t.targetSite),
+    index('collected_videos_status_idx').on(t.status),
+    index('collected_videos_video_idx').on(t.videoId),
+    index('collected_videos_target_site_idx').on(t.targetSite),
+    index('collected_videos_kind_idx').on(t.kind),
+  ]
+);
+

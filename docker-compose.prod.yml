@@ -111,6 +111,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # 采集任务（list_crawl / detail_fetch / 热链刷新 / R2 转存）由同一 worker 消费。
     command: ["npm", "run", "start", "-w", "@videox/worker"]
     networks: [videox]
 

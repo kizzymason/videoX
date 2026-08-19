@@ -8,8 +8,9 @@ coverage/
 .env.local
 .env.*.local
 
-storage/
-!storage/.gitkeep
+# 只忽略仓库根目录的本地媒体盘，不要误伤 apps/**/storage/ 源码
+/storage/
+!/storage/.gitkeep
 
 *.log
 npm-debug.log*
