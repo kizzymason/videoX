@@ -2,9 +2,11 @@ import { and, asc, desc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-or
 import {
   DEFAULT_PREVIEW_SECONDS,
   PLAYABLE_VIDEO_STATUSES,
+  resolveListOrientation,
   slugify,
   type SortOption,
   type VideoDetail,
+  type VideoKind,
   type VideoSummary,
 } from '@videox/shared';
 import { db, t, sqlRows, uuidArray } from '../../core/db.js';
@@ -128,6 +130,7 @@ export interface ListVideosOptions {
   minDuration?: number;
   maxDuration?: number;
   orientation?: 'vertical' | 'horizontal';
+  kind?: VideoKind;
   /** 后台列表要能看到草稿与转码中的内容，前台只看可播的公开内容。 */
   adminView?: boolean;
   excludeIds?: string[];
@@ -172,9 +175,13 @@ export function buildVideoFilters(options: ListVideosOptions): SQL[] {
   if (options.accessLevel) filters.push(eq(t.videos.accessLevel, options.accessLevel as VideoRow['accessLevel']));
   if (options.minDuration !== undefined) filters.push(gte(t.videos.durationSeconds, options.minDuration));
   if (options.maxDuration !== undefined) filters.push(lte(t.videos.durationSeconds, options.maxDuration));
-  if (options.orientation === 'vertical') {
+  const orientation = resolveListOrientation({
+    orientation: options.orientation,
+    kind: options.kind,
+  });
+  if (orientation === 'vertical') {
     filters.push(sql`${t.videos.width} is not null and ${t.videos.height} is not null and ${t.videos.height} > ${t.videos.width}`);
-  } else if (options.orientation === 'horizontal') {
+  } else if (orientation === 'horizontal') {
     filters.push(sql`${t.videos.width} is not null and ${t.videos.height} is not null and ${t.videos.width} >= ${t.videos.height}`);
   }
   if (options.excludeIds?.length) {
@@ -210,278 +217,4 @@ export function buildVideoFilters(options: ListVideosOptions): SQL[] {
   }
 
   return filters;
-}
-
-export async function listVideos(options: ListVideosOptions): Promise<{ items: VideoSummary[]; total: number }> {
-  const filters = buildVideoFilters(options);
-  const where = filters.length > 0 ? and(...filters) : undefined;
-
-  const orderBy = options.q
-    ? [
-        // 有关键词时优先按相关度排序：标题命中 > 全文匹配度 > 热度。
-        sql`(case when ${t.videos.title} ILIKE ${'%' + options.q.trim() + '%'} then 1 else 0 end) DESC`,
-        sql`ts_rank(search_vector, plainto_tsquery('simple', ${options.q.trim()})) DESC`,
-        desc(t.videos.viewCount),
-      ]
-    : buildOrderBy(options.sort);
-
-  const [rows, countResult] = await Promise.all([
-    db
-      .select(summaryColumns)
-      .from(t.videos)
-      .leftJoin(t.categories, eq(t.categories.id, t.videos.categoryId))
-      .leftJoin(t.users, eq(t.users.id, t.videos.authorId))
-      .where(where)
-      .orderBy(...orderBy)
-      .limit(options.pageSize)
-      .offset((options.page - 1) * options.pageSize),
-    db.select({ total: sql<number>`count(*)::int` }).from(t.videos).where(where),
-  ]);
-
-  const tagMap = await loadTagsFor(rows.map((r) => r.id));
-  return {
-    items: rows.map((row) => toSummary(row as SummaryRow, tagMap.get(row.id) ?? [])),
-    total: Number(countResult[0]?.total ?? 0),
-  };
-}
-
-/** 按 ID 批量取摘要，保持传入顺序（推荐流依赖这个顺序）。 */
-export async function getSummariesByIds(ids: string[]): Promise<VideoSummary[]> {
-  if (ids.length === 0) return [];
-  const rows = await db
-    .select(summaryColumns)
-    .from(t.videos)
-    .leftJoin(t.categories, eq(t.categories.id, t.videos.categoryId))
-    .leftJoin(t.users, eq(t.users.id, t.videos.authorId))
-    .where(inArray(t.videos.id, ids));
-
-  const tagMap = await loadTagsFor(rows.map((r) => r.id));
-  const byId = new Map(rows.map((r) => [r.id, toSummary(r as SummaryRow, tagMap.get(r.id) ?? [])]));
-  return ids.map((id) => byId.get(id)).filter((v): v is VideoSummary => Boolean(v));
-}
-
-export async function findVideoByIdOrSlug(idOrSlug: string): Promise<VideoRow | null> {
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
-  const [row] = await db
-    .select()
-    .from(t.videos)
-    .where(isUuid ? eq(t.videos.id, idOrSlug) : eq(t.videos.slug, idOrSlug))
-    .limit(1);
-  return row ?? null;
-}
-
-export interface ViewerState {
-  liked: boolean;
-  favorited: boolean;
-  following: boolean;
-  resumeSeconds: number;
-}
-
-export async function loadViewerState(videoId: string, authorId: string | null, userId: string | null): Promise<ViewerState> {
-  if (!userId) return { liked: false, favorited: false, following: false, resumeSeconds: 0 };
-
-  const [likes, favs, follows, history] = await Promise.all([
-    db
-      .select({ x: sql`1` })
-      .from(t.videoLikes)
-      .where(and(eq(t.videoLikes.videoId, videoId), eq(t.videoLikes.userId, userId)))
-      .limit(1),
-    db
-      .select({ x: sql`1` })
-      .from(t.favorites)
-      .where(and(eq(t.favorites.videoId, videoId), eq(t.favorites.userId, userId)))
-      .limit(1),
-    authorId
-      ? db
-          .select({ x: sql`1` })
-          .from(t.follows)
-          .where(and(eq(t.follows.followerId, userId), eq(t.follows.followeeId, authorId)))
-          .limit(1)
-      : Promise.resolve([]),
-    db
-      .select({ position: t.watchHistory.positionSeconds })
-      .from(t.watchHistory)
-      .where(and(eq(t.watchHistory.userId, userId), eq(t.watchHistory.videoId, videoId)))
-      .limit(1),
-  ]);
-
-  return {
-    liked: likes.length > 0,
-    favorited: favs.length > 0,
-    following: follows.length > 0,
-    resumeSeconds: Math.floor(history[0]?.position ?? 0),
-  };
-}
-
-export interface GateResult {
-  canPlay: boolean;
-  gateReason: VideoDetail['viewer']['gateReason'];
-}
-
-/** 播放门禁判定。是唯一的准入判据，播放票据与 HLS 中间件都调用它。 */
-export function evaluateGate(video: VideoRow, viewer: { userId: string | null; isVip: boolean; isAdmin: boolean }): GateResult {
-  if (viewer.isAdmin) return { canPlay: true, gateReason: null };
-
-  if (!PLAYABLE_VIDEO_STATUSES.includes(video.status)) {
-    return { canPlay: false, gateReason: 'unavailable' };
-  }
-  if (video.visibility === 'private') {
-    return { canPlay: false, gateReason: 'unavailable' };
-  }
-  if (video.accessLevel === 'login' && !viewer.userId) {
-    return { canPlay: false, gateReason: 'login_required' };
-  }
-  if (video.accessLevel === 'vip') {
-    if (!viewer.userId) return { canPlay: false, gateReason: 'login_required' };
-    if (!viewer.isVip) return { canPlay: false, gateReason: 'vip_required' };
-  }
-  return { canPlay: true, gateReason: null };
-}
-
-export async function buildVideoDetail(
-  video: VideoRow,
-  viewer: { userId: string | null; isVip: boolean; isAdmin: boolean },
-): Promise<VideoDetail> {
-  const settings = await getSiteSettings();
-
-  const [related] = await db
-    .select({
-      categorySlug: t.categories.slug,
-      categoryName: t.categories.name,
-      authorUsername: t.users.username,
-      authorDisplayName: t.users.displayName,
-      authorAvatarUrl: t.users.avatarUrl,
-    })
-    .from(t.videos)
-    .leftJoin(t.categories, eq(t.categories.id, t.videos.categoryId))
-    .leftJoin(t.users, eq(t.users.id, t.videos.authorId))
-    .where(eq(t.videos.id, video.id))
-    .limit(1);
-
-  const tagMap = await loadTagsFor([video.id]);
-  const viewerState = await loadViewerState(video.id, video.authorId, viewer.userId);
-  const gate = evaluateGate(video, viewer);
-
-  const summary = toSummary(
-    {
-      ...video,
-      categorySlug: related?.categorySlug ?? null,
-      categoryName: related?.categoryName ?? null,
-      authorUsername: related?.authorUsername ?? null,
-      authorDisplayName: related?.authorDisplayName ?? null,
-      authorAvatarUrl: related?.authorAvatarUrl ?? null,
-    } as unknown as SummaryRow,
-    tagMap.get(video.id) ?? [],
-  );
-
-  return {
-    ...summary,
-    renditions: (video.renditions ?? []).map((r) => ({
-      name: r.name,
-      height: r.height,
-      width: r.width,
-      bandwidth: r.bandwidth,
-      ready: r.ready,
-    })),
-    spriteUrl: video.spriteUrl,
-    spriteVttUrl: video.spriteVttUrl,
-    isEncrypted: video.isEncrypted,
-    previewSeconds: settings.previewSeconds || DEFAULT_PREVIEW_SECONDS,
-    viewer: { ...viewerState, canPlay: gate.canPlay, gateReason: gate.gateReason },
-  };
-}
-
-/** slug 唯一性：冲突时追加短随机后缀，而不是抛错打断上传流程。 */
-export async function generateUniqueSlug(title: string, videoId?: string): Promise<string> {
-  const base = slugify(title) || 'video';
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const candidate = attempt === 0 ? base : `${base}-${Math.random().toString(36).slice(2, 7)}`;
-    const [existing] = await db
-      .select({ id: t.videos.id })
-      .from(t.videos)
-      .where(eq(t.videos.slug, candidate))
-      .limit(1);
-    if (!existing || existing.id === videoId) return candidate;
-  }
-  return `${base}-${Date.now().toString(36)}`;
-}
-
-export async function bumpViewCount(videoId: string): Promise<void> {
-  await db
-    .update(t.videos)
-    .set({ viewCount: sql`${t.videos.viewCount} + 1` })
-    .where(eq(t.videos.id, videoId));
-}
-
-export async function requireVideo(idOrSlug: string): Promise<VideoRow> {
-  const video = await findVideoByIdOrSlug(idOrSlug);
-  if (!video) throw AppError.notFound('视频不存在');
-  return video;
-}
-
-export async function assertPlayable(video: VideoRow): Promise<void> {
-  if (!PLAYABLE_VIDEO_STATUSES.includes(video.status)) {
-    throw new AppError({
-      message: video.status === 'failed' ? '该视频转码失败，暂时无法播放' : '视频正在处理中，请稍后再试',
-      code: ErrorCode.VIDEO_NOT_READY,
-      status: 409,
-    });
-  }
-}
-
-/**
- * 同步标签：先按名字 upsert 到 tags 表，再重建关联并修正计数。
- */
-export async function syncVideoTags(videoId: string, tagNames: string[]): Promise<void> {
-  const names = [...new Set(tagNames.map((n) => n.trim()).filter(Boolean))].slice(0, 20);
-
-  await db.transaction(async (tx) => {
-    const oldLinks = await tx
-      .select({ tagId: t.videoTags.tagId })
-      .from(t.videoTags)
-      .where(eq(t.videoTags.videoId, videoId));
-
-    await tx.delete(t.videoTags).where(eq(t.videoTags.videoId, videoId));
-
-    let newTagIds: string[] = [];
-    if (names.length > 0) {
-      const inserted = await tx
-        .insert(t.tags)
-        .values(names.map((name) => ({ slug: slugify(name) || name.toLowerCase(), name })))
-        .onConflictDoUpdate({ target: t.tags.slug, set: { name: sql`excluded.name` } })
-        .returning({ id: t.tags.id });
-      newTagIds = inserted.map((r) => r.id);
-      await tx.insert(t.videoTags).values(newTagIds.map((tagId) => ({ videoId, tagId }))).onConflictDoNothing();
-    }
-
-    const affected = [...new Set([...oldLinks.map((l) => l.tagId), ...newTagIds])];
-    if (affected.length > 0) {
-      await tx.execute(sql`
-        UPDATE tags SET video_count = coalesce(sub.c, 0)
-        FROM (
-          SELECT tg.id, count(vt.video_id)::int AS c
-          FROM tags tg LEFT JOIN video_tags vt ON vt.tag_id = tg.id
-          WHERE tg.id = any(${uuidArray(affected)})
-          GROUP BY tg.id
-        ) sub
-        WHERE tags.id = sub.id
-      `);
-    }
-  });
-}
-
-export async function refreshCategoryCounts(categoryIds: (string | null)[]): Promise<void> {
-  const ids = categoryIds.filter((id): id is string => Boolean(id));
-  if (ids.length === 0) return;
-  await sqlRows(sql`
-    UPDATE categories SET video_count = coalesce(sub.c, 0)
-    FROM (
-      SELECT c.id, count(v.id)::int AS c
-      FROM categories c
-      LEFT JOIN videos v ON v.category_id = c.id AND v.status IN ('ready','partially_ready') AND v.visibility = 'public'
-      WHERE c.id = any(${uuidArray(ids)})
-      GROUP BY c.id
-    ) sub
-    WHERE categories.id = sub.id
-  `);
 }
