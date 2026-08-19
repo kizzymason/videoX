@@ -1,18 +1,20 @@
 import * as React from 'react';
-import { Link } from 'react-router-dom';
-import { Bookmark, Heart, Share2 } from 'lucide-react';
+import { Bookmark, Heart, Share2, Volume2, VolumeX } from 'lucide-react';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { usePlayer, type PlayerEngine, type PlayerSource } from '@videox/player';
 import { formatCount, type VideoSummary } from '@videox/shared';
 import { cn } from '@videox/ui';
-import { contentApi, socialApi } from '../lib/api';
+import { ApiError, contentApi, socialApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
 import { track } from '../lib/analytics';
 
 /**
- * Shorts：全屏竖滑。数据走 GET /api/videos/shorts。
- * 顶/底安全区都铺黑，离开由 App.applyChrome 卸回亮色。封面满屏，不挂中间播放按钮。
+ * Shorts：全屏竖滑，点击不进 /watch。数据走 GET /api/videos/shorts。
+ * 进入视口（~80%）才取 play-ticket + usePlayer 起播；离开即卸载引擎，全 feed 只活一个。
+ * 顶/底安全区都铺黑，离开由 App.applyChrome 卸回亮色。封面满屏，播放中不挂中间播放按钮。
  */
 export function ShortsTab() {
+  const [activeId, setActiveId] = React.useState<string | null>(null);
   const query = useInfiniteQuery({
     queryKey: ['shorts'],
     queryFn: ({ pageParam }) => contentApi.shorts({ page: pageParam, pageSize: 10 }),
@@ -29,6 +31,13 @@ export function ShortsTab() {
     if (el.scrollTop + el.clientHeight * 2 >= el.scrollHeight) void query.fetchNextPage();
   }, [query]);
 
+  const onActiveChange = React.useCallback((id: string, inView: boolean) => {
+    setActiveId((current) => {
+      if (inView) return id;
+      return current === id ? null : current;
+    });
+  }, []);
+
   return (
     <div className="fixed inset-0 z-30 bg-black text-white">
       {/* 顶部安全区实色，跟底栏同进同出 */}
@@ -38,7 +47,12 @@ export function ShortsTab() {
       </div>
       <div ref={containerRef} onScroll={onScroll} className="snap-feed tab-scroll h-full w-full">
         {videos.map((video) => (
-          <ShortsPage key={video.id} video={video} />
+          <ShortsPage
+            key={video.id}
+            video={video}
+            active={activeId === video.id}
+            onActiveChange={onActiveChange}
+          />
         ))}
         {query.isLoading ? (
           <div className="grid h-full place-items-center text-sm text-white/60">加载中…</div>
@@ -48,7 +62,15 @@ export function ShortsTab() {
   );
 }
 
-function ShortsPage({ video }: { video: VideoSummary }) {
+function ShortsPage({
+  video,
+  active,
+  onActiveChange,
+}: {
+  video: VideoSummary;
+  active: boolean;
+  onActiveChange: (id: string, inView: boolean) => void;
+}) {
   const poster = video.verticalPosterUrl ?? video.posterUrl;
   const ref = React.useRef<HTMLDivElement | null>(null);
 
@@ -57,19 +79,21 @@ function ShortsPage({ video }: { video: VideoSummary }) {
     if (!el) return undefined;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry && entry.intersectionRatio > 0.8) track('video_impression', { videoId: video.id });
+        const inView = Boolean(entry && entry.intersectionRatio > 0.8);
+        onActiveChange(video.id, inView);
+        if (inView) track('video_impression', { videoId: video.id });
       },
       { threshold: [0.8] },
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [video.id]);
+  }, [onActiveChange, video.id]);
 
   return (
     <div ref={ref} className="snap-page relative h-full w-full bg-black">
       {poster ? <img src={poster} alt="" className="size-full object-cover" /> : null}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
-      <Link to={`/watch/${video.slug || video.id}`} className="absolute inset-0" aria-label={`播放 ${video.title}`} />
+      {active ? <ShortsInPlacePlayer video={video} poster={poster} /> : null}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
       <div className="pointer-events-none absolute inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] flex items-end gap-3 px-4 pb-3">
         <div className="min-w-0 flex-1 space-y-1">
           <p className="text-[15px] font-semibold text-white">{video.title}</p>
@@ -96,12 +120,125 @@ function ShortsPage({ video }: { video: VideoSummary }) {
             icon={Share2}
             label="分享"
             onClick={() => {
-              const url = `${window.location.origin}/watch/${video.slug || video.id}`;
+              const url = `${window.location.origin}/shorts`;
               void (navigator.share?.({ title: video.title, url }) ?? navigator.clipboard.writeText(url));
             }}
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function ticketMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.isAuthError) return '登录后观看';
+    if (error.needsVip || error.isForbidden) return '会员专享';
+    if (error.message) return error.message;
+  }
+  return '暂无法播放';
+}
+
+/**
+ * 只在当前页挂载。离开视口由父级卸载，usePlayer 析构时 destroy 引擎。
+ * 不用 MobilePlayer：那套是 16:9 详情页皮肤。
+ */
+function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: string | null }) {
+  const [source, setSource] = React.useState<PlayerSource | null>(null);
+  const [gateMessage, setGateMessage] = React.useState<string | null>(null);
+  const engineRef = React.useRef<PlayerEngine | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setSource(null);
+    setGateMessage(null);
+    void contentApi
+      .playTicket(video.id)
+      .then((ticket) => {
+        if (cancelled) return;
+        setSource({
+          videoId: video.id,
+          masterUrl: ticket.masterUrl,
+          token: ticket.token,
+          ttlSeconds: ticket.ttlSeconds,
+          previewSeconds: ticket.previewSeconds,
+          resumeSeconds: ticket.resumeSeconds,
+          spriteVttUrl: ticket.spriteVttUrl,
+          poster,
+          title: video.title,
+          durationSeconds: video.durationSeconds,
+        });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setGateMessage(ticketMessage(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [poster, video.durationSeconds, video.id, video.title]);
+
+  const { engine, snapshot, videoRef, containerRef } = usePlayer({
+    source,
+    hotkeys: false,
+    autoplay: true,
+    muted: true,
+    renewTicket: async (id) => {
+      const renewed = await contentApi.renewTicket(id);
+      return {
+        token: renewed.token,
+        ttlSeconds: renewed.ttlSeconds,
+        previewSeconds: renewed.previewSeconds,
+        scope: renewed.scope,
+      };
+    },
+    onEnded: () => {
+      engineRef.current?.seek(0);
+      void engineRef.current?.play();
+    },
+    onFirstFrame: () => track('video_play', { videoId: video.id }),
+  });
+  engineRef.current = engine;
+
+  const overlay =
+    gateMessage ??
+    (snapshot.gate.blocked ? '会员专享' : null) ??
+    (snapshot.error ? snapshot.error.message : null);
+
+  return (
+    <div
+      ref={containerRef}
+      className="absolute inset-0"
+      onClick={() => {
+        if (source && !overlay) engine.togglePlay();
+      }}
+    >
+      <video
+        ref={videoRef}
+        className="absolute inset-0 size-full object-cover"
+        playsInline
+        poster={poster ?? undefined}
+      />
+      {overlay ? (
+        <div className="pointer-events-none absolute inset-0 grid place-items-center px-8 text-center">
+          <p className="text-sm text-white/85">{overlay}</p>
+        </div>
+      ) : !source ? (
+        <div className="pointer-events-none absolute inset-0 grid place-items-center">
+          <div className="size-6 animate-spin rounded-full border-2 border-white/25 border-t-white" />
+        </div>
+      ) : null}
+      <button
+        type="button"
+        className="absolute top-[calc(env(safe-area-inset-top)+2.5rem)] right-3 z-20 grid size-8 place-items-center rounded-full bg-black/40 text-white"
+        aria-label={snapshot.muted ? '取消静音' : '静音'}
+        onClick={(event) => {
+          event.stopPropagation();
+          engine.toggleMute();
+        }}
+      >
+        {snapshot.muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+      </button>
     </div>
   );
 }
