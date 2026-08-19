@@ -60,6 +60,7 @@ export function UploadPage() {
     tags: [],
     accessLevel: 'free',
     visibility: 'public',
+    kind: isShorts ? 'shorts' : 'vod',
   });
 
   const controllers = React.useRef(new Map<string, AbortController>());
@@ -118,6 +119,7 @@ export function UploadPage() {
               tags: meta.tags,
               accessLevel: meta.accessLevel,
               visibility: meta.visibility,
+              kind: isShorts ? 'shorts' : 'vod',
             },
             (patch) => update(task.id, patch),
             controller.signal,
