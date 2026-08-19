@@ -6,13 +6,11 @@ import {
   Clock,
   Crown,
   Heart,
-  Lock,
   LogOut,
   Monitor,
   Moon,
   Sun,
   Trash2,
-  User,
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -35,6 +33,7 @@ import { AppHeader } from '../components/AppHeader';
 import { PullToRefresh } from '../components/PullToRefresh';
 import { MasonryFeed } from '../components/MasonryFeed';
 import { MobileVideoCard } from '../components/MobileVideoCard';
+import { LoggedOutGate } from '../components/LoggedOutGate';
 
 const ENTRIES = [
   { to: '/history', label: '观看历史', icon: Clock },
@@ -54,41 +53,33 @@ export function MineTab() {
     enabled: Boolean(user),
   });
 
+  if (!user) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <AppHeader title="我的" />
+        <LoggedOutGate subtitle="同步历史、收藏与会员" redirect="/mine" />
+      </div>
+    );
+  }
+
   return (
     <>
       <AppHeader title="我的" />
       <div className="tab-scroll flex-1 space-y-5 px-4 pt-2 pb-6">
-        {user ? (
-          <Link to="/profile" className="flex items-center gap-3 rounded-2xl border border-border p-4">
-            <Avatar className="size-14">
-              <AvatarImage src={user.avatarUrl ?? undefined} alt={user.displayName} />
-              <AvatarFallback className="text-lg">{user.displayName.slice(0, 1).toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <p className="truncate font-medium">{user.displayName}</p>
-                {user.isVip ? <Badge variant="vip">VIP</Badge> : null}
-              </div>
-              <p className="truncate text-xs text-muted-foreground">@{user.username}</p>
+        <Link to="/profile" className="flex items-center gap-3 rounded-2xl border border-border p-4">
+          <Avatar className="size-14">
+            <AvatarImage src={user.avatarUrl ?? undefined} alt={user.displayName} />
+            <AvatarFallback className="text-lg">{user.displayName.slice(0, 1).toUpperCase()}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="truncate font-medium">{user.displayName}</p>
+              {user.isVip ? <Badge variant="vip">VIP</Badge> : null}
             </div>
-            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-          </Link>
-        ) : (
-          <div className="flex flex-col items-center gap-3 px-2 py-8 text-center">
-            <Avatar className="size-16">
-              <AvatarFallback className="bg-muted">
-                <User className="size-7 text-muted-foreground" />
-              </AvatarFallback>
-            </Avatar>
-            <div className="space-y-1">
-              <p className="text-base font-semibold">登录 videoX</p>
-              <p className="text-xs text-muted-foreground">同步历史、收藏与会员</p>
-            </div>
-            <Button asChild className="mt-1 h-11 w-full max-w-xs rounded-full">
-              <Link to="/login?redirect=/mine">登录 / 注册</Link>
-            </Button>
+            <p className="truncate text-xs text-muted-foreground">@{user.username}</p>
           </div>
-        )}
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+        </Link>
 
         {user ? (
           <Link
@@ -126,20 +117,15 @@ export function MineTab() {
           {ENTRIES.map(({ to, label, icon: Icon }, index) => (
             <Link
               key={to}
-              to={user ? to : `/login?redirect=${encodeURIComponent(to)}`}
+              to={to}
               className={cn(
                 'flex items-center gap-3 px-4 py-3.5 active:bg-accent',
                 index > 0 && 'border-t border-border',
-                !user && 'text-muted-foreground',
               )}
             >
               <Icon className="size-4 text-muted-foreground" />
               <span className="flex-1 text-sm text-foreground">{label}</span>
-              {user ? (
-                <ChevronRight className="size-4 text-muted-foreground" />
-              ) : (
-                <Lock className="size-4 text-muted-foreground" />
-              )}
+              <ChevronRight className="size-4 text-muted-foreground" />
             </Link>
           ))}
         </section>
