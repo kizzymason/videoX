@@ -9,4 +9,5 @@ export {
   activateStorageProfile,
   deleteStorageProfile,
   testStorageProfile,
+  getStorageUsage,
 } from './service.js';
