@@ -135,7 +135,8 @@ catalogRouter.get(
       footerText: settings.footerText,
       contactEmail: settings.contactEmail,
       allowRegistration: settings.allowRegistration,
-      previewSeconds: settings.previewSeconds,
+      previewSeconds: 0,
+      shortsFreeCount: settings.shortsFreeCount,
     });
   }),
 );

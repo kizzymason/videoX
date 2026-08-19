@@ -7,7 +7,7 @@ import { MobilePlayer } from '@videox/player/mobile';
 import type { PlayerSource } from '@videox/player';
 import { formatCount, formatRelativeTime, type VideoDetail } from '@videox/shared';
 import { Avatar, AvatarFallback, AvatarImage, Badge, Button, Skeleton, cn } from '@videox/ui';
-import { contentApi, socialApi } from '../lib/api';
+import { contentApi, socialApi, ApiError } from '../lib/api';
 import { track } from '../lib/analytics';
 import { useAuthStore } from '../stores/auth';
 import { useSeo } from '../hooks/use-seo';
@@ -33,7 +33,7 @@ export function WatchPage() {
   const ticketQuery = useQuery({
     queryKey: ['play-ticket', video?.id],
     queryFn: () => contentApi.playTicket(video!.id),
-    enabled: Boolean(video?.id) && Boolean(video?.viewer.canPlay || video?.viewer.gateReason === 'vip_required'),
+    enabled: Boolean(video?.id) && Boolean(video?.viewer.canPlay),
     staleTime: 0,
     gcTime: 0,
     retry: false,
@@ -127,6 +127,8 @@ export function WatchPage() {
   }
 
   const related = relatedQuery.data ?? [];
+  const ticketVip = ticketQuery.error instanceof ApiError && ticketQuery.error.needsVip;
+  const showVipGate = video.viewer.gateReason === 'vip_required' || ticketVip;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
@@ -172,10 +174,13 @@ export function WatchPage() {
                 <Button size="sm" onClick={() => navigate(`/login?redirect=${location.pathname}`)}>
                   登录后观看
                 </Button>
-              ) : video.viewer.gateReason === 'vip_required' ? (
-                <Button size="sm" variant="vip" onClick={() => navigate('/subscribe')}>
-                  开通会员观看
-                </Button>
+              ) : showVipGate ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-white">订阅后即可播放</p>
+                  <Button size="sm" variant="vip" onClick={() => navigate('/subscribe')}>
+                    开通会员观看
+                  </Button>
+                </div>
               ) : (
                 <p className="text-sm text-white/80">视频正在转码，稍后再来</p>
               )}
@@ -188,7 +193,7 @@ export function WatchPage() {
         <div className="space-y-3 px-4 py-3">
           <div className="flex items-start gap-2">
             <h1 className="flex-1 text-[15px] leading-snug font-medium">{video.title}</h1>
-            {video.accessLevel === 'vip' ? (
+            {video.kind === 'vod' || video.accessLevel === 'vip' ? (
               <Badge variant="vip" className="shrink-0">
                 <Crown />
                 会员

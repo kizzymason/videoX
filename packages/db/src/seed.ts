@@ -100,7 +100,8 @@ const DEFAULT_SITE_SETTINGS = {
   contactEmail: 'hello@videox.local',
   allowRegistration: true,
   commentsRequireApproval: false,
-  previewSeconds: 60,
+  previewSeconds: 0,
+  shortsFreeCount: 3,
   maxConcurrentStreams: 3,
   seo: {
     videoTitleTemplate: '{title} - {siteName}',
@@ -422,8 +423,6 @@ async function main() {
       const duration = randInt(90, 3600);
       const views = randInt(120, 480_000);
       const likes = Math.floor(views * (0.02 + Math.random() * 0.08));
-      // 每 5 个里放 1 个会员视频，方便验证门禁与加密链路。
-      const accessLevel = i % 5 === 4 ? ('vip' as const) : ('free' as const);
       const hue = (i * 37) % 360;
       return {
         slug: `demo-${String(i + 1).padStart(3, '0')}`,
@@ -434,7 +433,7 @@ async function main() {
         // 无片源、无 HLS，不能标 ready，否则首页会按 PLAYABLE_VIDEO_STATUSES 假装可播。
         status: 'draft' as const,
         visibility: 'public' as const,
-        accessLevel,
+        accessLevel: 'vip' as const,
         posterUrl: `/static/placeholder/cover?h=${hue}&t=${encodeURIComponent(title.slice(0, 12))}`,
         verticalPosterUrl: `/static/placeholder/cover?h=${hue}&r=3x4&t=${encodeURIComponent(title.slice(0, 12))}`,
         durationSeconds: duration,
@@ -442,7 +441,7 @@ async function main() {
         height: 1080,
         fps: 30,
         renditions: [],
-        isEncrypted: accessLevel === 'vip',
+        isEncrypted: true,
         viewCount: views,
         likeCount: likes,
         favoriteCount: Math.floor(likes * 0.4),

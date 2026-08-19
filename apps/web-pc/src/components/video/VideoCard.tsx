@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
-import { Crown, Lock } from 'lucide-react';
+import { Crown } from 'lucide-react';
 import { formatCount, formatDuration, formatRelativeTime, type VideoSummary } from '@videox/shared';
 import { Badge, Skeleton, cn } from '@videox/ui';
 import { contentApi } from '../../lib/api';
@@ -47,7 +47,7 @@ export function VideoCard({ video, progressPercent, className, layout = 'grid' }
     };
   }, []);
 
-  const isVip = video.accessLevel === 'vip';
+  const isVip = video.kind === 'vod' || video.accessLevel === 'vip';
   const isRow = layout === 'row';
 
   return (
@@ -94,11 +94,6 @@ export function VideoCard({ video, progressPercent, className, layout = 'grid' }
           <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded bg-vip px-1.5 py-0.5 text-[11px] font-semibold text-vip-foreground">
             <Crown className="size-3" />
             会员
-          </span>
-        ) : video.accessLevel === 'login' ? (
-          <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white">
-            <Lock className="size-3" />
-            登录可看
           </span>
         ) : null}
 

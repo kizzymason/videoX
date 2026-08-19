@@ -80,8 +80,8 @@ export class AppError extends Error {
   }
 
   /** 402 专门留给「需要开通会员」，前端据此弹出开通引导。 */
-  static vipRequired(message = '该内容需要会员才能观看') {
-    return new AppError({ message, code: ErrorCode.VIP_REQUIRED, status: 402 });
+  static vipRequired(message = '该内容需要会员才能观看', details?: unknown) {
+    return new AppError({ message, code: ErrorCode.VIP_REQUIRED, status: 402, details });
   }
 
   static notFound(message = '资源不存在') {

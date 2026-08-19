@@ -58,9 +58,9 @@ export function GateVeil({ show, previewSeconds, onUnlock, loggedIn = true, onLo
         </div>
         <div className="space-y-1">
           <p className="text-base font-semibold text-white">
-            {previewSeconds ? `试看 ${previewSeconds} 秒已结束` : '该内容需要会员'}
+            {previewSeconds ? `试看 ${previewSeconds} 秒已结束` : '订阅后即可播放'}
           </p>
-          <p className="text-sm text-white/60">开通会员即可观看完整视频，并解锁全站会员内容</p>
+          <p className="text-sm text-white/60">开通会员即可观看完整视频，并解锁全站内容</p>
         </div>
         <div className="flex items-center gap-2 pt-1">
           <button

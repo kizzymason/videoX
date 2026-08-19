@@ -15,6 +15,7 @@ import type {
   VideoStatus,
   VideoVisibility,
 } from './constants.js';
+import type { ShortsTrialQuota } from './shorts-trial.js';
 
 /** 统一响应包裹。所有 API 返回都是这个形状。 */
 export interface ApiEnvelope<T> {
@@ -205,6 +206,7 @@ export interface VideoDetail extends VideoSummary {
   spriteUrl: string | null;
   spriteVttUrl: string | null;
   isEncrypted: boolean;
+  /** 点播恒为 0。Shorts 免费条数走 shortsTrial，不走按秒试看。 */
   previewSeconds: number;
   /** 当前用户的互动状态 */
   viewer: {
@@ -212,7 +214,7 @@ export interface VideoDetail extends VideoSummary {
     favorited: boolean;
     following: boolean;
     canPlay: boolean;
-    /** canPlay 为 false 时给出原因：login_required | vip_required | unavailable */
+    /** canPlay 为 false 时：vip_required | unavailable（点播不再区分 login/free） */
     gateReason: 'login_required' | 'vip_required' | 'unavailable' | null;
     resumeSeconds: number;
   };
@@ -235,10 +237,13 @@ export interface PlaybackTicket {
   /** 剩余有效秒数，播放器据此安排续签 */
   ttlSeconds: number;
   isEncrypted: boolean;
+  /** 点播不再发按秒试看票，恒为 null。 */
   previewSeconds: number | null;
   resumeSeconds: number;
   spriteVttUrl: string | null;
   renditions: VideoRendition[];
+  /** 仅 Shorts 非会员票据返回：已看条数与剩余免费条数。 */
+  shortsTrial?: ShortsTrialQuota;
 }
 
 export interface Comment {
@@ -361,6 +366,7 @@ export interface SiteSettings {
   allowRegistration: boolean;
   commentsRequireApproval: boolean;
   previewSeconds: number;
+  shortsFreeCount: number;
   maxConcurrentStreams: number;
   seo: {
     videoTitleTemplate: string;

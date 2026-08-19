@@ -1,6 +1,5 @@
 import { Router, type Request, type Response } from 'express';
 import { eq } from 'drizzle-orm';
-import { HLS_SEGMENT_SECONDS } from '@videox/shared';
 import { deriveHlsContentKey } from '@videox/shared/play-token';
 import { db, t } from '../../core/db.js';
 import { env } from '../../config/env.js';
@@ -93,13 +92,9 @@ async function authorizeMediaRequest(req: Request, videoId: string) {
 
   const gate = evaluateGate(video, { userId, isVip, isAdmin });
   if (!gate.canPlay) {
-    // 试看票是「已知非会员」的合法状态，放行到分片层再按时间边界卡。
-    const previewAllowed = claims.scope === 'preview' && gate.gateReason === 'vip_required';
-    if (!previewAllowed) {
-      throw gate.gateReason === 'vip_required'
-        ? AppError.vipRequired('会员已过期或未开通，无法继续播放')
-        : AppError.forbidden('没有观看权限');
-    }
+    throw gate.gateReason === 'vip_required'
+      ? AppError.vipRequired('订阅后即可播放')
+      : AppError.forbidden('没有观看权限');
   }
 
   return { claims, video, userId, isVip, isAdmin };
@@ -114,19 +109,9 @@ async function authorizeMediaRequest(req: Request, videoId: string) {
  */
 async function assertWithinPreview(scope: 'full' | 'preview', file: string): Promise<void> {
   if (scope !== 'preview') return;
-  // 初始化段与密钥不含画面内容，必须放行，否则试看根本起不来。
+  // 点播已取消按秒试看，遗留 preview 票一律不给画面分片。
   if (/^init\.(mp4|m4s)$/.test(file)) return;
-
-  const match = /(\d+)\.(m4s|ts|mp4|m4a)$/.exec(file);
-  if (!match) throw AppError.vipRequired('试看片段已结束，开通会员继续观看');
-
-  const index = Number(match[1]);
-  const settings = await getSiteSettings();
-  const limit = settings.previewSeconds || 60;
-  // 分片 index 从 0 开始，第 index 片覆盖 [index*T, (index+1)*T)。
-  if (index * HLS_SEGMENT_SECONDS >= limit) {
-    throw AppError.vipRequired('试看片段已结束，开通会员继续观看');
-  }
+  throw AppError.vipRequired('订阅后即可播放');
 }
 
 function setCors(res: Response): void {

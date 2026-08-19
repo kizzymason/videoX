@@ -158,8 +158,8 @@ adminRouter.patch(
     if (typeof input.title === 'string' && input.title !== video.title) {
       patch.slug = await generateUniqueSlug(input.title, video.id);
     }
-    // 改成会员视频后新转码的产物才会加密，这里同步标记供转码任务读取。
-    if (input.accessLevel !== undefined) patch.isEncrypted = input.accessLevel === 'vip';
+    // 全站只保留会员档。不在这里改 isEncrypted：明文存量片改标加密会解不开，需重新转码。
+    if (input.accessLevel !== undefined) patch.accessLevel = 'vip';
 
     const [updated] = await db.update(t.videos).set(patch).where(eq(t.videos.id, video.id)).returning();
 
@@ -247,12 +247,10 @@ adminRouter.post(
         break;
       }
       case 'set_access': {
-        if (!input.accessLevel) throw AppError.badRequest('缺少 accessLevel');
         const result = await db
           .update(t.videos)
           .set({
-            accessLevel: input.accessLevel,
-            isEncrypted: input.accessLevel === 'vip',
+            accessLevel: 'vip',
             updatedAt: new Date(),
           })
           .where(inArray(t.videos.id, input.ids));

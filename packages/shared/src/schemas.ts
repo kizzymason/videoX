@@ -104,7 +104,7 @@ export const createVideoSchema = z.object({
   description: z.string().max(5000).nullable().optional(),
   categoryId: idSchema.nullable().optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
-  accessLevel: z.enum(ACCESS_LEVELS).default('free'),
+  accessLevel: z.enum(ACCESS_LEVELS).default('vip'),
   visibility: z.enum(VIDEO_VISIBILITIES).default('public'),
   kind: z.enum(VIDEO_KINDS).optional(),
   posterUrl: z.string().max(500).nullable().optional(),
@@ -139,7 +139,7 @@ export const uploadCompleteSchema = z.object({
   description: z.string().max(5000).optional(),
   categoryId: idSchema.nullable().optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
-  accessLevel: z.enum(ACCESS_LEVELS).default('free'),
+  accessLevel: z.enum(ACCESS_LEVELS).default('vip'),
   visibility: z.enum(VIDEO_VISIBILITIES).default('public'),
   /** 后台上传 Shorts 与点播分开；默认点播。 */
   kind: z.enum(VIDEO_KINDS).default('vod'),
@@ -270,7 +270,10 @@ export const siteSettingsSchema = z.object({
   contactEmail: z.string().max(160).nullable().default(null),
   allowRegistration: z.boolean().default(true),
   commentsRequireApproval: z.boolean().default(false),
-  previewSeconds: z.coerce.number().int().min(0).max(3600).default(60),
+  /** 点播不再按秒试看，保留字段以免旧后台配置校验失败。 */
+  previewSeconds: z.coerce.number().int().min(0).max(3600).default(0),
+  /** 游客与非会员可完整看的 Shorts 条数。 */
+  shortsFreeCount: z.coerce.number().int().min(0).max(50).default(3),
   maxConcurrentStreams: z.coerce.number().int().min(1).max(50).default(3),
   seo: z
     .object({

@@ -270,11 +270,11 @@ export async function completeUpload(params: {
       status: 'queued',
       // 新上传先待审：公开意图也压成 unlisted，后台通过才进前台。
       visibility: params.visibility === 'private' ? 'private' : 'unlisted',
-      accessLevel: params.accessLevel,
+      accessLevel: 'vip',
       kind: params.kind === 'shorts' ? 'shorts' : 'vod',
       sourceSizeBytes: stat.size,
       sourceHash: fileHash,
-      isEncrypted: params.accessLevel === 'vip',
+      isEncrypted: true,
     })
     .returning();
 
@@ -298,7 +298,7 @@ export async function completeUpload(params: {
   // 分片已经合并并上传，临时目录可以清掉了。
   await fsp.rm(dir, { recursive: true, force: true }).catch(() => undefined);
 
-  const jobId = await enqueueTranscode(video!.id, sourceKey, params.accessLevel === 'vip');
+  const jobId = await enqueueTranscode(video!.id, sourceKey, true);
 
   await db
     .update(t.users)
@@ -363,7 +363,7 @@ export async function cloneFromExisting(params: {
       status: 'ready',
       // 秒传也走闸门：新纪录未审，不直接上前台。
       visibility: params.visibility === 'private' ? 'private' : 'unlisted',
-      accessLevel: params.accessLevel,
+      accessLevel: 'vip',
       kind: params.kind === 'shorts' ? 'shorts' : 'vod',
       // 直接指向同一批产物，不复制文件。
       sourceKey: source.sourceKey,
@@ -429,12 +429,12 @@ export async function finalizeInstantUpload(params: {
       categoryId: params.categoryId ?? null,
       status: 'queued',
       visibility: params.visibility === 'private' ? 'private' : 'unlisted',
-      accessLevel: params.accessLevel,
+      accessLevel: 'vip',
       kind: params.kind === 'shorts' ? 'shorts' : 'vod',
       sourceKey: source.sourceKey,
       sourceSizeBytes: source.sourceSizeBytes,
       sourceHash: source.sourceHash,
-      isEncrypted: params.accessLevel === 'vip',
+      isEncrypted: true,
     })
     .returning();
 
@@ -446,7 +446,7 @@ export async function finalizeInstantUpload(params: {
   if (params.tags?.length) await syncVideoTags(video!.id, params.tags);
   await refreshCategoryCounts([params.categoryId ?? null]);
 
-  const jobId = await enqueueTranscode(video!.id, source.sourceKey, params.accessLevel === 'vip');
+  const jobId = await enqueueTranscode(video!.id, source.sourceKey, true);
 
   await db
     .update(t.users)
