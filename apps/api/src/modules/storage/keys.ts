@@ -28,4 +28,8 @@ export const StorageKeys = {
   preview(videoId: string): string {
     return `assets/${videoId}/preview.mp4`;
   },
+  caption(videoId: string, language: string, ext: string): string {
+    const clean = ext.replace(/^\./, '').toLowerCase();
+    return `assets/${videoId}/caption-${language}.${clean}`;
+  },
 } as const;
