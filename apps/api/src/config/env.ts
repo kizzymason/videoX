@@ -17,9 +17,12 @@ function findRepoRoot(start: string): string {
 
 export const REPO_ROOT = findRepoRoot(path.dirname(fileURLToPath(import.meta.url)));
 
-// .env 优先，缺失的键回落到 .env.example，保证克隆下来就能跑。
+// .env 优先。开发态缺失的键回落到 .env.example，方便克隆即跑。
+// 生产态禁止回落，避免漏配 .env 时带着 example 里的 dev_* 密钥启动。
 dotenv.config({ path: path.join(REPO_ROOT, '.env'), quiet: true });
-dotenv.config({ path: path.join(REPO_ROOT, '.env.example'), quiet: true });
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config({ path: path.join(REPO_ROOT, '.env.example'), quiet: true });
+}
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -77,8 +80,38 @@ if (!parsed.success) {
 
 const raw = parsed.data;
 
+const SECRET_FIELDS = [
+  'JWT_ACCESS_SECRET',
+  'JWT_REFRESH_SECRET',
+  'PLAY_TOKEN_SECRET',
+  'HLS_KEY_SECRET',
+  'COOKIE_SECRET',
+] as const;
+
+function isInsecureSecret(value: string): boolean {
+  const v = value.toLowerCase();
+  return v.startsWith('dev_') || v.includes('change_me');
+}
+
+if (raw.NODE_ENV === 'production') {
+  const bad = SECRET_FIELDS.filter((key) => isInsecureSecret(raw[key]));
+  if (bad.length > 0) {
+    console.error('生产环境拒绝默认密钥。请用 `openssl rand -hex 32` 写入 .env 后重启：');
+    for (const key of bad) console.error(`  ${key}`);
+    process.exit(1);
+  }
+}
+
 function absolute(p: string): string {
   return path.isAbsolute(p) ? p : path.resolve(REPO_ROOT, p);
+}
+
+function toOrigin(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
 }
 
 export const env = {
@@ -87,11 +120,11 @@ export const env = {
   isDev: raw.NODE_ENV === 'development',
   storageRoot: absolute(raw.STORAGE_LOCAL_ROOT),
   uploadTmpDir: absolute(raw.UPLOAD_TMP_DIR),
-  /** CORS 白名单：三个前端 + 本机常见变体 */
+  /** CORS 白名单：三个前端 + 本机常见变体。只比 origin，路径 /m /admin 不进比对。 */
   corsOrigins: [
-    raw.SITE_PUBLIC_URL,
-    raw.MOBILE_PUBLIC_URL,
-    raw.ADMIN_PUBLIC_URL,
+    toOrigin(raw.SITE_PUBLIC_URL),
+    toOrigin(raw.MOBILE_PUBLIC_URL),
+    toOrigin(raw.ADMIN_PUBLIC_URL),
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:5175',

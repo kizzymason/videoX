@@ -8,11 +8,13 @@ import { App } from './App';
 import { queryClient } from './lib/query';
 import './styles.css';
 
+const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined;
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={300}>
-        <BrowserRouter>
+        <BrowserRouter basename={routerBasename}>
           <App />
           <Toaster position="bottom-right" richColors closeButton />
         </BrowserRouter>
