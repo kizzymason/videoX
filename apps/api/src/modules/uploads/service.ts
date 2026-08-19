@@ -266,7 +266,8 @@ export async function completeUpload(params: {
       authorId: params.userId,
       categoryId: params.categoryId ?? null,
       status: 'queued',
-      visibility: params.visibility,
+      // 新上传先待审：公开意图也压成 unlisted，后台通过才进前台。
+      visibility: params.visibility === 'private' ? 'private' : 'unlisted',
       accessLevel: params.accessLevel,
       sourceSizeBytes: stat.size,
       sourceHash: fileHash,
@@ -353,7 +354,8 @@ export async function cloneFromExisting(params: {
       authorId: params.userId,
       categoryId: params.categoryId ?? null,
       status: 'ready',
-      visibility: params.visibility,
+      // 秒传也走闸门：新纪录未审，不直接上前台。
+      visibility: params.visibility === 'private' ? 'private' : 'unlisted',
       accessLevel: params.accessLevel,
       // 直接指向同一批产物，不复制文件。
       sourceKey: source.sourceKey,
@@ -371,7 +373,7 @@ export async function cloneFromExisting(params: {
       fps: source.fps,
       renditions: source.renditions,
       isEncrypted: source.isEncrypted,
-      publishedAt: new Date(),
+      publishedAt: null,
     })
     .returning();
 
