@@ -261,7 +261,7 @@ export const siteSettingsSchema = z.object({
       sitemapPageSize: z.coerce.number().int().min(100).max(50000).default(5000),
       robotsExtra: z.string().max(2000).default(''),
     })
-    // prefault 而非 default：让空对象走一遍字段级默认值，而不是业务全整个对象。
+    // prefault 而非 default：让空对象走一遍字段级默认值，而不是要求给全整个对象。
     .prefault({}),
 });
 
