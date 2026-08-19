@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
-import { Crown, Lock, Play } from 'lucide-react';
+import { Crown, Lock } from 'lucide-react';
 import { formatCount, formatDuration, formatRelativeTime, type VideoSummary } from '@videox/shared';
 import { Badge, Skeleton, cn } from '@videox/ui';
 import { contentApi } from '../../lib/api';
@@ -71,11 +71,7 @@ export function VideoCard({ video, progressPercent, className, layout = 'grid' }
             decoding="async"
             className="size-full object-cover"
           />
-        ) : (
-          <div className="grid size-full place-items-center text-muted-foreground">
-            <Play className="size-6" />
-          </div>
-        )}
+        ) : null}
 
         {/* 悬停预览片段：只有存在预览文件时才挂 video 元素 */}
         {hovering && video.previewUrl ? (
