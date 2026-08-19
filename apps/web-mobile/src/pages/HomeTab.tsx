@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { cn } from '@videox/ui';
 import { contentApi } from '../lib/api';
@@ -15,16 +15,11 @@ const FEEDS = [
   { key: 'popular', label: '热门' },
 ] as const;
 
+/** 首页 tab 只留三档。分类去搜索页。 */
 export function HomeTab() {
   const [feed, setFeed] = React.useState<(typeof FEEDS)[number]['key']>('recommend');
   const user = useAuthStore((s) => s.user);
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
-
-  const { data: categories } = useQuery({
-    queryKey: ['categories'],
-    queryFn: contentApi.categories,
-    staleTime: 10 * 60_000,
-  });
 
   const query = useInfiniteQuery({
     queryKey: ['home', feed],
@@ -93,16 +88,6 @@ export function HomeTab() {
                 <span className="mt-1.5 block h-0.5" />
               )}
             </button>
-          ))}
-          {(categories ?? []).slice(0, 8).map((category) => (
-            <Link
-              key={category.id}
-              to={`/category/${category.slug}`}
-              className="no-tap-highlight shrink-0 pb-1 text-[15px] text-muted-foreground"
-            >
-              {category.name}
-              <span className="mt-1.5 block h-0.5" />
-            </Link>
           ))}
         </div>
       </header>
