@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useTheme } from '@videox/ui';
+import { useTheme, Skeleton } from '@videox/ui';
 import { contentApi } from './lib/api';
 import { useAuthStore } from './stores/auth';
 import { useUiStore } from './stores/ui';
@@ -39,7 +39,15 @@ function RequireAuth({ children }: { children: React.ReactElement }) {
     }
   }, [initializing, user, openAuth]);
 
-  if (initializing) return null;
+  if (initializing) {
+    return (
+      <div className="mx-auto w-full max-w-[1600px] space-y-4 px-6 py-8">
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-48 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/" replace />;
   return children;
 }

@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { watchPercent, type SortOption } from '@videox/shared';
 import { contentApi, socialApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
@@ -31,6 +31,7 @@ export function HomePage() {
     queryFn: ({ pageParam }) => contentApi.videos({ page: pageParam, pageSize: 24, sort }),
     initialPageParam: 1,
     getNextPageParam: nextPageParam,
+    placeholderData: keepPreviousData,
   });
 
   const videos = flatten(feed.data?.pages);
@@ -61,6 +62,7 @@ export function HomePage() {
         videos={videos}
         loading={feed.isLoading}
         loadingMore={feed.isFetchingNextPage}
+        fetching={feed.isFetching && !feed.isFetchingNextPage && videos.length > 0}
         className="xl:grid-cols-4 2xl:grid-cols-4 min-[1800px]:grid-cols-4"
       />
       <InfiniteFooter

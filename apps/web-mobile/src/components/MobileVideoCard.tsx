@@ -36,7 +36,7 @@ export function MobileVideoCard({
     <Link
       to={`/watch/${video.slug || video.id}`}
       onPointerDown={prefetchWatchPage}
-      className={cn('no-tap-highlight flex flex-col', className)}
+      className={cn('vx-press no-tap-highlight flex flex-col', className)}
     >
       <div className="relative w-full overflow-hidden rounded-xl bg-muted" style={{ aspectRatio: ratio }}>
         {poster ? (

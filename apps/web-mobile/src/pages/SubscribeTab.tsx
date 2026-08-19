@@ -22,6 +22,7 @@ export function SubscribeTab() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const initializing = useAuthStore((s) => s.initializing);
   const refreshUser = useAuthStore((s) => s.refreshUser);
   const [code, setCode] = React.useState('');
 
@@ -57,6 +58,23 @@ export function SubscribeTab() {
   };
 
   const remaining = membership?.vipExpiresAt ? daysUntil(membership.vipExpiresAt) : null;
+
+  if (initializing) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <AppHeader title="订阅" />
+        <div className="flex-1 space-y-3 px-4 pt-4">
+          <Skeleton className="h-28 w-full rounded-2xl" />
+          <Skeleton className="h-12 w-full rounded-xl" />
+          <div className="grid grid-cols-2 gap-2.5">
+            {Array.from({ length: 4 }, (_, i) => (
+              <Skeleton key={i} className="h-32 rounded-xl" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (

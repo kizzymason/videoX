@@ -23,6 +23,7 @@ import {
   Button,
   Field,
   Input,
+  Skeleton,
   cn,
 } from '@videox/ui';
 import { ApiError, socialApi } from '../lib/api';
@@ -43,6 +44,7 @@ const ENTRIES = [
 
 export function MineTab() {
   const user = useAuthStore((s) => s.user);
+  const initializing = useAuthStore((s) => s.initializing);
   const logout = useAuthStore((s) => s.logout);
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
@@ -52,6 +54,19 @@ export function MineTab() {
     queryFn: () => socialApi.continueWatching(6),
     enabled: Boolean(user),
   });
+
+  if (initializing) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <AppHeader title="我的" />
+        <div className="flex-1 space-y-3 px-4 pt-4">
+          <Skeleton className="h-24 w-full rounded-2xl" />
+          <Skeleton className="h-20 w-full rounded-2xl" />
+          <Skeleton className="h-36 w-full rounded-2xl" />
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -66,7 +81,7 @@ export function MineTab() {
     <>
       <AppHeader title="我的" />
       <div className="tab-scroll flex-1 space-y-5 px-4 pt-2 pb-6">
-        <Link to="/profile" className="flex items-center gap-3 rounded-2xl border border-border p-4">
+        <Link to="/profile" className="vx-press flex items-center gap-3 rounded-2xl border border-border p-4 transition-colors duration-200 active:bg-accent">
           <Avatar className="size-14">
             <AvatarImage src={user.avatarUrl ?? undefined} alt={user.displayName} />
             <AvatarFallback className="text-lg">{user.displayName.slice(0, 1).toUpperCase()}</AvatarFallback>
@@ -84,7 +99,7 @@ export function MineTab() {
         {user ? (
           <Link
             to="/subscribe"
-            className="flex items-center gap-3 rounded-2xl bg-foreground p-4 text-background"
+            className="vx-press flex items-center gap-3 rounded-2xl bg-foreground p-4 text-background"
           >
             <Flame className="size-5" />
             <div className="flex-1">
@@ -119,7 +134,7 @@ export function MineTab() {
               key={to}
               to={to}
               className={cn(
-                'flex items-center gap-3 px-4 py-3.5 active:bg-accent',
+                'vx-press flex items-center gap-3 px-4 py-3.5 transition-colors duration-200 active:bg-accent',
                 index > 0 && 'border-t border-border',
               )}
             >
@@ -201,7 +216,7 @@ export function HistoryPage() {
               type="button"
               aria-label="清空历史"
               onClick={() => clearMutation.mutate()}
-              className="grid size-9 place-items-center rounded-full active:bg-accent"
+              className="vx-press grid size-9 place-items-center rounded-full transition-colors duration-200 active:bg-accent"
             >
               <Trash2 className="size-4" />
             </button>
@@ -358,7 +373,18 @@ export function ProfilePage() {
     onError: (error) => toast.error(error instanceof ApiError ? error.message : '保存失败'),
   });
 
-  if (initializing) return null;
+  if (initializing) {
+    return (
+      <>
+        <AppHeader back title="编辑资料" />
+        <div className="flex-1 space-y-4 px-4 py-4">
+          <Skeleton className="mx-auto size-20 rounded-full" />
+          <Skeleton className="h-11 w-full rounded-xl" />
+          <Skeleton className="h-24 w-full rounded-xl" />
+        </div>
+      </>
+    );
+  }
   if (!user) return <Navigate to="/login?redirect=/profile" replace />;
 
   return (

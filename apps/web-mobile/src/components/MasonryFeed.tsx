@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { VideoSummary } from '@videox/shared';
-import { Skeleton, cn } from '@videox/ui';
+import { Skeleton, Spinner, cn } from '@videox/ui';
 import { MobileVideoCard, cardHeight } from './MobileVideoCard';
 
 const GAP = 10;
@@ -20,6 +20,8 @@ export interface MasonryFeedProps {
   videos: VideoSummary[];
   loading?: boolean;
   loadingMore?: boolean;
+  /** 已有列表时的后台刷新，角上细转圈，不卸卡片 */
+  fetching?: boolean;
   hasMore?: boolean;
   onEndReached?: () => void;
   /** 列表顶部插入的内容（轮播、分类胶囊等） */
@@ -39,12 +41,14 @@ export function MasonryFeed({
   videos,
   loading,
   loadingMore,
+  fetching,
   hasMore,
   onEndReached,
   header,
   emptyText = '这里还没有内容',
   className,
 }: MasonryFeedProps) {
+  const showSkeleton = Boolean(loading) && videos.length === 0;
   // 容器在骨架屏与真实列表之间会整体换挂，用 state 持有节点，
   // 这样重新挂载时测量与滚动订阅都会跟着重跑（用 ref 的话首帧测不到宽度，列表会一直是空的）。
   const [container, setContainer] = React.useState<HTMLDivElement | null>(null);
@@ -130,12 +134,16 @@ export function MasonryFeed({
   }, [scrollTop, viewportHeight, totalHeight, hasMore, loadingMore, onEndReached]);
 
   return (
-    <div className={cn('px-3', className)}>
+    <div className={cn('relative px-3', className)}>
       {header}
 
       {/* 骨架屏也挂在同一个 ref 上，宽度在数据到达前就量好，首帧即可定位卡片 */}
-      <div ref={setContainer} className="relative w-full" style={{ height: loading ? undefined : totalHeight }}>
-        {loading ? (
+      <div
+        ref={setContainer}
+        className="relative w-full"
+        style={{ height: showSkeleton ? undefined : totalHeight }}
+      >
+        {showSkeleton ? (
           <div className="grid grid-cols-2 gap-2.5">
             {Array.from({ length: 8 }, (_, i) => (
               <div key={i} className="space-y-2">
@@ -158,7 +166,13 @@ export function MasonryFeed({
         )}
       </div>
 
-      {!loading && videos.length === 0 ? (
+      {fetching && videos.length > 0 && !loadingMore ? (
+        <div className="pointer-events-none absolute top-2 right-3">
+          <Spinner className="size-4 text-muted-foreground" />
+        </div>
+      ) : null}
+
+      {!showSkeleton && videos.length === 0 ? (
         <p className="py-16 text-center text-sm text-muted-foreground">{emptyText}</p>
       ) : (
         <div className="py-6 text-center text-xs text-muted-foreground">

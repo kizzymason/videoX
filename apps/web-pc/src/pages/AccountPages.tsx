@@ -14,6 +14,7 @@ import {
   CardContent,
   Field,
   Input,
+  Skeleton,
   Switch,
   Textarea,
   cn,
@@ -101,7 +102,15 @@ export function ProfilePage() {
     onError: (error) => toast.error(error instanceof ApiError ? error.message : '修改失败'),
   });
 
-  if (initializing) return null;
+  if (initializing) {
+    return (
+      <PageContainer className="max-w-3xl space-y-4">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-40 w-full rounded-xl" />
+        <Skeleton className="h-56 w-full rounded-xl" />
+      </PageContainer>
+    );
+  }
   if (!user) return null;
 
   return (

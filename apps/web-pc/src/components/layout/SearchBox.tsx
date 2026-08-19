@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Search, TrendingUp, X } from 'lucide-react';
-import { cn, useDebouncedValue } from '@videox/ui';
+import { cn, Skeleton, useDebouncedValue } from '@videox/ui';
 import { formatCount } from '@videox/shared';
 import { contentApi } from '../../lib/api';
 import { track } from '../../lib/analytics';
@@ -15,14 +15,14 @@ export function SearchBox({ className }: { className?: string }) {
   const wrapperRef = React.useRef<HTMLDivElement | null>(null);
   const debounced = useDebouncedValue(value.trim(), 220);
 
-  const { data: suggestions } = useQuery({
+  const { data: suggestions, isFetching: suggesting } = useQuery({
     queryKey: ['suggest', debounced],
     queryFn: () => contentApi.suggest(debounced),
     enabled: open && debounced.length > 0,
     staleTime: 60_000,
   });
 
-  const { data: hot } = useQuery({
+  const { data: hot, isFetching: hotFetching } = useQuery({
     queryKey: ['hot-keywords'],
     queryFn: contentApi.hotKeywords,
     enabled: open && debounced.length === 0,
@@ -114,65 +114,75 @@ export function SearchBox({ className }: { className?: string }) {
         ) : null}
       </div>
 
-      {open && flatOptions.length > 0 ? (
-        <div className="absolute inset-x-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-border bg-popover py-1 shadow-pop">
-          {debounced.length === 0 ? (
-            <p className="px-3 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
-              热门搜索
-            </p>
-          ) : null}
-          {flatOptions.map((option, index) => (
-            <button
-              key={
-                option.kind === 'keyword'
-                  ? `k-${option.keyword}`
-                  : option.kind === 'tag'
-                    ? `t-${option.tag.slug}`
-                    : `v-${option.video.id}`
-              }
-              type="button"
-              onMouseEnter={() => setActiveIndex(index)}
-              onClick={() => choose(index)}
-              className={cn(
-                'flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors',
-                index === activeIndex ? 'bg-accent' : 'hover:bg-accent/60',
-              )}
-            >
-              {option.kind === 'keyword' ? (
-                <>
-                  <TrendingUp className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{option.keyword}</span>
-                </>
-              ) : option.kind === 'tag' ? (
-                <>
-                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                    标签
-                  </span>
-                  <span className="truncate">{option.tag.name}</span>
-                  <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
-                    {formatCount(option.tag.videoCount)}
-                  </span>
-                </>
-              ) : (
-                <>
-                  {option.video.posterUrl ? (
-                    <img
-                      src={option.video.posterUrl}
-                      alt=""
-                      className="h-8 w-14 shrink-0 rounded object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <span className="h-8 w-14 shrink-0 rounded bg-muted" />
+      {open && (flatOptions.length > 0 || (debounced.length > 0 && suggesting && !suggestions) || (debounced.length === 0 && hotFetching && !hot)) ? (
+        <div className="absolute inset-x-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-border bg-popover py-1 shadow-pop duration-200 animate-in fade-in-0 zoom-in-95">
+          {debounced.length > 0 && suggesting && !suggestions ? (
+            <div className="space-y-2 px-3 py-2">
+              {Array.from({ length: 4 }, (_, i) => (
+                <Skeleton key={i} className="h-8 w-full rounded-md" />
+              ))}
+            </div>
+          ) : (
+            <>
+              {debounced.length === 0 ? (
+                <p className="px-3 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground/70 uppercase">
+                  热门搜索
+                </p>
+              ) : null}
+              {flatOptions.map((option, index) => (
+                <button
+                  key={
+                    option.kind === 'keyword'
+                      ? `k-${option.keyword}`
+                      : option.kind === 'tag'
+                        ? `t-${option.tag.slug}`
+                        : `v-${option.video.id}`
+                  }
+                  type="button"
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => choose(index)}
+                  className={cn(
+                    'flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors duration-200',
+                    index === activeIndex ? 'bg-accent' : 'hover:bg-accent/60',
                   )}
-                  <span className="truncate">{option.video.title}</span>
-                  <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
-                    {formatCount(option.video.viewCount)} 播放
-                  </span>
-                </>
-              )}
-            </button>
-          ))}
+                >
+                  {option.kind === 'keyword' ? (
+                    <>
+                      <TrendingUp className="size-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{option.keyword}</span>
+                    </>
+                  ) : option.kind === 'tag' ? (
+                    <>
+                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                        标签
+                      </span>
+                      <span className="truncate">{option.tag.name}</span>
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
+                        {formatCount(option.tag.videoCount)}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      {option.video.posterUrl ? (
+                        <img
+                          src={option.video.posterUrl}
+                          alt=""
+                          className="h-8 w-14 shrink-0 rounded object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span className="h-8 w-14 shrink-0 rounded bg-muted" />
+                      )}
+                      <span className="truncate">{option.video.title}</span>
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
+                        {formatCount(option.video.viewCount)} 播放
+                      </span>
+                    </>
+                  )}
+                </button>
+              ))}
+            </>
+          )}
         </div>
       ) : null}
     </div>

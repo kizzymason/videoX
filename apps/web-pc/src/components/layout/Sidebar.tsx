@@ -1,3 +1,4 @@
+import type * as React from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import {
   Clock,
@@ -47,7 +48,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-40 flex flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out-quint',
+        'vx-chrome-sidebar fixed inset-y-0 left-0 z-40 flex flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out-quint',
         collapsed ? 'w-16' : 'w-60',
       )}
     >
@@ -96,15 +97,26 @@ export function Sidebar() {
                 to={`/category/${category.slug}`}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+                    'relative flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors duration-200',
                     isActive
                       ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
                       : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground',
                   )
                 }
               >
-                <span className="truncate">{category.name}</span>
-                <span className="shrink-0 text-xs text-muted-foreground/70 tabular-nums">{category.videoCount}</span>
+                {({ isActive }) => (
+                  <>
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-r bg-foreground transition-opacity duration-200',
+                        isActive ? 'opacity-100' : 'opacity-0',
+                      )}
+                    />
+                    <span className="truncate">{category.name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground/70 tabular-nums">{category.videoCount}</span>
+                  </>
+                )}
               </NavLink>
             ))}
           </Section>
@@ -159,7 +171,7 @@ function NavItem({
       end={end}
       className={({ isActive }) =>
         cn(
-          'flex w-full items-center rounded-lg text-sm transition-colors',
+          'relative flex w-full items-center rounded-lg text-sm transition-colors duration-200',
           collapsed ? 'h-10 justify-center px-0' : 'gap-3 px-3 py-2',
           isActive
             ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
@@ -167,8 +179,19 @@ function NavItem({
         )
       }
     >
-      <Icon className="size-[18px] shrink-0" />
-      {!collapsed ? <span className="truncate">{label}</span> : null}
+      {({ isActive }) => (
+        <>
+          <span
+            aria-hidden
+            className={cn(
+              'absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-r bg-foreground transition-opacity duration-200',
+              isActive ? 'opacity-100' : 'opacity-0',
+            )}
+          />
+          <Icon className="size-[18px] shrink-0" />
+          {!collapsed ? <span className="truncate">{label}</span> : null}
+        </>
+      )}
     </NavLink>
   );
 

@@ -1,23 +1,14 @@
 import * as React from 'react';
-import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useTheme } from '@videox/ui';
+import { Skeleton, useTheme } from '@videox/ui';
 import { contentApi } from './lib/api';
 import { track } from './lib/analytics';
 import { useAuthStore } from './stores/auth';
 import { useUiStore } from './stores/ui';
-import { TabBar } from './components/TabBar';
-import { HomeTab } from './pages/HomeTab';
-import { ShortsTab } from './pages/ShortsTab';
-import { CategoriesTab, CategoryPage, ChannelPage } from './pages/CategoriesTab';
-import { SubscribeTab } from './pages/SubscribeTab';
-import {
-  FavoritesPage,
-  FollowingPage,
-  HistoryPage,
-  MineTab,
-  ProfilePage,
-} from './pages/MineTab';
+import { AppChrome } from './components/AppChrome';
+import { CategoryPage, ChannelPage } from './pages/CategoriesTab';
+import { FavoritesPage, FollowingPage, HistoryPage, ProfilePage } from './pages/MineTab';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { SearchPage } from './pages/SearchPage';
@@ -92,43 +83,22 @@ function applyChrome(dark: boolean, shorts: boolean) {
   apple.setAttribute('content', dark ? 'black-translucent' : 'default');
 }
 
-function TabLayout() {
-  const { pathname } = useLocation();
-  const shorts = pathname.startsWith('/shorts');
-  return (
-    <div
-      className={
-        shorts
-          ? 'flex min-h-0 flex-1 flex-col bg-black pb-[calc(3.5rem+env(safe-area-inset-bottom))]'
-          : 'flex min-h-0 flex-1 flex-col bg-background pb-[calc(3.5rem+env(safe-area-inset-bottom))]'
-      }
-    >
-      <div
-        aria-hidden
-        className={shorts ? 'pointer-events-none fixed inset-x-0 top-0 z-50' : 'pointer-events-none fixed inset-x-0 top-0 z-40 bg-background'}
-        style={{
-          height: 'env(safe-area-inset-top, 0px)',
-          backgroundColor: shorts ? '#000000' : undefined,
-        }}
-      />
-      <Outlet />
-      <TabBar />
-    </div>
-  );
-}
-
-function StackLayout() {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <Outlet />
-    </div>
-  );
+function TabRoute() {
+  return null;
 }
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const user = useAuthStore((s) => s.user);
   const initializing = useAuthStore((s) => s.initializing);
-  if (initializing) return null;
+  if (initializing) {
+    return (
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <Skeleton className="h-10 w-40" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-24 w-full" />
+      </div>
+    );
+  }
   if (!user) return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
   return children;
 }
@@ -163,7 +133,7 @@ export function App() {
   }, [location.pathname]);
 
   const syncChrome = React.useCallback(() => {
-    const shorts = location.pathname.startsWith('/shorts');
+    const shorts = location.pathname === '/shorts' || location.pathname.startsWith('/shorts/');
     const dark =
       shorts ||
       themeMode === 'dark' ||
@@ -187,15 +157,12 @@ export function App() {
 
   return (
     <Routes>
-      <Route element={<TabLayout />}>
-        <Route index element={<HomeTab />} />
-        <Route path="shorts" element={<ShortsTab />} />
-        <Route path="categories" element={<CategoriesTab />} />
-        <Route path="subscribe" element={<SubscribeTab />} />
-        <Route path="mine" element={<MineTab />} />
-      </Route>
-
-      <Route element={<StackLayout />}>
+      <Route element={<AppChrome />}>
+        <Route index element={<TabRoute />} />
+        <Route path="shorts" element={<TabRoute />} />
+        <Route path="categories" element={<TabRoute />} />
+        <Route path="subscribe" element={<TabRoute />} />
+        <Route path="mine" element={<TabRoute />} />
         <Route path="search" element={<SearchPage />} />
         <Route path="category/:slug" element={<CategoryPage />} />
         <Route path="channel/:username" element={<ChannelPage />} />

@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Search, TrendingUp, X } from 'lucide-react';
-import { useDebouncedValue, useLocalStorage } from '@videox/ui';
+import { Skeleton, useDebouncedValue, useLocalStorage } from '@videox/ui';
 import { contentApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
 import { track } from '../lib/analytics';
@@ -23,7 +23,7 @@ export function SearchPage() {
     staleTime: 10 * 60_000,
   });
   const { data: hot } = useQuery({ queryKey: ['hot'], queryFn: contentApi.hotKeywords, staleTime: 5 * 60_000 });
-  const { data: suggestions } = useQuery({
+  const { data: suggestions, isFetching: suggesting } = useQuery({
     queryKey: ['suggest', debounced],
     queryFn: () => contentApi.suggest(debounced),
     enabled: debounced.length > 0 && debounced !== q,
@@ -35,6 +35,7 @@ export function SearchPage() {
     initialPageParam: 1,
     getNextPageParam: nextPageParam,
     enabled: q.length > 0,
+    placeholderData: keepPreviousData,
   });
 
   const submit = (keyword: string) => {
@@ -57,7 +58,7 @@ export function SearchPage() {
             type="button"
             aria-label="返回"
             onClick={() => navigate(-1)}
-            className="no-tap-highlight grid size-9 shrink-0 place-items-center rounded-full active:bg-accent"
+            className="no-tap-highlight grid size-9 shrink-0 place-items-center rounded-full transition-colors duration-200 active:bg-accent"
           >
             <ChevronLeft className="size-5" />
           </button>
@@ -96,14 +97,20 @@ export function SearchPage() {
         </div>
       </div>
 
-      {debounced.length > 0 && debounced !== q && suggestions ? (
+      {debounced.length > 0 && debounced !== q && suggesting && !suggestions ? (
+        <div className="flex-1 space-y-2 px-4 pt-3">
+          {Array.from({ length: 5 }, (_, i) => (
+            <Skeleton key={i} className="h-10 w-full rounded-lg" />
+          ))}
+        </div>
+      ) : debounced.length > 0 && debounced !== q && suggestions ? (
         <div className="tab-scroll flex-1 divide-y divide-border">
           {suggestions.tags.map((tag) => (
             <button
               key={tag.slug}
               type="button"
               onClick={() => submit(tag.name)}
-              className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm active:bg-accent"
+              className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors duration-200 active:bg-accent"
             >
               <Search className="size-4 shrink-0 text-muted-foreground" />
               <span className="flex-1 truncate">{tag.name}</span>
@@ -115,7 +122,7 @@ export function SearchPage() {
               key={item.id}
               type="button"
               onClick={() => navigate(`/watch/${item.id}`)}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left active:bg-accent"
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-200 active:bg-accent"
             >
               {item.posterUrl ? (
                 <img src={item.posterUrl} alt="" className="h-11 w-20 shrink-0 rounded-md object-cover" />
@@ -132,6 +139,7 @@ export function SearchPage() {
             videos={videos}
             loading={results.isLoading}
             loadingMore={results.isFetchingNextPage}
+            fetching={results.isFetching && !results.isFetchingNextPage && videos.length > 0}
             hasMore={results.hasNextPage}
             onEndReached={() => void results.fetchNextPage()}
             className="pt-3"
@@ -192,7 +200,7 @@ export function SearchPage() {
                     key={keyword}
                     type="button"
                     onClick={() => submit(keyword)}
-                    className="flex w-full items-center gap-3 rounded-lg py-2.5 text-left text-sm active:bg-accent"
+                    className="flex w-full items-center gap-3 rounded-lg py-2.5 text-left text-sm transition-colors duration-200 active:bg-accent"
                   >
                     <span
                       className={

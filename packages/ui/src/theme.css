@@ -243,4 +243,31 @@
     overflow: hidden;
     word-break: break-word;
   }
+
+  /* C 端克制动效：只动透明度 / 缩放，时长对齐登录弹窗。 */
+  .vx-page-enter {
+    animation: vx-page-enter 200ms var(--ease-out-quint) both;
+  }
+  @keyframes vx-page-enter {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .vx-press {
+    transition: transform 150ms var(--ease-out-quint);
+  }
+  .vx-press:active {
+    transform: scale(0.98);
+  }
+
+  .vx-chrome-sidebar {
+    view-transition-name: vx-sidebar;
+  }
+  .vx-chrome-topbar {
+    view-transition-name: vx-topbar;
+  }
 }

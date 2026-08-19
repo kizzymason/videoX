@@ -102,30 +102,9 @@ export function AuthModal() {
 
         <p className="text-center text-2xl font-semibold tracking-tight">videoX</p>
 
-        <div className="flex justify-center gap-8 border-b border-border">
-          {(
-            [
-              { key: 'login', label: '登录' },
-              { key: 'register', label: '注册' },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setMode(tab.key)}
-              className={cn(
-                'relative -mb-px px-1 pb-2.5 text-sm transition-colors',
-                mode === tab.key ? 'font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {tab.label}
-              {mode === tab.key ? (
-                <span className="absolute inset-x-0 bottom-0 h-0.5 bg-foreground" />
-              ) : null}
-            </button>
-          ))}
-        </div>
+        <AuthModeTabs mode={mode} onChange={setMode} />
 
+        <div key={mode} className="vx-page-enter">
         {mode === 'login' ? (
           <form onSubmit={submitLogin} className="space-y-4">
             <Field label="用户名" htmlFor="vx-login-user">
@@ -195,8 +174,57 @@ export function AuthModal() {
             </p>
           </div>
         )}
+        </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function AuthModeTabs({
+  mode,
+  onChange,
+}: {
+  mode: 'login' | 'register';
+  onChange: (mode: 'login' | 'register') => void;
+}) {
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const [bar, setBar] = React.useState({ left: 0, width: 0 });
+
+  React.useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const el = root.querySelector<HTMLElement>('[data-active="true"]');
+    if (!el) return;
+    setBar({ left: el.offsetLeft, width: el.offsetWidth });
+  }, [mode]);
+
+  return (
+    <div ref={rootRef} className="relative flex justify-center gap-8 border-b border-border">
+      {(
+        [
+          { key: 'login', label: '登录' },
+          { key: 'register', label: '注册' },
+        ] as const
+      ).map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          data-active={mode === tab.key}
+          onClick={() => onChange(tab.key)}
+          className={cn(
+            'relative -mb-px px-1 pb-2.5 text-sm transition-colors duration-200',
+            mode === tab.key ? 'font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {tab.label}
+        </button>
+      ))}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute bottom-0 h-0.5 bg-foreground transition-[left,width] duration-200 ease-out-quint"
+        style={{ left: bar.left, width: bar.width }}
+      />
+    </div>
   );
 }
 

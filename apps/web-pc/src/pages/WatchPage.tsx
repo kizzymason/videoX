@@ -352,13 +352,20 @@ function Description({ text }: { text: string }) {
   const [expanded, setExpanded] = React.useState(false);
   const isLong = text.length > 160;
   return (
-    <div className="rounded-xl bg-muted/50 p-4 text-sm leading-relaxed whitespace-pre-wrap">
-      <p className={cn(!expanded && isLong && 'line-clamp-3')}>{text}</p>
+    <div className="rounded-xl bg-muted/50 p-4 text-sm leading-relaxed">
+      <p
+        className={cn(
+          'overflow-hidden whitespace-pre-wrap transition-[max-height] duration-200 ease-out-quint',
+          expanded || !isLong ? 'max-h-[40rem]' : 'max-h-[4.5rem]',
+        )}
+      >
+        {text}
+      </p>
       {isLong ? (
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+          className="mt-2 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
         >
           {expanded ? '收起' : '展开全部'}
         </button>
