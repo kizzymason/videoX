@@ -2,8 +2,9 @@ import * as React from 'react';
 import { Check, ChevronRight } from 'lucide-react';
 import { cn } from '@videox/ui';
 
+const TRACK = 48;
 const KNOB = 40;
-const PAD = 2;
+const PAD = (TRACK - KNOB) / 2;
 const THRESHOLD = 0.92;
 
 export function SlideCaptcha({
@@ -23,6 +24,7 @@ export function SlideCaptcha({
   const startRatio = React.useRef(0);
   const ratioRef = React.useRef(0);
   const [ratio, setRatio] = React.useState(0);
+  const [sliding, setSliding] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [done, setDone] = React.useState(false);
 
@@ -49,6 +51,7 @@ export function SlideCaptcha({
   const onPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (disabled || busy || done) return;
     dragging.current = true;
+    setSliding(true);
     startX.current = event.clientX;
     startRatio.current = ratioRef.current;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -66,9 +69,12 @@ export function SlideCaptcha({
   const onPointerUp = () => {
     if (!dragging.current) return;
     dragging.current = false;
+    setSliding(false);
     if (ratioRef.current >= THRESHOLD) void finish();
     else setRatioBoth(0);
   };
+
+  const glide = sliding ? undefined : 'left 200ms var(--ease-out-quint), width 200ms var(--ease-out-quint)';
 
   return (
     <div
@@ -81,7 +87,7 @@ export function SlideCaptcha({
     >
       <div
         className="absolute inset-y-0 left-0 bg-foreground/10"
-        style={{ width: `calc(${PAD}px + ${ratio} * (100% - ${PAD * 2}px))` }}
+        style={{ width: `calc(${PAD}px + ${ratio} * (100% - ${PAD * 2}px))`, transition: glide }}
       />
       <p
         className={cn(
@@ -99,10 +105,11 @@ export function SlideCaptcha({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        className="absolute top-0.5 z-20 grid size-10 touch-none place-items-center rounded-full bg-primary text-primary-foreground shadow-sm"
+        className="absolute z-20 grid size-10 touch-none place-items-center rounded-full bg-primary text-primary-foreground shadow-sm"
         style={{
-          left: PAD,
-          transform: `translateX(calc(${ratio} * (100% - ${KNOB + PAD * 2}px)))`,
+          top: PAD,
+          left: `calc(${PAD}px + ${ratio} * (100% - ${KNOB + PAD * 2}px))`,
+          transition: glide,
         }}
       >
         {done ? <Check className="size-4" strokeWidth={2.5} /> : <ChevronRight className="size-4" strokeWidth={2.5} />}

@@ -14,8 +14,10 @@ import { LoginPage, NotFoundPage, ProfilePage, RegisterPage, SettingsPage } from
 import { AuthModal } from './components/AuthModal';
 import { useAuthModalStore } from './stores/auth-modal';
 import { prefetchWatchPage } from './lib/prefetch-watch';
+import { AuthGatePage } from './pages/AuthGatePage';
 
 const WatchPage = React.lazy(() => import('./pages/WatchPage').then((m) => ({ default: m.WatchPage })));
+const ShortsPage = React.lazy(() => import('./pages/ShortsPage').then((m) => ({ default: m.ShortsPage })));
 
 function WatchRouteFallback() {
   return (
@@ -49,6 +51,14 @@ function RequireAuth({ children }: { children: React.ReactElement }) {
     );
   }
   if (!user) return <Navigate to="/" replace />;
+  return children;
+}
+
+function RequireMembershipAuth({ children }: { children: React.ReactElement }) {
+  const user = useAuthStore((s) => s.user);
+  const initializing = useAuthStore((s) => s.initializing);
+  if (initializing) return null;
+  if (!user) return <Navigate to="/auth-required?redirect=/membership" replace />;
   return children;
 }
 
@@ -97,6 +107,15 @@ export function App() {
         <Route path="categories" element={<CategoriesPage />} />
         <Route path="category/:slug" element={<CategoryPage />} />
         <Route path="search" element={<SearchPage />} />
+        <Route path="auth-required" element={<AuthGatePage />} />
+        <Route
+          path="shorts"
+          element={
+            <React.Suspense fallback={<div className="min-h-[60vh] bg-black" />}>
+              <ShortsPage />
+            </React.Suspense>
+          }
+        />
         <Route
           path="watch/:idOrSlug"
           element={
@@ -106,7 +125,14 @@ export function App() {
           }
         />
         <Route path="channel/:username" element={<ChannelPage />} />
-        <Route path="membership" element={<MembershipPage />} />
+        <Route
+          path="membership"
+          element={
+            <RequireMembershipAuth>
+              <MembershipPage />
+            </RequireMembershipAuth>
+          }
+        />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="history" element={<RequireAuth><HistoryPage /></RequireAuth>} />
         <Route path="favorites" element={<RequireAuth><FavoritesPage /></RequireAuth>} />

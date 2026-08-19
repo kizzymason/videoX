@@ -62,13 +62,13 @@ export function ExplorePage() {
 // ---------------------------------------------------------------------------
 
 export function CategoriesPage() {
-  useSeo({ title: '全部分类' });
+  useSeo({ title: '全部频道' });
   const { data, isLoading } = useQuery({ queryKey: ['categories'], queryFn: contentApi.categories });
   const { data: tags } = useQuery({ queryKey: ['tags'], queryFn: () => contentApi.tags(40) });
 
   return (
     <PageContainer>
-      <PageHeader title="全部分类" description="按频道浏览全站内容" />
+      <PageHeader title="全部频道" description="按频道浏览全站内容" />
 
       {isLoading ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -77,7 +77,7 @@ export function CategoriesPage() {
           ))}
         </div>
       ) : (data?.length ?? 0) === 0 ? (
-        <EmptyState icon={<LayoutGrid />} title="还没有分类" />
+        <EmptyState icon={<LayoutGrid />} title="还没有频道" />
       ) : (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {data!.map((category) => (
@@ -154,7 +154,7 @@ export function CategoryPage() {
   return (
     <PageContainer>
       <PageHeader
-        title={category?.name ?? '分类'}
+        title={category?.name ?? '频道'}
         description={category?.description ?? undefined}
         action={<SortTabs value={sort} onChange={setSort} />}
       />
@@ -264,7 +264,7 @@ export function SearchPage() {
           </div>
         </FilterRow>
         {categories && categories.length > 0 ? (
-          <FilterRow label="分类">
+          <FilterRow label="频道">
             <div className="flex flex-wrap gap-1">
               <FilterChip active={!categoryId} onClick={() => update({ categoryId: undefined })}>
                 全部

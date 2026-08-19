@@ -97,7 +97,7 @@ export function SearchBox({ className }: { className?: string }) {
           onKeyDown={onKeyDown}
           placeholder="搜索视频、标签、创作者"
           aria-label="搜索"
-          className="h-9 w-full rounded-full border border-input bg-muted/60 pr-9 pl-9 text-sm outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:bg-background focus:ring-[3px] focus:ring-ring/15"
+          className="h-10 w-full rounded-full border border-input bg-muted/60 pr-9 pl-9 text-[15px] outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:bg-background focus:ring-[3px] focus:ring-ring/15"
         />
         {value ? (
           <button

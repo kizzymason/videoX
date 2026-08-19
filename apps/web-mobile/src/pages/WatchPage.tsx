@@ -139,6 +139,7 @@ export function WatchPage() {
             poster={video.posterUrl}
             title={video.title}
             autoplay
+            muted={false}
             loggedIn={Boolean(user)}
             onBack={() => navigate(-1)}
             renewTicket={async (id) => {

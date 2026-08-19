@@ -98,6 +98,8 @@ export interface VideoListQuery {
 
 export const contentApi = {
   videos: (query: VideoListQuery) => api.get<Paginated<VideoSummary>>('/videos', query as Record<string, unknown>),
+  shorts: (query: VideoListQuery = {}) =>
+    api.get<Paginated<VideoSummary>>('/videos/shorts', query as Record<string, unknown>),
   video: (idOrSlug: string) => api.get<VideoDetail>(`/videos/${encodeURIComponent(idOrSlug)}`),
   related: (id: string, limit = 12) => api.get<VideoSummary[]>(`/videos/${id}/related`, { limit }),
   moreFromAuthor: (id: string, limit = 8) => api.get<VideoSummary[]>(`/videos/${id}/more-from-author`, { limit }),

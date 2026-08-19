@@ -149,7 +149,7 @@ export function SearchPage() {
         <div className="tab-scroll flex-1 space-y-6 px-4 pt-4">
           {categories && categories.length > 0 ? (
             <section className="space-y-2.5">
-              <h2 className="text-sm font-semibold">分类</h2>
+              <h2 className="text-sm font-semibold">频道</h2>
               <div className="grid grid-cols-2 gap-2.5">
                 {categories.map((category) => (
                   <Link

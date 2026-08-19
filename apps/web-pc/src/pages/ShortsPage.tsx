@@ -1,14 +1,16 @@
 import * as React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
 import { Bookmark, Heart, Maximize, Volume2, VolumeX } from 'lucide-react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { usePlayer, type PlayerEngine, type PlayerSource } from '@videox/player';
 import { formatCount, parseShortsTrialDetails, type ShortsTrialQuota, type VideoSummary } from '@videox/shared';
-import { Spinner } from '@videox/ui';
+import { cn } from '@videox/ui';
 import { ApiError, contentApi, socialApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
 import { track } from '../lib/analytics';
+import { useSeo } from '../hooks/use-seo';
 import { useAuthStore } from '../stores/auth';
+import { useAuthModalStore } from '../stores/auth-modal';
+import { Link } from 'react-router-dom';
 
 function enterFullscreen(container: HTMLElement | null) {
   if (!container) return;
@@ -21,87 +23,80 @@ function enterFullscreen(container: HTMLElement | null) {
 }
 
 /**
- * Shorts：全屏竖滑，点击不进 /watch。数据走 GET /api/videos/shorts。
- * 进入视口（~80%）才取 play-ticket + usePlayer 起播；离开即卸载引擎，全 feed 只活一个。
- * 顶/底安全区都铺黑，离开由 App.applyChrome 卸回亮色。封面满屏，播放中不挂中间播放按钮。
+ * PC Shorts 保留移动端的竖滑体验，但铺满宽屏舞台。
+ * Shorts 里横屏、竖屏都可能出现，所以画面统一 object-contain 居中，
+ * 多出来的区域留黑：竖片左右加黑边，横片上下加黑边，都不裁切。
  */
-export function ShortsTab({ active = true }: { active?: boolean }) {
+export function ShortsPage() {
+  useSeo({ title: 'Shorts' });
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const query = useInfiniteQuery({
-    queryKey: ['shorts'],
+    queryKey: ['pc-shorts'],
     queryFn: ({ pageParam }) => contentApi.shorts({ page: pageParam, pageSize: 10 }),
     initialPageParam: 1,
     getNextPageParam: nextPageParam,
   });
-
   const videos = flatten(query.data?.pages);
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
-
-  React.useEffect(() => {
-    if (!active) setActiveId(null);
-  }, [active]);
+  const feedRef = React.useRef<HTMLDivElement | null>(null);
 
   const onScroll = React.useCallback(() => {
-    const el = containerRef.current;
-    if (!el || query.isFetchingNextPage || !query.hasNextPage) return;
-    if (el.scrollTop + el.clientHeight * 2 >= el.scrollHeight) void query.fetchNextPage();
+    const feed = feedRef.current;
+    if (!feed || query.isFetchingNextPage || !query.hasNextPage) return;
+    if (feed.scrollTop + feed.clientHeight * 2 >= feed.scrollHeight) void query.fetchNextPage();
   }, [query]);
 
-  const onActiveChange = React.useCallback((id: string, inView: boolean) => {
-    setActiveId((current) => {
-      if (inView) return id;
-      return current === id ? null : current;
-    });
+  const onActiveChange = React.useCallback((id: string, active: boolean) => {
+    setActiveId((current) => (active ? id : current === id ? null : current));
   }, []);
 
   return (
-    <div className="fixed inset-0 z-30 bg-black text-white" style={{ colorScheme: 'dark' }}>
-      <div ref={containerRef} onScroll={onScroll} className="snap-feed tab-scroll h-full w-full">
+    <div className="h-[calc(100dvh-4rem)] w-full bg-black text-white">
+      <div
+        ref={feedRef}
+        onScroll={onScroll}
+        className="h-full snap-y snap-mandatory overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         {videos.map((video) => (
-          <ShortsPage
-            key={video.id}
-            video={video}
-            active={active && activeId === video.id}
-            onActiveChange={onActiveChange}
-          />
+          <ShortsSlide key={video.id} video={video} active={activeId === video.id} onActiveChange={onActiveChange} />
         ))}
         {query.isLoading ? (
-          <div className="grid h-full place-items-center">
-            <Spinner className="size-6 text-white" />
-          </div>
+          <div className="grid h-full place-items-center text-sm text-white/60">加载中…</div>
+        ) : null}
+        {!query.isLoading && videos.length === 0 ? (
+          <div className="grid h-full place-items-center px-8 text-center text-sm text-white/60">暂时没有 Shorts</div>
         ) : null}
       </div>
     </div>
   );
 }
 
-function ShortsPage({
+function ShortsSlide({
   video,
   active,
   onActiveChange,
 }: {
   video: VideoSummary;
   active: boolean;
-  onActiveChange: (id: string, inView: boolean) => void;
+  onActiveChange: (id: string, active: boolean) => void;
 }) {
   const poster = video.verticalPosterUrl ?? video.posterUrl;
-  const ref = React.useRef<HTMLDivElement | null>(null);
-  const navigate = useNavigate();
+  const slideRef = React.useRef<HTMLDivElement | null>(null);
   const user = useAuthStore((state) => state.user);
+  const openAuth = useAuthModalStore((state) => state.openAuth);
   const requireLogin = React.useCallback(
     (action: () => void) => {
       if (!user) {
-        navigate('/auth-required?redirect=/shorts');
+        openAuth('login', '/shorts');
         return;
       }
       action();
     },
-    [navigate, user],
+    [openAuth, user],
   );
 
   React.useEffect(() => {
-    const el = ref.current;
-    if (!el) return undefined;
+    const slide = slideRef.current;
+    if (!slide) return undefined;
     const observer = new IntersectionObserver(
       ([entry]) => {
         const inView = Boolean(entry && entry.intersectionRatio > 0.8);
@@ -110,41 +105,46 @@ function ShortsPage({
       },
       { threshold: [0.8] },
     );
-    observer.observe(el);
+    observer.observe(slide);
     return () => observer.disconnect();
   }, [onActiveChange, video.id]);
 
   return (
-    <div ref={ref} className="snap-page relative h-full w-full bg-black">
-      {poster ? <img src={poster} alt="" className="size-full object-cover" /> : null}
-      {active ? <ShortsInPlacePlayer video={video} poster={poster} /> : null}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] flex items-end gap-3 px-4 pb-3">
-        <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-[15px] font-semibold text-white">{video.title}</p>
+    <article ref={slideRef} className="relative h-full w-full snap-start snap-always bg-black">
+      {poster ? <img src={poster} alt="" className="absolute inset-0 size-full object-contain" /> : null}
+      {active ? <InPlacePlayer video={video} poster={poster} /> : null}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/85 to-transparent" />
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-[1200px] items-end gap-8 px-8 pb-8">
+        <div className="min-w-0 flex-1 space-y-1.5 pb-1">
+          <p className="line-clamp-2 text-lg font-semibold">{video.title}</p>
           {video.author ? (
-            <p className="text-xs text-white/70">
+            <p className="text-sm text-white/70">
               @{video.author.username}
-              <span className="mx-1 text-white/30">·</span>
+              <span className="mx-1 text-white/35">·</span>
               {formatCount(video.viewCount)} 播放
             </p>
           ) : null}
         </div>
-        <div className="pointer-events-auto flex shrink-0 flex-col items-center gap-4 text-white">
-          <ShortsAction
+        <div className="pointer-events-auto flex shrink-0 flex-col items-center gap-4">
+          <Action
             icon={Heart}
             label={formatCount(video.likeCount)}
             onClick={() => requireLogin(() => void socialApi.like(video.id).catch(() => undefined))}
           />
-          <ShortsAction
+          <Action
             icon={Bookmark}
             label="收藏"
             onClick={() => requireLogin(() => void socialApi.favorite(video.id).catch(() => undefined))}
           />
-          <ShortsAction icon={Maximize} label="全屏" onClick={() => enterFullscreen(ref.current)} />
+          <Action
+            icon={Maximize}
+            label="全屏"
+            onClick={() => enterFullscreen(slideRef.current)}
+          />
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -164,11 +164,7 @@ function ticketGate(error: unknown): { message: string; subscribe: boolean; tria
   return { message: '暂无法播放', subscribe: false, trial: null };
 }
 
-/**
- * 只在当前页挂载。离开视口由父级卸载，usePlayer 析构时 destroy 引擎。
- * 不用 MobilePlayer：那套是 16:9 详情页皮肤。
- */
-function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: string | null }) {
+function InPlacePlayer({ video, poster }: { video: VideoSummary; poster: string | null }) {
   const [source, setSource] = React.useState<PlayerSource | null>(null);
   const [gate, setGate] = React.useState<{ message: string; subscribe: boolean; trial: ShortsTrialQuota | null } | null>(
     null,
@@ -197,8 +193,7 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
         });
       })
       .catch((error: unknown) => {
-        if (cancelled) return;
-        setGate(ticketGate(error));
+        if (!cancelled) setGate(ticketGate(error));
       });
     return () => {
       cancelled = true;
@@ -211,12 +206,12 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
     autoplay: true,
     muted: false,
     renewTicket: async (id) => {
-      const renewed = await contentApi.renewTicket(id);
+      const ticket = await contentApi.renewTicket(id);
       return {
-        token: renewed.token,
-        ttlSeconds: renewed.ttlSeconds,
-        previewSeconds: renewed.previewSeconds,
-        scope: renewed.scope,
+        token: ticket.token,
+        ttlSeconds: ticket.ttlSeconds,
+        previewSeconds: ticket.previewSeconds,
+        scope: ticket.scope,
       };
     },
     onEnded: () => {
@@ -239,12 +234,7 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
         if (source && !overlayMessage) engine.togglePlay();
       }}
     >
-      <video
-        ref={videoRef}
-        className="absolute inset-0 size-full object-cover"
-        playsInline
-        poster={poster ?? undefined}
-      />
+      <video ref={videoRef} className="absolute inset-0 size-full object-contain" playsInline poster={poster ?? undefined} />
       {overlayMessage ? (
         <div className="absolute inset-0 grid place-items-center bg-black/70 px-8 text-center backdrop-blur-[2px]">
           <div className="pointer-events-auto flex max-w-xs flex-col items-center gap-3">
@@ -252,7 +242,7 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
             <p className="text-sm text-white/70">订阅后即可继续观看 Shorts</p>
             {showSubscribe ? (
               <Link
-                to="/subscribe"
+                to="/membership"
                 className="rounded-full bg-black px-5 py-2 text-sm font-semibold text-white ring-1 ring-white/25"
               >
                 去订阅
@@ -267,8 +257,8 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
       ) : null}
       <button
         type="button"
-        className="absolute top-[calc(env(safe-area-inset-top)+0.75rem)] right-3 z-20 grid size-8 place-items-center rounded-full bg-black/40 text-white"
         aria-label={snapshot.muted ? '取消静音' : '静音'}
+        className="absolute top-5 right-6 z-10 grid size-10 place-items-center rounded-full bg-white/12 backdrop-blur-sm transition-colors hover:bg-white/20"
         onClick={(event) => {
           event.stopPropagation();
           engine.toggleMute();
@@ -285,13 +275,13 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
         value={Math.min(snapshot.currentTime, Math.max(snapshot.duration, video.durationSeconds ?? 0, 1))}
         onClick={(event) => event.stopPropagation()}
         onChange={(event) => engine.seek(Number(event.target.value))}
-        className="absolute inset-x-4 bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.25rem)] z-20 h-1 cursor-pointer accent-white"
+        className="absolute inset-x-6 bottom-2 z-20 h-1 cursor-pointer accent-white"
       />
     </div>
   );
 }
 
-function ShortsAction({
+function Action({
   icon: Icon,
   label,
   onClick,
@@ -301,9 +291,9 @@ function ShortsAction({
   onClick: () => void;
 }) {
   return (
-    <button type="button" onClick={onClick} className="vx-press no-tap-highlight flex flex-col items-center gap-0.5">
-      <span className="grid size-10 place-items-center rounded-full active:bg-white/15">
-        <Icon className="size-6" />
+    <button type="button" onClick={onClick} className="flex flex-col items-center gap-0.5">
+      <span className={cn('grid size-10 place-items-center rounded-full bg-black/25 backdrop-blur-sm')}>
+        <Icon className="size-5" />
       </span>
       <span className="text-[11px] tabular-nums">{label}</span>
     </button>
