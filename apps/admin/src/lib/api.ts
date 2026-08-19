@@ -6,6 +6,7 @@ import type {
   AuditLogEntry,
   AuthSession,
   Banner,
+  CaptionTrack,
   Category,
   CurrentUser,
   DashboardOverview,
@@ -178,6 +179,12 @@ export const videosApi = {
   retranscode: (id: string) => api.post<{ jobId: string }>(`/admin/videos/${id}/retranscode`),
   bulk: (body: { ids: string[]; action: BulkAction; accessLevel?: string; categoryId?: string }) =>
     api.post<{ affected: number }>('/admin/videos/bulk', body),
+
+  captions: (id: string) => api.get<CaptionTrack[]>(`/admin/videos/${id}/captions`),
+  uploadCaption: (id: string, body: { lang: string; filename: string; content: string }) =>
+    api.post<CaptionTrack[]>(`/admin/videos/${id}/captions`, body),
+  deleteCaption: (id: string, lang: string) =>
+    api.delete<CaptionTrack[]>(`/admin/videos/${id}/captions/${encodeURIComponent(lang)}`),
 
   jobs: (page = 1, pageSize = 20) => api.get<Paginated<TranscodeJob>>('/admin/transcode/jobs', { page, pageSize }),
   cancelJob: (id: string) => api.post<null>(`/admin/transcode/jobs/${id}/cancel`),

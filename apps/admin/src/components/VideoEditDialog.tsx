@@ -20,6 +20,7 @@ import {
   Textarea,
 } from '@videox/ui';
 import { videosApi } from '../lib/api';
+import { CaptionTracksField } from './CaptionTracksField';
 import { TagInput } from './TagInput';
 
 interface Draft {
@@ -154,6 +155,7 @@ export function VideoEditDialog({
                 />
               </Field>
             </div>
+            {video ? <CaptionTracksField videoId={video.id} /> : null}
           </div>
         ) : null}
 
