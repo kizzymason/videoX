@@ -10,6 +10,7 @@ import type {
   TranscodeJobStatus,
   UserRole,
   UserStatus,
+  CaptionFormat,
   VideoKind,
   VideoStatus,
   VideoVisibility,
@@ -215,6 +216,14 @@ export interface VideoDetail extends VideoSummary {
     gateReason: 'login_required' | 'vip_required' | 'unavailable' | null;
     resumeSeconds: number;
   };
+  /** 详情页字幕轨，地址可给播放器挂 <track>。无字幕时为空数组。 */
+  captions: CaptionTrack[];
+}
+
+export interface CaptionTrack {
+  lang: string;
+  format: CaptionFormat;
+  url: string;
 }
 
 export interface PlaybackTicket {

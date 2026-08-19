@@ -42,6 +42,10 @@ export type AccessLevel = (typeof ACCESS_LEVELS)[number];
 export const VIDEO_KINDS = ['vod', 'shorts'] as const;
 export type VideoKind = (typeof VIDEO_KINDS)[number];
 
+/** 后台上传字幕只收这两种。 */
+export const CAPTION_FORMATS = ['vtt', 'srt'] as const;
+export type CaptionFormat = (typeof CAPTION_FORMATS)[number];
+
 export const TRANSCODE_JOB_STATUSES = [
   'queued',
   'probing',
