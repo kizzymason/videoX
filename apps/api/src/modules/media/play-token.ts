@@ -96,12 +96,13 @@ export function requirePlayToken(req: Request, expectedVideoId: string): PlayTok
 const STREAM_TTL_SECONDS = 90;
 
 function streamKey(userId: string): string {
-  return `streams:${userId}`;
+  // v2：按设备而不是按视频占坑。旧 key 含 videoId，连点几部片子就会误报 429。
+  return `stream-devices:${userId}`;
 }
 
 /**
- * 用 Redis 有序集合记录「用户 → 活跃播放会话」，score 为最后心跳时间。
- * 每次请求 manifest 时续期；超过上限则拒绝新会话，但已在列表内的会话不受影响。
+ * 用 Redis 有序集合记录「用户 → 活跃播放设备」，score 为最后心跳时间。
+ * 每次请求 manifest 时续期；超过上限则拒绝新设备，已在列表内的设备不受影响。
  */
 export async function registerStream(userId: string, sessionKey: string, limit: number): Promise<void> {
   if (userId === 'anon') return;
@@ -143,7 +144,10 @@ export async function releaseStream(userId: string, sessionKey: string): Promise
   }
 }
 
-/** 会话标识：同一浏览器同一视频算一路流，换标签页看别的片子算另一路。 */
+/**
+ * 一台设备一个坑：UA + IP 前缀相同即同一浏览器/出口。
+ * 不要把 videoId 算进去，否则首页连点、Shorts 下滑都会把「3 台设备」打满。
+ */
 export function streamSessionKey(claims: PlayTokenClaims): string {
-  return `${claims.videoId}:${claims.uaHash}:${claims.ipPrefix}`;
+  return `${claims.uaHash}:${claims.ipPrefix}`;
 }
