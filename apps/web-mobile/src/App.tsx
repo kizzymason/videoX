@@ -46,8 +46,16 @@ function applyChrome(dark: boolean) {
 }
 
 function TabLayout() {
+  const { pathname } = useLocation();
+  const shorts = pathname.startsWith('/shorts');
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background pb-[calc(3.5rem+env(safe-area-inset-bottom))]">
+    <div
+      className={
+        shorts
+          ? 'flex min-h-0 flex-1 flex-col bg-black pb-[calc(3.5rem+env(safe-area-inset-bottom))]'
+          : 'flex min-h-0 flex-1 flex-col bg-background pb-[calc(3.5rem+env(safe-area-inset-bottom))]'
+      }
+    >
       <Outlet />
       <TabBar />
     </div>
@@ -90,7 +98,9 @@ export function App() {
   }, [location.pathname]);
 
   React.useEffect(() => {
+    const shorts = location.pathname.startsWith('/shorts');
     const dark =
+      shorts ||
       themeMode === 'dark' ||
       (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
     applyChrome(dark);
