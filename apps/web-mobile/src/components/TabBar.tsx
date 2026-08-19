@@ -1,5 +1,5 @@
 import type * as React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { Clapperboard, Crown, House, User, type LucideProps } from 'lucide-react';
 import { cn } from '@videox/ui';
 
@@ -12,10 +12,18 @@ const TABS: Tab[] = [
   { to: '/mine', label: '我的', icon: User },
 ];
 
-/** 全站统一亮色底栏，Shorts 也一样，铺满底部安全区。 */
+/** 实色底栏。Shorts 暗、离开回亮，铺满底部安全区。 */
 export function TabBar() {
+  const { pathname } = useLocation();
+  const dark = pathname.startsWith('/shorts');
+
   return (
-    <nav className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur-lg">
+    <nav
+      className={cn(
+        'pb-safe fixed inset-x-0 bottom-0 z-40 border-t',
+        dark ? 'border-white/10 bg-black' : 'border-border bg-background',
+      )}
+    >
       <div className="flex h-14 items-stretch">
         {TABS.map(({ to, label, icon: Icon, end }) => (
           <NavLink
@@ -25,7 +33,13 @@ export function TabBar() {
             className={({ isActive }) =>
               cn(
                 'no-tap-highlight flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors duration-150',
-                isActive ? 'text-foreground' : 'text-muted-foreground',
+                dark
+                  ? isActive
+                    ? 'text-white'
+                    : 'text-white/45'
+                  : isActive
+                    ? 'text-foreground'
+                    : 'text-muted-foreground',
               )
             }
           >
