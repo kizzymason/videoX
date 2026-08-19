@@ -31,8 +31,7 @@ const PERSONAL_NAV = [
 ];
 
 /**
- * 左侧边栏。参考 ChatGPT / Claude 的处理：固定宽度、无阴影、只用 1px 分隔线，
- * 折叠后只留图标并靠 tooltip 补齐语义。
+ * 左侧边栏。折叠后图标在 64px 宽里水平居中，跟顶栏折叠按钮对齐。
  */
 export function Sidebar() {
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
@@ -52,7 +51,7 @@ export function Sidebar() {
         collapsed ? 'w-16' : 'w-60',
       )}
     >
-      <div className={cn('flex h-14 shrink-0 items-center gap-2', collapsed ? 'justify-center px-2' : 'px-4')}>
+      <div className={cn('flex h-14 shrink-0 items-center', collapsed ? 'justify-center px-0' : 'gap-2 px-4')}>
         {!collapsed ? (
           <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
             <span className="grid size-7 place-items-center rounded-lg bg-primary text-primary-foreground">
@@ -74,7 +73,7 @@ export function Sidebar() {
         </button>
       </div>
 
-      <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 pb-4">
+      <nav className={cn('scrollbar-thin flex-1 overflow-y-auto pb-4', collapsed ? 'px-0' : 'px-2')}>
         <Section collapsed={collapsed}>
           {PRIMARY_NAV.map((item) => (
             <NavItem key={item.to} {...item} collapsed={collapsed} />
@@ -112,7 +111,7 @@ export function Sidebar() {
         ) : null}
       </nav>
 
-      <div className="border-t border-sidebar-border p-2">
+      <div className={cn('border-t border-sidebar-border', collapsed ? 'p-0 py-2' : 'p-2')}>
         <NavItem to="/membership" label="开通会员" icon={Crown} collapsed={collapsed} accent />
         <NavItem to="/settings" label="设置" icon={Settings} collapsed={collapsed} />
       </div>
@@ -162,8 +161,8 @@ function NavItem({
       end={end}
       className={({ isActive }) =>
         cn(
-          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-          collapsed && 'justify-center px-0',
+          'flex w-full items-center rounded-lg text-sm transition-colors',
+          collapsed ? 'h-10 justify-center px-0' : 'gap-3 px-3 py-2',
           isActive
             ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
             : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground',
