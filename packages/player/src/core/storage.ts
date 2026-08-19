@@ -1,4 +1,4 @@
-/** 播放器的本地记忆：音量、倍速、清晰度偏好、带宽播种、观看进度。 */
+/** 播放器的本地记忆：音量、倍速、清晰度、字幕、带宽播种、观看进度。 */
 
 const NS = 'videox:player';
 
@@ -31,6 +31,9 @@ export const prefs = {
   /** 记住用户手选的分辨率高度（不是 level 索引——换个视频索引就对不上了）。 */
   getQualityHeight: () => read<number | null>('qualityHeight', null),
   setQualityHeight: (v: number | null) => write('qualityHeight', v),
+  /** 上次选的字幕语言；'off' = 关闭；null = 从未选过。 */
+  getCaptionLang: () => read<string | 'off' | null>('captionLang', null),
+  setCaptionLang: (v: string | 'off') => write('captionLang', v),
 };
 
 /**
