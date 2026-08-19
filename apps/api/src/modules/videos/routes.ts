@@ -48,6 +48,7 @@ videosRouter.get(
       sort: 'recommended' | 'latest' | 'popular' | 'trending' | 'most_liked' | 'longest' | 'shortest';
       minDuration?: number;
       maxDuration?: number;
+      orientation?: 'vertical' | 'horizontal';
     }>(req);
 
     const result = await listVideos({ ...q, adminView: false });
@@ -56,6 +57,29 @@ videosRouter.get(
       void recordImpressions(req.auth.id, result.items.map((v) => v.id));
     }
 
+    ok(res, paginated(result.items, result.total, q.page, q.pageSize));
+  }),
+);
+
+/** Shorts：已通过、可播、竖屏。必须挂在 /:idOrSlug 前面。 */
+videosRouter.get(
+  '/shorts',
+  optionalAuth,
+  validate({ query: videoListQuerySchema }),
+  asyncHandler(async (req, res) => {
+    const q = query<{
+      page: number;
+      pageSize: number;
+      sort: 'recommended' | 'latest' | 'popular' | 'trending' | 'most_liked' | 'longest' | 'shortest';
+    }>(req);
+    const result = await listVideos({
+      ...q,
+      adminView: false,
+      orientation: 'vertical',
+    });
+    if (req.auth && result.items.length > 0) {
+      void recordImpressions(req.auth.id, result.items.map((v) => v.id));
+    }
     ok(res, paginated(result.items, result.total, q.page, q.pageSize));
   }),
 );
