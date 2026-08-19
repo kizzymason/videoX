@@ -4,12 +4,14 @@ import {
   PLAYABLE_VIDEO_STATUSES,
   slugify,
   type SortOption,
+  type CaptionTrack,
   type VideoDetail,
   type VideoSummary,
 } from '@videox/shared';
 import { db, t, sqlRows, uuidArray } from '../../core/db.js';
 import { AppError, ErrorCode } from '../../core/errors.js';
 import { getSiteSettings } from '../settings/service.js';
+import { captionPublicUrl } from '../storage/keys.js';
 
 export type VideoRow = typeof t.videos.$inferSelect;
 
@@ -367,6 +369,7 @@ export async function buildVideoDetail(
   const tagMap = await loadTagsFor([video.id]);
   const viewerState = await loadViewerState(video.id, video.authorId, viewer.userId);
   const gate = evaluateGate(video, viewer);
+  const captions = await listCaptionTracks(video.id);
 
   const summary = toSummary(
     {
@@ -394,7 +397,24 @@ export async function buildVideoDetail(
     isEncrypted: video.isEncrypted,
     previewSeconds: settings.previewSeconds || DEFAULT_PREVIEW_SECONDS,
     viewer: { ...viewerState, canPlay: gate.canPlay, gateReason: gate.gateReason },
+    captions,
   };
+}
+
+export async function listCaptionTracks(videoId: string): Promise<CaptionTrack[]> {
+  const rows = await db
+    .select({
+      lang: t.videoCaptions.lang,
+      format: t.videoCaptions.format,
+    })
+    .from(t.videoCaptions)
+    .where(eq(t.videoCaptions.videoId, videoId))
+    .orderBy(asc(t.videoCaptions.lang));
+  return rows.map((row) => ({
+    lang: row.lang,
+    format: row.format,
+    url: captionPublicUrl(videoId, row.lang, row.format),
+  }));
 }
 
 /** slug 唯一性：冲突时追加短随机后缀，而不是抛错打断上传流程。 */
