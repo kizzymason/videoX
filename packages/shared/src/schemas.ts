@@ -226,6 +226,16 @@ export const playTicketSchema = z.object({
   videoId: idSchema,
 });
 
+export const uploadCaptionSchema = z.object({
+  lang: z
+    .string()
+    .trim()
+    .regex(/^[a-z]{2,3}(?:-[A-Za-z]{2})?$/, '语言代码不正确'),
+  filename: z.string().min(1).max(255),
+  content: z.string().min(1, '字幕文件不能为空').max(2_000_000),
+});
+
+
 // --------------------------------------------------------------------------
 // 后台配置
 // --------------------------------------------------------------------------
