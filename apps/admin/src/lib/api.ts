@@ -128,7 +128,10 @@ export interface LiveTranscodeJob {
   errorMessage: string | null;
 }
 
-export type Query = Record<string, unknown>;
+export type Query = Record<string, unknown> & {
+  /** 后台列表可选内容类型，例如 shorts；仅前端查询参数，不改后端。 */
+  kind?: string;
+};
 
 // ---------------------------------------------------------------------------
 // 认证
