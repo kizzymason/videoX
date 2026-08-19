@@ -11,16 +11,25 @@ import { CategoriesPage, CategoryPage, ExplorePage, SearchPage } from './pages/B
 import { ChannelPage, FavoritesPage, FollowingPage, HistoryPage } from './pages/LibraryPages';
 import { MembershipPage } from './pages/MembershipPage';
 import { LoginPage, NotFoundPage, ProfilePage, RegisterPage, SettingsPage } from './pages/AccountPages';
+import { AuthModal } from './components/AuthModal';
+import { useAuthModalStore } from './stores/auth-modal';
 
-// 播放页会把 hls.js（约 570KB）拖进依赖图，单独切出去，首页不必为它买单。
 const WatchPage = React.lazy(() => import('./pages/WatchPage').then((m) => ({ default: m.WatchPage })));
 
-/** 需要登录的页面统一在这里挡一道，未登录时带 redirect 跳登录页。 */
+/** 需要登录的页面统一在这里挡一道，未登录时打开登录弹窗。 */
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const user = useAuthStore((s) => s.user);
   const initializing = useAuthStore((s) => s.initializing);
+  const openAuth = useAuthModalStore((s) => s.openAuth);
+
+  React.useLayoutEffect(() => {
+    if (!initializing && !user) {
+      openAuth('login', `${location.pathname}${location.search}`);
+    }
+  }, [initializing, user, openAuth]);
+
   if (initializing) return null;
-  if (!user) return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  if (!user) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -38,7 +47,6 @@ export function App() {
     setMode(themeMode);
   }, [themeMode, setMode]);
 
-  // 站点设置里的默认主题只在用户没自己选过时生效。
   const { data: site } = useQuery({ queryKey: ['site'], queryFn: contentApi.site, staleTime: 10 * 60_000 });
   React.useEffect(() => {
     if (!site) return;
@@ -51,7 +59,9 @@ export function App() {
   }, [site?.siteName]);
 
   return (
-    <Routes>
+    <>
+      <AuthModal />
+      <Routes>
       <Route element={<AppShell />}>
         <Route index element={<HomePage />} />
         <Route path="explore" element={<ExplorePage />} />
@@ -69,35 +79,15 @@ export function App() {
         <Route path="channel/:username" element={<ChannelPage />} />
         <Route path="membership" element={<MembershipPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route
-          path="history"
-          element={
-            <RequireAuth>
-              <HistoryPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="favorites"
-          element={
-            <RequireAuth>
-              <FavoritesPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="following"
-          element={
-            <RequireAuth>
-              <FollowingPage />
-            </RequireAuth>
-          }
-        />
-        <Route path="profile" element={<ProfilePage />} />
+        <Route path="history" element={<RequireAuth><HistoryPage /></RequireAuth>} />
+        <Route path="favorites" element={<RequireAuth><FavoritesPage /></RequireAuth>} />
+        <Route path="following" element={<RequireAuth><FollowingPage /></RequireAuth>} />
+        <Route path="profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
     </Routes>
+    </>
   );
 }

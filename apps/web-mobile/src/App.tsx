@@ -15,10 +15,11 @@ import {
   FavoritesPage,
   FollowingPage,
   HistoryPage,
-  LoginPage,
   MineTab,
   ProfilePage,
 } from './pages/MineTab';
+import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
 import { SearchPage } from './pages/SearchPage';
 
 const WatchPage = React.lazy(() => import('./pages/WatchPage').then((m) => ({ default: m.WatchPage })));
@@ -141,6 +142,7 @@ export function App() {
         <Route path="category/:slug" element={<CategoryPage />} />
         <Route path="channel/:username" element={<ChannelPage />} />
         <Route path="login" element={<LoginPage />} />
+        <Route path="register" element={<RegisterPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route
           path="watch/:idOrSlug"
