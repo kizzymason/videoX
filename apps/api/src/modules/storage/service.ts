@@ -176,7 +176,7 @@ export async function testStorageProfile(
   }
 
   const config: DriverConfig = override
-    ? { driver: override.driver, ...(mergedConfig as DriverConfig), driver: override.driver }
+    ? { ...(mergedConfig as DriverConfig), driver: override.driver }
     : configFromRow({ ...existing, config: mergedConfig });
 
   const probe = `videox-probe/${Date.now()}-${Math.random().toString(36).slice(2)}.txt`;
