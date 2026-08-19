@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isVerticalVideo } from '@videox/shared';
 
-describe('Shorts 竖屏判定', () => {
+describe('竖屏判定', () => {
   it('高大于宽才算竖屏', () => {
     expect(isVerticalVideo({ width: 1080, height: 1920 })).toBe(true);
     expect(isVerticalVideo({ width: 1920, height: 1080 })).toBe(false);
