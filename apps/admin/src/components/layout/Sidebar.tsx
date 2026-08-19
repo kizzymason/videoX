@@ -13,6 +13,7 @@ import {
   ListTree,
   MessageSquare,
   ReceiptText,
+  RectangleVertical,
   ScrollText,
   Settings,
   Sparkles,
@@ -38,6 +39,7 @@ export const NAV_GROUPS: Group[] = [
     title: '内容',
     items: [
       { to: '/videos', label: '视频管理', icon: Film },
+      { to: '/shorts', label: 'Shorts', icon: RectangleVertical },
       { to: '/upload', label: '视频上传', icon: Upload },
       { to: '/transcode', label: '转码队列', icon: Clapperboard },
       { to: '/comments', label: '评论审核', icon: MessageSquare },
