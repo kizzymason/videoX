@@ -31,7 +31,7 @@ import { PageHeader } from '../components/Page';
 import { TagInput } from '../components/TagInput';
 
 const ACCEPT = 'video/*,.mp4,.mkv,.mov,.avi,.flv,.webm,.ts,.m4v';
-/** 同时跐几个文件。转码在后端排队，这里只管上传带宽。 */
+/** 同时跑几个文件。转码在后端排队，这里只管上传带宽。 */
 const FILE_CONCURRENCY = 2;
 
 const PHASE_LABEL: Record<UploadTask['phase'], string> = {
@@ -60,6 +60,7 @@ export function UploadPage() {
     tags: [],
     accessLevel: 'free',
     visibility: 'public',
+    kind: isShorts ? 'shorts' : 'vod',
   });
 
   const controllers = React.useRef(new Map<string, AbortController>());
@@ -89,7 +90,7 @@ export function UploadPage() {
     ]);
   };
 
-  /** 队列消费：始终保持 FILE_CONCURRENCY 个文件在跐，一个结束立刻补位。 */
+  /** 队列消费：始终保持 FILE_CONCURRENCY 个文件在跑，一个结束立刻补位。 */
   const start = async () => {
     if (running) return;
     setRunning(true);
@@ -118,6 +119,7 @@ export function UploadPage() {
               tags: meta.tags,
               accessLevel: meta.accessLevel,
               visibility: meta.visibility,
+              kind: isShorts ? 'shorts' : 'vod',
             },
             (patch) => update(task.id, patch),
             controller.signal,
