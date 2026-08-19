@@ -236,7 +236,7 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
             {showSubscribe ? (
               <Link
                 to="/subscribe"
-                className="rounded-full bg-[oklch(0.79_0.14_78)] px-5 py-2 text-sm font-semibold text-[oklch(0.22_0.06_78)]"
+                className="rounded-full bg-black px-5 py-2 text-sm font-semibold text-white ring-1 ring-white/25"
               >
                 去订阅
               </Link>

@@ -1,10 +1,10 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Crown, Gift, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import { Check, Flame, Gift, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { daysUntil, formatDate, formatPrice } from '@videox/shared';
-import { Badge, Button, Input, Skeleton, cn } from '@videox/ui';
+import { Button, Input, Skeleton, cn } from '@videox/ui';
 import { ApiError, membershipApi } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { track } from '../lib/analytics';
@@ -12,7 +12,7 @@ import { AppHeader } from '../components/AppHeader';
 import { LoggedOutGate } from '../components/LoggedOutGate';
 
 const HIGHLIGHTS = [
-  { icon: Crown, title: '全站会员内容', desc: '解锁所有 VIP 专享视频' },
+  { icon: Flame, title: '全站会员内容', desc: '解锁所有点播与 Shorts' },
   { icon: Zap, title: '最高画质', desc: '1080p 及以上码率不限速' },
   { icon: ShieldCheck, title: '无限制观看', desc: '点播与 Shorts 全部解锁，不再受 3 条试看限制' },
 ];
@@ -72,30 +72,28 @@ export function SubscribeTab() {
       <AppHeader title="订阅" />
       <div className="tab-scroll flex-1 space-y-6 px-4 pt-2 pb-6">
         {/* 会员状态卡 */}
-        <div
-          className={cn(
-            'relative overflow-hidden rounded-2xl p-5 text-white',
-            'bg-[linear-gradient(135deg,oklch(0.28_0.03_78),oklch(0.18_0.01_285))]',
-          )}
-        >
-          <div className="absolute -top-8 -right-6 size-28 rounded-full bg-vip/25 blur-2xl" />
+        <div className="relative overflow-hidden rounded-2xl bg-foreground p-5 text-background">
           <div className="relative space-y-1">
             <div className="flex items-center gap-2">
-              <Crown className="size-5 text-vip" />
+              <Flame className="size-5" />
               <span className="text-base font-semibold">videoX 会员</span>
-              {membership?.isVip ? <Badge variant="vip">生效中</Badge> : null}
+              {membership?.isVip ? (
+                <span className="rounded-full border border-background/25 px-2 py-0.5 text-[10px] font-medium">
+                  生效中
+                </span>
+              ) : null}
             </div>
             {user ? (
               membership?.isVip ? (
-                <p className="text-sm text-white/70">
+                <p className="text-sm text-background/70">
                   有效期至 {formatDate(membership.vipExpiresAt)}
                   {remaining !== null ? `（剩余 ${remaining} 天）` : ''}
                 </p>
               ) : (
-                <p className="text-sm text-white/70">尚未开通，使用卡密即可立即生效</p>
+                <p className="text-sm text-background/70">尚未开通，使用卡密即可立即生效</p>
               )
             ) : (
-              <p className="text-sm text-white/70">登录后即可激活会员</p>
+              <p className="text-sm text-background/70">登录后即可激活会员</p>
             )}
           </div>
         </div>
@@ -154,11 +152,11 @@ export function SubscribeTab() {
                   key={plan.id}
                   className={cn(
                     'relative flex flex-col gap-1 rounded-xl border p-3.5',
-                    plan.isRecommended ? 'border-vip/50 bg-vip/[0.05]' : 'border-border',
+                    plan.isRecommended ? 'border-foreground/40 bg-muted/40' : 'border-border',
                   )}
                 >
                   {plan.badge ? (
-                    <span className="absolute -top-2 right-2 rounded-full bg-vip px-2 py-0.5 text-[10px] font-semibold text-vip-foreground">
+                    <span className="absolute -top-2 right-2 rounded-full bg-foreground px-2 py-0.5 text-[10px] font-semibold text-background">
                       {plan.badge}
                     </span>
                   ) : null}

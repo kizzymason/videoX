@@ -118,7 +118,7 @@ export function ProfilePage() {
             <div className="min-w-0 space-y-1">
               <div className="flex items-center gap-2">
                 <p className="font-medium">{user.displayName}</p>
-                {user.isVip ? <Badge variant="vip">VIP</Badge> : null}
+                {user.isVip ? <Badge>会员</Badge> : null}
                 {user.role === 'admin' ? <Badge variant="secondary">管理员</Badge> : null}
               </div>
               <p className="text-sm text-muted-foreground">

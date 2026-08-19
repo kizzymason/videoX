@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
-import { Crown } from 'lucide-react';
 import { formatCount, formatDuration, formatRelativeTime, type VideoSummary } from '@videox/shared';
 import { Badge, Skeleton, cn } from '@videox/ui';
 import { contentApi } from '../../lib/api';
@@ -47,7 +46,6 @@ export function VideoCard({ video, progressPercent, className, layout = 'grid' }
     };
   }, []);
 
-  const isVip = video.kind === 'vod' || video.accessLevel === 'vip';
   const isRow = layout === 'row';
 
   return (
@@ -89,13 +87,6 @@ export function VideoCard({ video, progressPercent, className, layout = 'grid' }
         <span className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">
           {formatDuration(video.durationSeconds)}
         </span>
-
-        {isVip ? (
-          <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded bg-vip px-1.5 py-0.5 text-[11px] font-semibold text-vip-foreground">
-            <Crown className="size-3" />
-            会员
-          </span>
-        ) : null}
 
         {progressPercent !== undefined && progressPercent > 0 ? (
           <span className="absolute inset-x-0 bottom-0 h-[3px] bg-white/25">

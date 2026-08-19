@@ -4,7 +4,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import {
   ChevronRight,
   Clock,
-  Crown,
+  Flame,
   Heart,
   LogOut,
   Monitor,
@@ -74,7 +74,7 @@ export function MineTab() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <p className="truncate font-medium">{user.displayName}</p>
-              {user.isVip ? <Badge variant="vip">VIP</Badge> : null}
+              {user.isVip ? <Badge>会员</Badge> : null}
             </div>
             <p className="truncate text-xs text-muted-foreground">@{user.username}</p>
           </div>
@@ -84,16 +84,16 @@ export function MineTab() {
         {user ? (
           <Link
             to="/subscribe"
-            className="flex items-center gap-3 rounded-2xl bg-[linear-gradient(135deg,oklch(0.28_0.03_78),oklch(0.18_0.01_285))] p-4 text-white"
+            className="flex items-center gap-3 rounded-2xl bg-foreground p-4 text-background"
           >
-            <Crown className="size-5 text-vip" />
+            <Flame className="size-5" />
             <div className="flex-1">
               <p className="text-sm font-medium">{user.isVip ? '会员生效中' : '开通会员'}</p>
-              <p className="text-xs text-white/65">
+              <p className="text-xs text-background/70">
                 {user.isVip && user.vipExpiresAt ? `有效期至 ${formatDate(user.vipExpiresAt)}` : '卡密即时激活'}
               </p>
             </div>
-            <ChevronRight className="size-4 text-white/60" />
+            <ChevronRight className="size-4 text-background/60" />
           </Link>
         ) : null}
 

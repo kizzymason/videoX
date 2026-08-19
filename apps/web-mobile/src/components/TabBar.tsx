@@ -1,6 +1,6 @@
 import type * as React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Clapperboard, Crown, House, User, type LucideProps } from 'lucide-react';
+import { Clapperboard, Flame, House, User, type LucideProps } from 'lucide-react';
 import { cn } from '@videox/ui';
 
 type Tab = { to: string; label: string; icon: React.ComponentType<LucideProps>; end?: boolean };
@@ -8,7 +8,7 @@ type Tab = { to: string; label: string; icon: React.ComponentType<LucideProps>; 
 const TABS: Tab[] = [
   { to: '/', label: '首页', icon: House, end: true },
   { to: '/shorts', label: 'Shorts', icon: Clapperboard },
-  { to: '/subscribe', label: '订阅', icon: Crown },
+  { to: '/subscribe', label: '订阅', icon: Flame },
   { to: '/mine', label: '我的', icon: User },
 ];
 

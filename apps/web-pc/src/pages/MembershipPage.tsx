@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Crown, Gift, Sparkles } from 'lucide-react';
+import { Check, Flame, Gift, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { daysUntil, formatDate, formatPrice } from '@videox/shared';
 import { Badge, Button, Card, CardContent, Input, Skeleton, cn } from '@videox/ui';
@@ -64,23 +64,28 @@ export function MembershipPage() {
     <PageContainer>
       <PageHeader title="会员中心" description="卡密即时到账，支持叠加续期" />
 
-      {user && membership?.isVip ? (
-        <Card className="border-vip/35 bg-vip/[0.06]">
-          <CardContent className="flex flex-wrap items-center gap-4 p-5">
-            <div className="grid size-11 place-items-center rounded-full bg-vip/15">
-              <Crown className="size-5 text-vip" />
+      <div className="overflow-hidden rounded-xl bg-foreground p-5 text-background">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="grid size-11 place-items-center rounded-full bg-background/10">
+            <Flame className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold">videoX 会员</p>
+              {user && membership?.isVip ? (
+                <span className="rounded-full border border-background/25 px-2 py-0.5 text-[10px] font-medium">
+                  生效中
+                </span>
+              ) : null}
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold">会员生效中</p>
-              <p className="text-sm text-muted-foreground">
-                有效期至 {formatDate(membership.vipExpiresAt)}
-                {remaining !== null ? `（剩余 ${remaining} 天）` : ''}
-              </p>
-            </div>
-            <Badge variant="vip">VIP</Badge>
-          </CardContent>
-        </Card>
-      ) : null}
+            <p className="text-sm text-background/70">
+              {user && membership?.isVip
+                ? `有效期至 ${formatDate(membership.vipExpiresAt)}${remaining !== null ? `（剩余 ${remaining} 天）` : ''}`
+                : '尚未开通，使用卡密即可立即生效'}
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* 卡密兑换放在最上面：这是本站唯一的开通路径，不该藏在套餐后面 */}
       <Card>

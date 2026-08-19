@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Crown, LogOut, Monitor, Moon, Sun, User as UserIcon } from 'lucide-react';
+import { Flame, LogOut, Monitor, Moon, Sun, User as UserIcon } from 'lucide-react';
 import {
   Avatar,
   AvatarFallback,
@@ -73,7 +73,7 @@ export function Topbar() {
               <DropdownMenuLabel>
                 <div className="flex items-center gap-2">
                   <span className="truncate font-medium text-foreground">{user.displayName}</span>
-                  {user.isVip ? <Badge variant="vip">VIP</Badge> : null}
+                  {user.isVip ? <Badge>会员</Badge> : null}
                 </div>
                 <p className="truncate text-xs font-normal text-muted-foreground">{user.email}</p>
               </DropdownMenuLabel>
@@ -83,7 +83,7 @@ export function Topbar() {
                 个人中心
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => navigate('/membership')}>
-                <Crown />
+                <Flame />
                 {user.isVip ? '续费会员' : '开通会员'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />

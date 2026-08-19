@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AlertTriangle, Crown, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Flame, RotateCcw } from 'lucide-react';
 import { cn } from '../../lib/cn.js';
 import type { PlayerError } from '../../types.js';
 
@@ -53,8 +53,8 @@ export function GateVeil({ show, previewSeconds, onUnlock, loggedIn = true, onLo
       )}
     >
       <div className="flex max-w-sm flex-col items-center gap-3">
-        <div className="grid size-12 place-items-center rounded-full bg-[oklch(0.74_0.14_78)]/15">
-          <Crown className="size-6 text-[oklch(0.8_0.14_78)]" />
+        <div className="grid size-12 place-items-center rounded-full bg-white/10">
+          <Flame className="size-6 text-white" />
         </div>
         <div className="space-y-1">
           <p className="text-base font-semibold text-white">
@@ -66,9 +66,9 @@ export function GateVeil({ show, previewSeconds, onUnlock, loggedIn = true, onLo
           <button
             type="button"
             onClick={onUnlock}
-            className="rounded-lg bg-[oklch(0.79_0.14_78)] px-5 py-2 text-sm font-semibold text-[oklch(0.22_0.06_78)] transition-opacity hover:opacity-90"
+            className="rounded-lg bg-black px-5 py-2 text-sm font-semibold text-white ring-1 ring-white/25 transition-opacity hover:bg-black/80"
           >
-            开通会员
+            开通会员观看
           </button>
           {!loggedIn && onLogin ? (
             <button
