@@ -15,10 +15,6 @@ import {
   VIDEO_VISIBILITIES,
 } from './constants.js';
 
-// --------------------------------------------------------------------------
-// 通用
-// --------------------------------------------------------------------------
-
 export const idSchema = z.string().min(1).max(64);
 
 export const paginationSchema = z.object({
@@ -30,10 +26,6 @@ export const cursorSchema = z.object({
   cursor: z.string().max(256).optional(),
   limit: z.coerce.number().int().min(1).max(PAGE_SIZE_MAX).default(PAGE_SIZE_DEFAULT),
 });
-
-// --------------------------------------------------------------------------
-// 认证
-// --------------------------------------------------------------------------
 
 const usernameSchema = z
   .string()
@@ -56,7 +48,6 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  /** 支持邮箱或用户名登录 */
   identifier: z.string().min(3).max(160),
   password: z.string().min(1).max(128),
   remember: z.boolean().optional().default(true),
@@ -73,10 +64,6 @@ export const updateProfileSchema = z.object({
   avatarUrl: z.string().url().max(500).nullable().optional(),
 });
 
-// --------------------------------------------------------------------------
-// 视频
-// --------------------------------------------------------------------------
-
 export const videoListQuerySchema = paginationSchema.extend({
   q: z.string().max(120).optional(),
   categoryId: idSchema.optional(),
@@ -89,6 +76,7 @@ export const videoListQuerySchema = paginationSchema.extend({
   sort: z.enum(SORT_OPTIONS).default('latest'),
   minDuration: z.coerce.number().int().min(0).optional(),
   maxDuration: z.coerce.number().int().min(0).optional(),
+  orientation: z.enum(['vertical', 'horizontal']).optional(),
 });
 
 export const createVideoSchema = z.object({
@@ -112,15 +100,10 @@ export const bulkVideoActionSchema = z.object({
   categoryId: idSchema.nullable().optional(),
 });
 
-// --------------------------------------------------------------------------
-// 上传
-// --------------------------------------------------------------------------
-
 export const uploadInitSchema = z.object({
   filename: z.string().min(1).max(255),
   fileSize: z.coerce.number().int().min(1).max(50 * 1024 * 1024 * 1024),
   chunkSize: z.coerce.number().int().min(256 * 1024).max(64 * 1024 * 1024),
-  /** 整文件 SHA-256，用于秒传去重 */
   fileHash: z.string().regex(/^[a-f0-9]{64}$/i).optional(),
   mimeType: z.string().max(120).optional(),
 });
@@ -133,10 +116,6 @@ export const uploadCompleteSchema = z.object({
   accessLevel: z.enum(ACCESS_LEVELS).default('free'),
   visibility: z.enum(VIDEO_VISIBILITIES).default('public'),
 });
-
-// --------------------------------------------------------------------------
-// 互动
-// --------------------------------------------------------------------------
 
 export const createCommentSchema = z.object({
   videoId: idSchema,
@@ -156,13 +135,8 @@ export const progressSchema = z.object({
   videoId: idSchema,
   positionSeconds: z.coerce.number().min(0).max(24 * 3600),
   durationSeconds: z.coerce.number().min(0).max(24 * 3600).optional(),
-  /** 本次心跳实际观看时长，用于统计总播放时长 */
   deltaSeconds: z.coerce.number().min(0).max(600).optional(),
 });
-
-// --------------------------------------------------------------------------
-// 会员
-// --------------------------------------------------------------------------
 
 export const redeemSchema = z.object({
   code: z
@@ -207,17 +181,9 @@ export const grantVipSchema = z.object({
   note: z.string().max(200).optional(),
 });
 
-// --------------------------------------------------------------------------
-// 播放
-// --------------------------------------------------------------------------
-
 export const playTicketSchema = z.object({
   videoId: idSchema,
 });
-
-// --------------------------------------------------------------------------
-// 后台配置
-// --------------------------------------------------------------------------
 
 export const s3ConfigSchema = z.object({
   endpoint: z.string().max(300).default(''),
@@ -259,7 +225,6 @@ export const siteSettingsSchema = z.object({
       sitemapPageSize: z.coerce.number().int().min(100).max(50000).default(5000),
       robotsExtra: z.string().max(2000).default(''),
     })
-    // prefault 而非 default：让空对象走一遍字段级默认值，而不是要求给全整个对象。
     .prefault({}),
 });
 
@@ -333,10 +298,6 @@ export const orderQuerySchema = paginationSchema.extend({
   q: z.string().max(120).optional(),
 });
 
-// --------------------------------------------------------------------------
-// 统计
-// --------------------------------------------------------------------------
-
 export const analyticsPayloadSchema = z.object({
   event: z.enum(ANALYTICS_EVENTS),
   sessionId: z.string().min(1).max(64),
@@ -359,7 +320,6 @@ export const analyticsBatchSchema = z.object({
 });
 
 export const rangeQuerySchema = z.object({
-  /** 统计窗口天数 */
   days: z.coerce.number().int().min(1).max(365).default(30),
 });
 
