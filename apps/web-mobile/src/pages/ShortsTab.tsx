@@ -40,12 +40,7 @@ export function ShortsTab() {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-30 bg-black text-white">
-      {/* 顶部安全区实色，跟底栏同进同出 */}
-      <div className="pointer-events-none fixed inset-x-0 top-0 z-50 h-[env(safe-area-inset-top)] bg-black" />
-      <div className="pt-safe pointer-events-none absolute inset-x-0 top-0 z-10 px-3 py-2">
-        <p className="text-sm font-medium text-white">Shorts</p>
-      </div>
+    <div className="fixed inset-0 z-30 bg-black text-white" style={{ colorScheme: 'dark' }}>
       <div ref={containerRef} onScroll={onScroll} className="snap-feed tab-scroll h-full w-full">
         {videos.map((video) => (
           <ShortsPage
@@ -250,7 +245,7 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
       ) : null}
       <button
         type="button"
-        className="absolute top-[calc(env(safe-area-inset-top)+2.5rem)] right-3 z-20 grid size-8 place-items-center rounded-full bg-black/40 text-white"
+        className="absolute top-[calc(env(safe-area-inset-top)+0.75rem)] right-3 z-20 grid size-8 place-items-center rounded-full bg-black/40 text-white"
         aria-label={snapshot.muted ? '取消静音' : '静音'}
         onClick={(event) => {
           event.stopPropagation();
