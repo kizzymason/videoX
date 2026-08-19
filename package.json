@@ -32,7 +32,9 @@
     "smoke": "node scripts/smoke.mjs",
     "e2e": "node scripts/e2e-pipeline.mjs",
     "icons": "node scripts/gen-icons.mjs",
-    "setup": "npm install && npm run db:up && node scripts/wait-for-db.mjs && npm run db:migrate && npm run db:seed"
+    "setup": "npm install && npm run db:up && node scripts/wait-for-db.mjs && npm run db:migrate && npm run db:seed",
+    "prod:up": "docker compose -f docker-compose.prod.yml --env-file .env up -d --build",
+    "prod:down": "docker compose -f docker-compose.prod.yml down"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
