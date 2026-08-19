@@ -31,6 +31,7 @@ const summaryColumns = {
   durationSeconds: t.videos.durationSeconds,
   width: t.videos.width,
   height: t.videos.height,
+  kind: t.videos.kind,
   status: t.videos.status,
   visibility: t.videos.visibility,
   accessLevel: t.videos.accessLevel,
@@ -89,6 +90,7 @@ export function toSummary(row: SummaryRow, tags: VideoRelations['tags'] = []): V
     durationSeconds: row.durationSeconds,
     width: row.width,
     height: row.height,
+    kind: row.kind,
     status: row.status,
     visibility: row.visibility,
     accessLevel: row.accessLevel,
@@ -128,6 +130,7 @@ export interface ListVideosOptions {
   minDuration?: number;
   maxDuration?: number;
   orientation?: 'vertical' | 'horizontal';
+  kind?: 'vod' | 'shorts';
   /** 后台列表要能看到草稿与转码中的内容，前台只看可播的公开内容。 */
   adminView?: boolean;
   excludeIds?: string[];
@@ -172,6 +175,9 @@ export function buildVideoFilters(options: ListVideosOptions): SQL[] {
   if (options.accessLevel) filters.push(eq(t.videos.accessLevel, options.accessLevel as VideoRow['accessLevel']));
   if (options.minDuration !== undefined) filters.push(gte(t.videos.durationSeconds, options.minDuration));
   if (options.maxDuration !== undefined) filters.push(lte(t.videos.durationSeconds, options.maxDuration));
+  if (options.kind) {
+    filters.push(eq(t.videos.kind, options.kind));
+  }
   if (options.orientation === 'vertical') {
     filters.push(sql`${t.videos.width} is not null and ${t.videos.height} is not null and ${t.videos.height} > ${t.videos.width}`);
   } else if (options.orientation === 'horizontal') {

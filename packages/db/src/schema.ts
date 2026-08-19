@@ -27,6 +27,7 @@ import type {
   TranscodeJobStatus,
   UserRole,
   UserStatus,
+  VideoKind,
   VideoStatus,
   VideoVisibility,
 } from '@videox/shared';
@@ -38,16 +39,11 @@ const timestamps = {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(now),
 };
 
-// ==========================================================================
-// 用户与认证
-// ==========================================================================
-
 export const users = pgTable(
   'users',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     email: varchar('email', { length: 160 }),
-    /** 小写化的邮箱，唯一索引建在它上面；未填邮箱时为 null，允许多个空值 */
     emailNormalized: varchar('email_normalized', { length: 160 }),
     username: varchar('username', { length: 32 }).notNull(),
     usernameNormalized: varchar('username_normalized', { length: 32 }).notNull(),
@@ -57,7 +53,6 @@ export const users = pgTable(
     bio: text('bio'),
     role: varchar('role', { length: 16 }).$type<UserRole>().notNull().default('user'),
     status: varchar('status', { length: 16 }).$type<UserStatus>().notNull().default('active'),
-    /** 会员到期时间。null 或过期即非会员，是播放门禁的唯一判据。 */
     vipExpiresAt: timestamp('vip_expires_at', { withTimezone: true }),
     followerCount: integer('follower_count').notNull().default(0),
     followingCount: integer('following_count').notNull().default(0),
@@ -79,12 +74,8 @@ export const refreshTokens = pgTable(
   'refresh_tokens',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    /** 只存 SHA-256 摘要，明文仅存在于 httpOnly cookie 中 */
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     tokenHash: varchar('token_hash', { length: 64 }).notNull(),
-    /** 轮换链：被替换后指向新令牌，用于检测重放 */
     replacedById: uuid('replaced_by_id'),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -98,10 +89,6 @@ export const refreshTokens = pgTable(
     index('refresh_tokens_expires_idx').on(t.expiresAt),
   ],
 );
-
-// ==========================================================================
-// 分类 / 标签
-// ==========================================================================
 
 export const categories = pgTable(
   'categories',
@@ -137,10 +124,6 @@ export const tags = pgTable(
   (t) => [uniqueIndex('tags_slug_uq').on(t.slug), index('tags_count_idx').on(t.videoCount)],
 );
 
-// ==========================================================================
-// 视频
-// ==========================================================================
-
 export interface RenditionRecord {
   name: string;
   height: number;
@@ -160,51 +143,38 @@ export const videos = pgTable(
     description: text('description'),
     authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
     categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
-
     status: varchar('status', { length: 24 }).$type<VideoStatus>().notNull().default('draft'),
     visibility: varchar('visibility', { length: 16 }).$type<VideoVisibility>().notNull().default('public'),
     accessLevel: varchar('access_level', { length: 16 }).$type<AccessLevel>().notNull().default('free'),
-
-    /** 存储层相对路径，例如 videos/<id>/source.mp4 */
     sourceKey: varchar('source_key', { length: 500 }),
     sourceSizeBytes: bigint('source_size_bytes', { mode: 'number' }),
-    /** 整文件 SHA-256，用于秒传去重 */
     sourceHash: varchar('source_hash', { length: 64 }),
-    /** HLS 输出目录，例如 hls/<id> */
     hlsDir: varchar('hls_dir', { length: 500 }),
     posterUrl: varchar('poster_url', { length: 500 }),
     verticalPosterUrl: varchar('vertical_poster_url', { length: 500 }),
     previewUrl: varchar('preview_url', { length: 500 }),
     spriteUrl: varchar('sprite_url', { length: 500 }),
     spriteVttUrl: varchar('sprite_vtt_url', { length: 500 }),
-
     durationSeconds: integer('duration_seconds').notNull().default(0),
     width: integer('width'),
     height: integer('height'),
+    kind: varchar('kind', { length: 16 }).$type<VideoKind>().notNull().default('vod'),
     fps: real('fps'),
-    /** 各画质档产出状态。首档就绪即可播放。 */
     renditions: jsonb('renditions').$type<RenditionRecord[]>().notNull().default(sql`'[]'::jsonb`),
     isEncrypted: boolean('is_encrypted').notNull().default(false),
     outputBytes: bigint('output_bytes', { mode: 'number' }).notNull().default(0),
-
     viewCount: integer('view_count').notNull().default(0),
     likeCount: integer('like_count').notNull().default(0),
     favoriteCount: integer('favorite_count').notNull().default(0),
     commentCount: integer('comment_count').notNull().default(0),
     shareCount: integer('share_count').notNull().default(0),
-    /** 累计观看秒数，用于计算平均完播率 */
     totalWatchSeconds: bigint('total_watch_seconds', { mode: 'number' }).notNull().default(0),
-    /** 0~1 的平均完播率，推荐打分的核心因子 */
     completionRate: doublePrecision('completion_rate').notNull().default(0),
-    /** 质量分：由互动率归一化得到 */
     qualityScore: doublePrecision('quality_score').notNull().default(0),
-    /** AI 重排写入的 0~100 分 */
     aiScore: doublePrecision('ai_score'),
     aiReason: text('ai_reason'),
     aiScoredAt: timestamp('ai_scored_at', { withTimezone: true }),
-    /** 人工加权，正负均可，直接叠加到最终排序分 */
     manualBoost: doublePrecision('manual_boost').notNull().default(0),
-
     publishedAt: timestamp('published_at', { withTimezone: true }),
     ...timestamps,
   },
@@ -216,6 +186,7 @@ export const videos = pgTable(
     index('videos_published_idx').on(t.publishedAt),
     index('videos_views_idx').on(t.viewCount),
     index('videos_access_idx').on(t.accessLevel),
+    index('videos_kind_idx').on(t.kind),
     index('videos_hash_idx').on(t.sourceHash),
     index('videos_ai_score_idx').on(t.aiScore),
   ],
@@ -224,24 +195,17 @@ export const videos = pgTable(
 export const videoTags = pgTable(
   'video_tags',
   {
-    videoId: uuid('video_id')
-      .notNull()
-      .references(() => videos.id, { onDelete: 'cascade' }),
-    tagId: uuid('tag_id')
-      .notNull()
-      .references(() => tags.id, { onDelete: 'cascade' }),
+    videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
+    tagId: uuid('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
   },
   (t) => [primaryKey({ columns: [t.videoId, t.tagId] }), index('video_tags_tag_idx').on(t.tagId)],
 );
 
-/** 每档 HLS 产物的明细。renditions JSONB 是给前端的快照，这里是运维视角的账本。 */
 export const videoRenditions = pgTable(
   'video_renditions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    videoId: uuid('video_id')
-      .notNull()
-      .references(() => videos.id, { onDelete: 'cascade' }),
+    videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 16 }).notNull(),
     width: integer('width').notNull(),
     height: integer('height').notNull(),
@@ -254,24 +218,17 @@ export const videoRenditions = pgTable(
   (t) => [uniqueIndex('video_renditions_uq').on(t.videoId, t.name)],
 );
 
-// ==========================================================================
-// 上传与转码
-// ==========================================================================
-
 export const uploadSessions = pgTable(
   'upload_sessions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     filename: varchar('filename', { length: 255 }).notNull(),
     mimeType: varchar('mime_type', { length: 120 }),
     fileSize: bigint('file_size', { mode: 'number' }).notNull(),
     fileHash: varchar('file_hash', { length: 64 }),
     chunkSize: integer('chunk_size').notNull(),
     totalChunks: integer('total_chunks').notNull(),
-    /** 已落盘的分片序号，断点续传据此告诉客户端从哪继续 */
     receivedChunks: jsonb('received_chunks').$type<number[]>().notNull().default(sql`'[]'::jsonb`),
     tempDir: varchar('temp_dir', { length: 500 }).notNull(),
     status: varchar('status', { length: 16 }).notNull().default('pending'),
@@ -285,9 +242,7 @@ export const transcodeJobs = pgTable(
   'transcode_jobs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    videoId: uuid('video_id')
-      .notNull()
-      .references(() => videos.id, { onDelete: 'cascade' }),
+    videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
     status: varchar('status', { length: 20 }).$type<TranscodeJobStatus>().notNull().default('queued'),
     progress: real('progress').notNull().default(0),
     stage: varchar('stage', { length: 60 }),
@@ -295,7 +250,6 @@ export const transcodeJobs = pgTable(
     completedRenditions: jsonb('completed_renditions').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     errorMessage: text('error_message'),
     attempts: integer('attempts').notNull().default(0),
-    /** BullMQ 的 job id，用于取消 */
     queueJobId: varchar('queue_job_id', { length: 80 }),
     startedAt: timestamp('started_at', { withTimezone: true }),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
@@ -304,22 +258,13 @@ export const transcodeJobs = pgTable(
   (t) => [index('transcode_jobs_video_idx').on(t.videoId), index('transcode_jobs_status_idx').on(t.status)],
 );
 
-// ==========================================================================
-// 互动
-// ==========================================================================
-
 export const comments = pgTable(
   'comments',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    videoId: uuid('video_id')
-      .notNull()
-      .references(() => videos.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     parentId: uuid('parent_id'),
-    /** 楼中楼：所有子孙评论都挂在同一个 rootId 下，一次查询即可取全楼 */
     rootId: uuid('root_id'),
     replyToUserId: uuid('reply_to_user_id').references(() => users.id, { onDelete: 'set null' }),
     content: text('content').notNull(),
@@ -342,12 +287,8 @@ export const comments = pgTable(
 export const commentLikes = pgTable(
   'comment_likes',
   {
-    commentId: uuid('comment_id')
-      .notNull()
-      .references(() => comments.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    commentId: uuid('comment_id').notNull().references(() => comments.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(now),
   },
   (t) => [primaryKey({ columns: [t.commentId, t.userId] })],
@@ -356,12 +297,8 @@ export const commentLikes = pgTable(
 export const videoLikes = pgTable(
   'video_likes',
   {
-    videoId: uuid('video_id')
-      .notNull()
-      .references(() => videos.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(now),
   },
   (t) => [primaryKey({ columns: [t.videoId, t.userId] }), index('video_likes_user_idx').on(t.userId, t.createdAt)],
@@ -370,12 +307,8 @@ export const videoLikes = pgTable(
 export const favorites = pgTable(
   'favorites',
   {
-    videoId: uuid('video_id')
-      .notNull()
-      .references(() => videos.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(now),
   },
   (t) => [primaryKey({ columns: [t.videoId, t.userId] }), index('favorites_user_idx').on(t.userId, t.createdAt)],
@@ -384,33 +317,21 @@ export const favorites = pgTable(
 export const follows = pgTable(
   'follows',
   {
-    followerId: uuid('follower_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    followeeId: uuid('followee_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    followerId: uuid('follower_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    followeeId: uuid('followee_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(now),
   },
-  (t) => [
-    primaryKey({ columns: [t.followerId, t.followeeId] }),
-    index('follows_followee_idx').on(t.followeeId, t.createdAt),
-  ],
+  (t) => [primaryKey({ columns: [t.followerId, t.followeeId] }), index('follows_followee_idx').on(t.followeeId, t.createdAt)],
 );
 
 export const watchHistory = pgTable(
   'watch_history',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    videoId: uuid('video_id')
-      .notNull()
-      .references(() => videos.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
     positionSeconds: real('position_seconds').notNull().default(0),
     durationSeconds: real('duration_seconds').notNull().default(0),
-    /** 本条记录累计的真实观看秒数（去掉拖动跳过的部分） */
     watchedSeconds: real('watched_seconds').notNull().default(0),
     completed: boolean('completed').notNull().default(false),
     playCount: integer('play_count').notNull().default(1),
@@ -423,10 +344,6 @@ export const watchHistory = pgTable(
     index('watch_history_video_idx').on(t.videoId),
   ],
 );
-
-// ==========================================================================
-// 会员体系
-// ==========================================================================
 
 export const plans = pgTable(
   'plans',
@@ -453,9 +370,7 @@ export const redeemCodes = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     code: varchar('code', { length: 64 }).notNull(),
-    planId: uuid('plan_id')
-      .notNull()
-      .references(() => plans.id, { onDelete: 'restrict' }),
+    planId: uuid('plan_id').notNull().references(() => plans.id, { onDelete: 'restrict' }),
     batchId: varchar('batch_id', { length: 64 }),
     status: varchar('status', { length: 16 }).$type<RedeemCodeStatus>().notNull().default('unused'),
     usedByUserId: uuid('used_by_user_id').references(() => users.id, { onDelete: 'set null' }),
@@ -477,9 +392,7 @@ export const subscriptions = pgTable(
   'subscriptions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     planId: uuid('plan_id').references(() => plans.id, { onDelete: 'set null' }),
     status: varchar('status', { length: 16 }).$type<SubscriptionStatus>().notNull().default('active'),
     startsAt: timestamp('starts_at', { withTimezone: true }).notNull().default(now),
@@ -487,10 +400,7 @@ export const subscriptions = pgTable(
     sourceOrderId: uuid('source_order_id'),
     ...timestamps,
   },
-  (t) => [
-    index('subscriptions_user_idx').on(t.userId, t.expiresAt),
-    index('subscriptions_status_idx').on(t.status),
-  ],
+  (t) => [index('subscriptions_user_idx').on(t.userId, t.expiresAt), index('subscriptions_status_idx').on(t.status)],
 );
 
 export const orders = pgTable(
@@ -498,29 +408,18 @@ export const orders = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     orderNo: varchar('order_no', { length: 40 }).notNull(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     planId: uuid('plan_id').references(() => plans.id, { onDelete: 'set null' }),
     amountCents: integer('amount_cents').notNull().default(0),
     source: varchar('source', { length: 20 }).$type<OrderSource>().notNull(),
     status: varchar('status', { length: 16 }).$type<OrderStatus>().notNull().default('paid'),
     redeemCodeId: uuid('redeem_code_id').references(() => redeemCodes.id, { onDelete: 'set null' }),
-    /** 支付通道回调原文等，JSONB 便于后续接入不同渠道 */
     channelPayload: jsonb('channel_payload').$type<Record<string, unknown>>(),
     note: varchar('note', { length: 200 }),
     ...timestamps,
   },
-  (t) => [
-    uniqueIndex('orders_no_uq').on(t.orderNo),
-    index('orders_user_idx').on(t.userId, t.createdAt),
-    index('orders_created_idx').on(t.createdAt),
-  ],
+  (t) => [uniqueIndex('orders_no_uq').on(t.orderNo), index('orders_user_idx').on(t.userId, t.createdAt), index('orders_created_idx').on(t.createdAt)],
 );
-
-// ==========================================================================
-// 运营配置
-// ==========================================================================
 
 export const banners = pgTable(
   'banners',
@@ -542,7 +441,6 @@ export const banners = pgTable(
   (t) => [index('banners_active_sort_idx').on(t.isActive, t.sortOrder)],
 );
 
-/** 键值配置表。site_settings / algo_weights 各占一行，value 是 JSONB。 */
 export const settings = pgTable('settings', {
   key: varchar('key', { length: 60 }).primaryKey(),
   value: jsonb('value').$type<Record<string, unknown>>().notNull(),
@@ -585,9 +483,7 @@ export const aiScoringRuns = pgTable(
   'ai_scoring_runs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => aiProfiles.id, { onDelete: 'cascade' }),
+    profileId: uuid('profile_id').notNull().references(() => aiProfiles.id, { onDelete: 'cascade' }),
     status: varchar('status', { length: 16 }).notNull().default('running'),
     totalVideos: integer('total_videos').notNull().default(0),
     scoredVideos: integer('scored_videos').notNull().default(0),
@@ -614,20 +510,11 @@ export const auditLogs = pgTable(
   (t) => [index('audit_logs_created_idx').on(t.createdAt), index('audit_logs_actor_idx').on(t.actorId)],
 );
 
-// ==========================================================================
-// 推荐画像
-// ==========================================================================
-
-/** 用户对标签的兴趣强度。带时间衰减，由播放/点赞/收藏等行为累积。 */
 export const userTagAffinity = pgTable(
   'user_tag_affinity',
   {
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    tagId: uuid('tag_id')
-      .notNull()
-      .references(() => tags.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    tagId: uuid('tag_id').notNull().references(() => tags.id, { onDelete: 'cascade' }),
     score: doublePrecision('score').notNull().default(0),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(now),
   },
@@ -637,40 +524,24 @@ export const userTagAffinity = pgTable(
 export const userCategoryAffinity = pgTable(
   'user_category_affinity',
   {
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    categoryId: uuid('category_id')
-      .notNull()
-      .references(() => categories.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    categoryId: uuid('category_id').notNull().references(() => categories.id, { onDelete: 'cascade' }),
     score: doublePrecision('score').notNull().default(0),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(now),
   },
   (t) => [primaryKey({ columns: [t.userId, t.categoryId] }), index('uca_user_score_idx').on(t.userId, t.score)],
 );
 
-/** 已曝光未点击的记录，用于推荐去重，避免同一个视频反复刷屏。 */
 export const recommendationImpressions = pgTable(
   'recommendation_impressions',
   {
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    videoId: uuid('video_id')
-      .notNull()
-      .references(() => videos.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
     count: integer('count').notNull().default(1),
     lastShownAt: timestamp('last_shown_at', { withTimezone: true }).notNull().default(now),
   },
-  (t) => [
-    primaryKey({ columns: [t.userId, t.videoId] }),
-    index('rec_impressions_time_idx').on(t.userId, t.lastShownAt),
-  ],
+  (t) => [primaryKey({ columns: [t.userId, t.videoId] }), index('rec_impressions_time_idx').on(t.userId, t.lastShownAt)],
 );
-
-// ==========================================================================
-// 埋点与统计
-// ==========================================================================
 
 export const analyticsSessions = pgTable(
   'analytics_sessions',
@@ -754,9 +625,7 @@ export const statsVideoDaily = pgTable(
   'stats_video_daily',
   {
     date: varchar('date', { length: 10 }).notNull(),
-    videoId: uuid('video_id')
-      .notNull()
-      .references(() => videos.id, { onDelete: 'cascade' }),
+    videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
     impressions: integer('impressions').notNull().default(0),
     clicks: integer('clicks').notNull().default(0),
     plays: integer('plays').notNull().default(0),
@@ -769,13 +638,10 @@ export const statsVideoDaily = pgTable(
   (t) => [primaryKey({ columns: [t.date, t.videoId] }), index('stats_video_daily_video_idx').on(t.videoId)],
 );
 
-/** 单视频的观看留存：把时长切成 100 段，统计每段有多少人看过。 */
 export const videoRetention = pgTable(
   'video_retention',
   {
-    videoId: uuid('video_id')
-      .notNull()
-      .references(() => videos.id, { onDelete: 'cascade' }),
+    videoId: uuid('video_id').notNull().references(() => videos.id, { onDelete: 'cascade' }),
     bucket: integer('bucket').notNull(),
     viewers: integer('viewers').notNull().default(0),
   },

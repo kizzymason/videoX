@@ -99,6 +99,7 @@ uploadsRouter.post(
       tags?: string[];
       accessLevel: 'free' | 'login' | 'vip';
       visibility: 'public' | 'unlisted' | 'private';
+      kind?: 'vod' | 'shorts';
     }>(req);
 
     const session = await getUploadSession(req.params.uploadId!, req.auth!.id);

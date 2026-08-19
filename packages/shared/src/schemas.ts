@@ -3,6 +3,7 @@ import {
   ACCESS_LEVELS,
   ANALYTICS_EVENTS,
   COMMENT_STATUSES,
+  VIDEO_KINDS,
   ORDER_STATUSES,
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
@@ -94,6 +95,8 @@ export const videoListQuerySchema = paginationSchema.extend({
   maxDuration: z.coerce.number().int().min(0).optional(),
   /** vertical = Shorts 信息流，只出高大于宽的已通过可播片。 */
   orientation: z.enum(['vertical', 'horizontal']).optional(),
+  /** 后台目录拆分：shorts 与 vod 独立库存。 */
+  kind: z.enum(VIDEO_KINDS).optional(),
 });
 
 export const createVideoSchema = z.object({
@@ -103,6 +106,7 @@ export const createVideoSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
   accessLevel: z.enum(ACCESS_LEVELS).default('free'),
   visibility: z.enum(VIDEO_VISIBILITIES).default('public'),
+  kind: z.enum(VIDEO_KINDS).optional(),
   posterUrl: z.string().max(500).nullable().optional(),
   verticalPosterUrl: z.string().max(500).nullable().optional(),
   publishedAt: z.string().datetime().nullable().optional(),
@@ -137,6 +141,8 @@ export const uploadCompleteSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
   accessLevel: z.enum(ACCESS_LEVELS).default('free'),
   visibility: z.enum(VIDEO_VISIBILITIES).default('public'),
+  /** 后台上传 Shorts 与点播分开；默认点播。 */
+  kind: z.enum(VIDEO_KINDS).default('vod'),
 });
 
 // --------------------------------------------------------------------------

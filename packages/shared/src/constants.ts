@@ -38,6 +38,10 @@ export type VideoVisibility = (typeof VIDEO_VISIBILITIES)[number];
 export const ACCESS_LEVELS = ['free', 'login', 'vip'] as const;
 export type AccessLevel = (typeof ACCESS_LEVELS)[number];
 
+/** 目录类型。点播与 Shorts 独立库存，后台上传时显式选择。 */
+export const VIDEO_KINDS = ['vod', 'shorts'] as const;
+export type VideoKind = (typeof VIDEO_KINDS)[number];
+
 export const TRANSCODE_JOB_STATUSES = [
   'queued',
   'probing',

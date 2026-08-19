@@ -67,3 +67,13 @@ CREATE INDEX IF NOT EXISTS subscriptions_active_idx
 -- --- 注册：邮箱改为可选 ----------------------------------------------------
 ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
 ALTER TABLE users ALTER COLUMN email_normalized DROP NOT NULL;
+
+-- --- VOD / Shorts 目录拆分 ------------------------------------------------
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS kind varchar(16) NOT NULL DEFAULT 'vod';
+UPDATE videos
+  SET kind = 'shorts'
+  WHERE kind = 'vod'
+    AND width IS NOT NULL
+    AND height IS NOT NULL
+    AND height > width;
+CREATE INDEX IF NOT EXISTS videos_kind_idx ON videos (kind);

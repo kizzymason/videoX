@@ -6,10 +6,18 @@ export function isVerticalVideo(video: {
   return video.width != null && video.height != null && video.height > video.width;
 }
 
+/** 点播：宽大于等于高。宽高未知的不进首页点播列表。 */
+export function isHorizontalVideo(video: {
+  width: number | null;
+  height: number | null;
+}): boolean {
+  return video.width != null && video.height != null && video.width >= video.height;
+}
+
 /**
- * 竖屏优先。竖屏可播条数为 0 时，Shorts 回落到任意已通过可播片。
- * 预览/冷启动没有竖屏种子时信息流不能空；一旦有竖屏，仍只出竖屏。
+ * Shorts 与点播独立：竖屏库存为空时不再回落普通可播点播。
+ * 保留函数以免旧 import 炸，恒为 false。
  */
-export function shortsUsePlayableFallback(verticalTotal: number): boolean {
-  return verticalTotal === 0;
+export function shortsUsePlayableFallback(_verticalTotal: number): boolean {
+  return false;
 }
