@@ -127,6 +127,7 @@ export interface ListVideosOptions {
   sort?: SortOption;
   minDuration?: number;
   maxDuration?: number;
+  orientation?: 'vertical' | 'horizontal';
   /** 后台列表要能看到草稿与转码中的内容，前台只看可播的公开内容。 */
   adminView?: boolean;
   excludeIds?: string[];
@@ -171,6 +172,11 @@ export function buildVideoFilters(options: ListVideosOptions): SQL[] {
   if (options.accessLevel) filters.push(eq(t.videos.accessLevel, options.accessLevel as VideoRow['accessLevel']));
   if (options.minDuration !== undefined) filters.push(gte(t.videos.durationSeconds, options.minDuration));
   if (options.maxDuration !== undefined) filters.push(lte(t.videos.durationSeconds, options.maxDuration));
+  if (options.orientation === 'vertical') {
+    filters.push(sql`${t.videos.width} is not null and ${t.videos.height} is not null and ${t.videos.height} > ${t.videos.width}`);
+  } else if (options.orientation === 'horizontal') {
+    filters.push(sql`${t.videos.width} is not null and ${t.videos.height} is not null and ${t.videos.width} >= ${t.videos.height}`);
+  }
   if (options.excludeIds?.length) {
     filters.push(sql`${t.videos.id} <> all(${uuidArray(options.excludeIds)})`);
   }
