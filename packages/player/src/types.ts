@@ -75,6 +75,13 @@ export interface RenewedTicket {
   scope?: 'full' | 'preview';
 }
 
+/** 点播字幕轨。HTML <track> 只认 VTT，srt 由皮肤先转成 blob 再挂。 */
+export interface PlayerCaptionTrack {
+  lang: string;
+  format: 'vtt' | 'srt';
+  url: string;
+}
+
 export interface PlayerSource {
   videoId: string;
   /** 带签名参数的 master.m3u8 */
@@ -88,6 +95,8 @@ export interface PlayerSource {
   resumeSeconds?: number;
   /** 进度条缩略图 VTT */
   spriteVttUrl?: string | null;
+  /** 字幕轨。跟 spriteVttUrl 无关——那条是缩略图，不能当字幕挂。 */
+  captions?: PlayerCaptionTrack[];
   poster?: string | null;
   title?: string;
   durationSeconds?: number;
