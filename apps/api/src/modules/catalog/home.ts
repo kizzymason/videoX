@@ -24,8 +24,6 @@ export interface CatalogHome {
   degraded: boolean;
 }
 
-export { settleRecommend } from './fallback.js';
-
 export async function getCatalogHome(options: { userId: string | null }): Promise<CatalogHome> {
   const [rec, latestPage, hotRows, categoryRows] = await Promise.all([
     settleRecommend(() => recommendVideos({ userId: options.userId, limit: RAIL_SIZE })),
