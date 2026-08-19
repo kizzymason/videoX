@@ -192,6 +192,8 @@ videosRouter.post(
     await assertPlayable(video);
 
     const isAdmin = req.auth?.role === 'admin';
+    // 会员权益回源数据库确认，不信任 access token 里的 vipExp 快照——
+    // 否则刚兑换完卡密的用户要等 token 过期才能看，退款/封禁也会有窗口期。
     const isVip = req.auth ? await assertVipFresh(req) : false;
     const gate = evaluateGate(video, {
       userId: req.auth?.id ?? null,
@@ -201,6 +203,7 @@ videosRouter.post(
 
     const settings = await getSiteSettings();
 
+    // 会员片对已登录的非会员发「试看票」：能起播前 N 秒，播到边界由 core 弹开通遮罩。
     const previewSeconds =
       !gate.canPlay && gate.gateReason === 'vip_required' && settings.previewSeconds > 0
         ? settings.previewSeconds
@@ -227,6 +230,7 @@ videosRouter.post(
         .where(and(eq(t.watchHistory.userId, req.auth.id), eq(t.watchHistory.videoId, video.id)))
         .limit(1);
       resumeSeconds = Math.floor(history?.position ?? 0);
+      // 已经看到结尾就不要再「续播」到片尾了。
       if (video.durationSeconds > 0 && resumeSeconds > video.durationSeconds - 15) resumeSeconds = 0;
     }
 
@@ -257,6 +261,7 @@ videosRouter.post(
   }),
 );
 
+/** 续签：播放中 token 快过期时静默换新，不打断播放。 */
 videosRouter.post(
   '/:id/renew-ticket',
   optionalAuth,
@@ -269,6 +274,7 @@ videosRouter.post(
     const gate = evaluateGate(video, { userId: req.auth?.id ?? null, isVip, isAdmin: isAdmin ?? false });
 
     const settings = await getSiteSettings();
+    // 续签时权益可能已经变化：会员到期就自动降级成试看，而不是直接断流。
     const downgradeToPreview =
       !gate.canPlay && gate.gateReason === 'vip_required' && settings.previewSeconds > 0;
     if (!gate.canPlay && !downgradeToPreview) throw AppError.forbidden('播放权限已失效');
@@ -290,6 +296,7 @@ videosRouter.post(
   }),
 );
 
+/** 作者的其它作品 */
 videosRouter.get(
   '/:id/more-from-author',
   asyncHandler(async (req, res) => {
@@ -309,6 +316,7 @@ videosRouter.get(
   }),
 );
 
+/** 上传者查看自己视频的转码进度 */
 videosRouter.get(
   '/:id/transcode-status',
   requireAuth,
