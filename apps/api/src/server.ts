@@ -5,6 +5,7 @@ import { logger } from './core/logger.js';
 import { closeDb } from './core/db.js';
 import { closeRedis } from './core/redis.js';
 import { closeQueues, scheduleMaintenance } from './core/queue.js';
+import { scheduleCollectionTasks, stopScheduledTasks } from './modules/collection/scheduler.js';
 
 async function bootstrap() {
   // 本地驱动需要这些目录存在，提前建好省得第一次上传时报错。
@@ -31,6 +32,9 @@ async function bootstrap() {
     logger.warn({ err: error }, '周期任务注册失败，Redis 可能未就绪');
   });
 
+  // 采集系统定时任务（每日增量/每周全量/号池健康检查/日志清理）
+  scheduleCollectionTasks();
+
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
@@ -38,6 +42,7 @@ async function bootstrap() {
     logger.info({ signal }, '正在关闭服务…');
 
     server.close(() => logger.info('HTTP 服务已关闭'));
+    stopScheduledTasks();
     // 给在途请求 10 秒收尾，超时强制退出。
     const force = setTimeout(() => {
       logger.warn('优雅关闭超时，强制退出');

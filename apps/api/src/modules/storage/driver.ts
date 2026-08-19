@@ -13,7 +13,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { AppError, ErrorCode } from '../../core/errors.js';
-import { env } from '../../config/env.js';
+import { env, REPO_ROOT } from '../../config/env.js';
 
 export interface ObjectMeta {
   size: number;
@@ -82,7 +82,10 @@ export interface DriverConfig {
 
 export function createStorageDriver(config: DriverConfig): Storage {
   if (config.driver === 's3') return new S3Storage(config);
-  return new LocalStorage(config.root || env.storageRoot);
+  // DB profile 里存的 root 可能是相对路径（如 ./storage）。npm workspace 脚本的
+  // cwd 是 apps/* 子目录，相对路径会解析错位，这里统一锚定到仓库根。
+  const root = config.root || env.storageRoot;
+  return new LocalStorage(path.isAbsolute(root) ? root : path.resolve(REPO_ROOT, root));
 }
 
 class LocalStorage implements Storage {

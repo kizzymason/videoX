@@ -120,7 +120,6 @@ export function MobilePlayer({
       <video
         ref={videoRef}
         className="size-full bg-black object-contain"
-        poster={poster ?? undefined}
         crossOrigin="use-credentials"
       >
         {captions.tracksReady

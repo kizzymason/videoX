@@ -12,11 +12,13 @@ import {
   type MaintenanceJobData,
   type TranscodeJobData,
 } from '@videox/api/core/queue';
+import { QUEUE_COLLECTION, type CollectionJobData } from '@videox/api/collection';
 import { logger } from './logger.js';
 import { FFMPEG_BIN, FFPROBE_BIN } from './ffmpeg.js';
 import { runTranscodeJob } from './jobs/transcode.js';
 import { runAiScoringJob } from './jobs/ai-scoring.js';
 import { runMaintenanceJob } from './jobs/maintenance.js';
+import { runCollectionJob } from './jobs/collection.js';
 
 /** 留一个核给系统与 API，避免转码把机器压死导致接口超时。 */
 const transcodeConcurrency = Math.max(1, Math.min(env.TRANSCODE_CONCURRENCY, Math.max(1, os.cpus().length - 1)));
@@ -68,9 +70,20 @@ async function bootstrap(): Promise<void> {
     concurrency: 1,
   });
 
+  // 采集任务：网络 IO 为主（源站 API / 分片下载），并发可以比转码高。
+  // R2 转存是长任务，锁续期调长避免误判卡死。
+  const collectionWorker = new Worker<CollectionJobData>(QUEUE_COLLECTION, runCollectionJob, {
+    connection: createQueueConnection(),
+    prefix: QUEUE_PREFIX,
+    concurrency: Math.max(2, Math.min(8, os.cpus().length)),
+    lockDuration: 300_000,
+    stalledInterval: 60_000,
+  });
+
   attachLogging(transcodeWorker, 'transcode');
   attachLogging(aiWorker, 'ai-scoring');
   attachLogging(maintenanceWorker, 'maintenance');
+  attachLogging(collectionWorker, 'collection');
 
   logger.info('videoX worker 已就绪，等待任务');
 
@@ -81,7 +94,12 @@ async function bootstrap(): Promise<void> {
     logger.info({ signal }, '正在关闭 worker…');
 
     // close() 会等在跑的任务结束再退出，避免转码到一半留下半成品。
-    await Promise.allSettled([transcodeWorker.close(), aiWorker.close(), maintenanceWorker.close()]);
+    await Promise.allSettled([
+      transcodeWorker.close(),
+      aiWorker.close(),
+      maintenanceWorker.close(),
+      collectionWorker.close(),
+    ]);
     await Promise.allSettled([closeRedis(), closeDb()]);
     process.exit(0);
   };

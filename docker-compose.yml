@@ -35,6 +35,12 @@ services:
       timeout: 3s
       retries: 20
 
+# ============================================================================
+# 采集 Worker 说明：本地开发用 `npm run dev:worker`（tsx watch）；
+# 生产部署用 docker-compose.prod.yml（其中 worker 服务入口为
+# `npm run start -w @videox/worker`，依赖 Docker 构建产物）。
+# ============================================================================
+
 volumes:
   videox_pgdata:
   videox_redisdata:

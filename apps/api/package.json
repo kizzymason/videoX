@@ -13,6 +13,7 @@
     "./core/logger": "./src/core/logger.ts",
     "./core/queue": "./src/core/queue.ts",
     "./core/redis": "./src/core/redis.ts",
+    "./collection": "./src/modules/collection/index.ts",
     "./storage": "./src/modules/storage/index.ts",
     "./maintenance": "./src/modules/maintenance/index.ts",
     "./package.json": "./package.json"
@@ -41,6 +42,7 @@
     "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "nanoid": "^6.0.1",
+    "node-cron": "^3.0.3",
     "pg": "^8.23.0",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
@@ -54,6 +56,7 @@
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.13.0",
+    "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.11.10",
     "drizzle-kit": "^0.31.10",
     "pino-pretty": "^13.0.0",

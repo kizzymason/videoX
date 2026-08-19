@@ -315,7 +315,7 @@ export const uploadApi = {
 };
 
 /**
- * 分片上传走裸 fetch：ApiClient 会把 body JSON 化，而这里要发二进制。
+ * 分片上传走裸 fetch：ApiClient 会把 body JSON 化，而这里要发二进制；
  * 同时需要 XHR 之外的 AbortSignal 支持，fetch 正好够用。
  */
 export async function putChunk(
@@ -350,3 +350,175 @@ export async function putChunk(
   }
   return payload.data!;
 }
+
+
+// ---------------------------------------------------------------------------
+// 采集系统（/api/collection）
+// ---------------------------------------------------------------------------
+
+export interface PoolAccountRow {
+  id: string;
+  targetSite: string;
+  uid: string;
+  token: string;
+  username: string | null;
+  isVip: boolean;
+  vipExpiresAt: string | null;
+  status: 'active' | 'inactive' | 'banned';
+  usageCount: number;
+  lastUsedAt: string | null;
+  lastCheckAt: string | null;
+  createdAt: string;
+}
+
+export interface PoolStats {
+  total: number;
+  active: number;
+  inactive: number;
+  banned: number;
+  vip: number;
+  free: number;
+}
+
+export interface CollectionJobRow {
+  id: string;
+  taskId: string;
+  type: 'list_crawl' | 'detail_fetch' | 'play_url_refresh' | 'r2_transfer';
+  targetSite: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  priority: number;
+  payload: Record<string, unknown>;
+  retryCount: number;
+  maxRetries: number;
+  nextRunAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface CollectedVideoRow {
+  id: string;
+  externalId: string;
+  targetSite: string;
+  sourceKey: string | null;
+  videoId: string | null;
+  title: string;
+  kind: 'gv' | 'mv' | 'tv';
+  page: number;
+  status: 'pending' | 'imported' | 'updating' | 'archived';
+  importMode: 'hotlink' | 'r2_transfer' | null;
+  localVideoUrl: string | null;
+  externalPlayUrl: string | null;
+  metadata: Record<string, unknown> | null;
+  lastFetchedAt: string | null;
+  importedAt: string | null;
+  createdAt: string;
+}
+
+export interface CollectionLogRow {
+  id: string;
+  jobId: string | null;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+  context: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface CollectionStorageStrategy {
+  mode: 'hotlink_only' | 'r2_only' | 'hybrid';
+  growthMode: 'slow' | 'rapid';
+  latestDays?: number;
+  popularViewThreshold?: number;
+  maxStorageGB?: number;
+  monthlyBudgetUSD?: number;
+}
+
+export interface CollectionScheduleSettings {
+  enabled: boolean;
+  kind: 'gv' | 'mv' | 'tv';
+  pageCountPerRun: number;
+  cronExpression?: string;
+  startTime: string;
+  incremental: boolean;
+}
+
+export interface CollectionPoolSettings {
+  minAccountCount: number;
+  vipWeightMultiplier: number;
+  healthCheckIntervalMinutes: number;
+  autoRemoveFailedAfterAttempts: number;
+}
+
+export interface CollectionSettings {
+  storage: CollectionStorageStrategy;
+  dailySchedule: CollectionScheduleSettings;
+  weeklySchedule: CollectionScheduleSettings;
+  pool: CollectionPoolSettings;
+}
+
+export interface CollectionStats {
+  pool: PoolStats;
+  todayTasks: { total: number; completed: number; failed: number; running: number; queued: number };
+  allTasks: { total: number; completed: number; failed: number };
+  videos: {
+    total: number;
+    pending: number;
+    imported: number;
+    hotlink: number;
+    r2: number;
+    todayNew: number;
+  };
+  queue: { waiting: number; active: number; failed: number };
+}
+
+export const collectionApi = {
+  // 号池
+  pools: (query: Query) => api.get<Paginated<PoolAccountRow>>('/collection/pools', query),
+  poolStats: () => api.get<PoolStats>('/collection/pools/stats'),
+  importPools: (accounts: Array<{ uid: string; token: string; username?: string; isVip: boolean }>) =>
+    api.post<{ ids: string[] }>('/collection/pools', { accounts }),
+  updatePool: (id: string, body: Query) => api.put<PoolAccountRow>(`/collection/pools/${id}`, body),
+  deletePool: (id: string) => api.delete<null>(`/collection/pools/${id}`),
+  healthCheck: (accountId?: string) =>
+    api.post<{ valid?: number; valid_count?: number; invalid?: number; failed?: number }>(
+      '/collection/pools/health-check',
+      accountId ? { accountId } : {},
+    ),
+
+  // 任务
+  tasks: (query: Query) => api.get<Paginated<CollectionJobRow>>('/collection/tasks', query),
+  queueStats: () => api.get<{ waiting: number; active: number; failed: number }>('/collection/tasks/queue-stats'),
+  createTask: (body: {
+    type: 'list_crawl' | 'detail_fetch' | 'play_url_refresh';
+    kind: 'gv' | 'mv' | 'tv';
+    page?: number;
+    externalId?: number;
+    priority?: number;
+  }) => api.post<{ collectionJobId: string; bullmqJobId: string }>('/collection/tasks', body),
+  retryTask: (id: string) => api.post<unknown>(`/collection/tasks/${id}/retry`),
+
+  // 采集视频
+  videos: (query: Query) => api.get<Paginated<CollectedVideoRow>>('/collection/videos', query),
+  pendingCount: () => api.get<{ count: number }>('/collection/videos/pending-count'),
+  importVideos: (body: {
+    collectedVideoIds: string[];
+    autoPublish: boolean;
+    forceMode?: 'hotlink' | 'r2_transfer';
+  }) =>
+    api.post<{
+      imported: Array<{ collectedVideoId: string; videoId: string; importMode: string }>;
+      failed: Array<{ collectedVideoId: string; error: string }>;
+    }>('/collection/videos/import', body),
+  publishVideo: (id: string) => api.post<null>(`/collection/videos/${id}/publish`),
+  unpublishVideo: (id: string) => api.post<null>(`/collection/videos/${id}/unpublish`),
+
+  // 日志
+  logs: (query: Query) => api.get<Paginated<CollectionLogRow>>('/collection/logs', query),
+
+  // 配置与统计
+  settings: () => api.get<CollectionSettings>('/collection/settings'),
+  updateSettings: (body: Query) => api.put<null>('/collection/settings', body),
+  stats: () => api.get<CollectionStats>('/collection/stats'),
+  trend: (days: number) => api.get<Array<{ date: string; count: number }>>('/collection/stats/trend', { days }),
+};

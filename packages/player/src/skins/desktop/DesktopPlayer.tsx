@@ -103,7 +103,6 @@ export function DesktopPlayer({
       <video
         ref={videoRef}
         className="size-full bg-black object-contain"
-        poster={poster ?? undefined}
         onClick={() => engine.togglePlay()}
         crossOrigin="use-credentials"
       >

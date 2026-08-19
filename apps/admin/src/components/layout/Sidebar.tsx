@@ -1,6 +1,7 @@
 import type * as React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
+  Activity,
   BarChart3,
   Boxes,
   Clapperboard,
@@ -10,16 +11,19 @@ import {
   Image,
   KeyRound,
   LayoutDashboard,
+  ListTodo,
   ListTree,
   MessageSquare,
   ReceiptText,
   RectangleVertical,
   ScrollText,
   Settings,
+  SlidersHorizontal,
   Sparkles,
   Tags,
   Upload,
   Users,
+  Video,
   type LucideProps,
 } from 'lucide-react';
 import { cn } from '@videox/ui';
@@ -60,6 +64,16 @@ export const NAV_GROUPS: Group[] = [
       { to: '/plans', label: '套餐管理', icon: CreditCard },
       { to: '/redeem-codes', label: '卡密管理', icon: KeyRound },
       { to: '/orders', label: '订单流水', icon: ReceiptText },
+    ],
+  },
+  {
+    title: '采集系统',
+    items: [
+      { to: '/collection/dashboard', label: '采集总览', icon: Activity },
+      { to: '/collection/pools', label: '账号管理', icon: Users },
+      { to: '/collection/videos', label: '采集视频', icon: Video },
+      { to: '/collection/tasks', label: '采集任务', icon: ListTodo },
+      { to: '/collection/settings', label: '采集设置', icon: SlidersHorizontal },
     ],
   },
   {

@@ -66,6 +66,14 @@ function applyToken(url: string, token: string): string {
   }
 }
 
+function resolveUrl(url: string): URL | null {
+  try {
+    return new URL(url, typeof location === 'undefined' ? 'http://localhost' : location.href);
+  } catch {
+    return null;
+  }
+}
+
 function levelLabel(level: Level): string {
   if (level.height) return `${level.height}p`;
   return `${Math.round((level.bitrate ?? 0) / 1000)}k`;
@@ -84,6 +92,8 @@ export class PlayerEngine {
   private options: PlayerEngineOptions;
 
   private token = '';
+  /** master.m3u8 所在的 API origin；热链视频的分片会落在源站 CDN，不能加自定义头。 */
+  private apiOrigin = '';
   private renewTimer: ReturnType<typeof setTimeout> | null = null;
   private renewing: Promise<void> | null = null;
 
@@ -223,6 +233,8 @@ export class PlayerEngine {
     this.teardownHls();
     this.source = source;
     this.token = source.token;
+    // master 所在的 API origin：xhrSetup 只对自家 API 的裸分片 URL 加鉴权头。
+    this.apiOrigin = resolveUrl(source.masterUrl)?.origin ?? '';
     this.retries = 0;
     this.mediaRecoveries = 0;
     this.loadStartedAt = performance.now();
@@ -255,6 +267,7 @@ export class PlayerEngine {
   private buildConfig(): Partial<HlsConfig> {
     const seeded = bandwidth.get();
     const getToken = () => this.token;
+    const apiOrigin = this.apiOrigin;
     const BaseLoader = Hls.DefaultConfig.loader as unknown as {
       new (config: HlsConfig): {
         load(context: LoaderContext, config: LoaderConfiguration, callbacks: LoaderCallbacks<LoaderContext>): void;
@@ -276,9 +289,19 @@ export class PlayerEngine {
     }
 
     return {
-      xhrSetup(xhr) {
+      xhrSetup(xhr, url) {
         const token = getToken();
-        if (token) xhr.setRequestHeader('x-play-token', token);
+        if (!token) return;
+        const parsed = resolveUrl(url);
+        if (!parsed) return;
+        // URL 已带票 query（master / index / key）：query 鉴权已足够，不再设头。
+        // 热链采集视频的 master 会被 302 到源站，自定义头随重定向带到源站会
+        // 触发 CORS 预检，而源站 Allow-Headers 只白名单它自己的头。
+        if (parsed.searchParams.has(PLAY_TOKEN_PARAM)) return;
+        // 只对自家 API 的请求（本地转码视频的裸分片 URL）加头；
+        // 直连源站 CDN 的请求（热链分片 / key）绝不能带自定义头。
+        if (!apiOrigin || parsed.origin !== apiOrigin) return;
+        xhr.setRequestHeader('x-play-token', token);
       },
       // 解封装与解密放到 worker 线程，主线程只做渲染，滚动时不掉帧。
       enableWorker: true,
