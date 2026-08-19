@@ -24,29 +24,49 @@ import { SearchPage } from './pages/SearchPage';
 
 const WatchPage = React.lazy(() => import('./pages/WatchPage').then((m) => ({ default: m.WatchPage })));
 
-/** 顶/底安全区跟底栏同色。Shorts 进则暗、离则亮，并压过 useTheme 的 color-scheme。 */
-function applyChrome(dark: boolean) {
+/**
+ * 顶/底安全区跟底栏同色。Shorts 进则暗、离则亮。
+ * color-scheme 必须写进 stylesheet !important：useTheme 稍后会改 html 的 inline
+ * color-scheme，浅色主题下 iOS/Chrome 会把状态栏画成白底。
+ */
+function applyChrome(dark: boolean, shorts: boolean) {
   const color = dark ? '#000000' : '#ffffff';
+  const scheme = dark ? 'dark' : 'light';
   const root = document.documentElement;
+  root.classList.toggle('dark', dark);
+  root.classList.toggle('light', !dark);
   root.style.backgroundColor = color;
-  root.style.colorScheme = dark ? 'dark' : 'light';
+  root.style.colorScheme = scheme;
   document.body.style.backgroundColor = color;
   const app = document.getElementById('root');
   if (app) app.style.backgroundColor = color;
+
   let paint = document.getElementById('vx-chrome-paint');
   if (!paint) {
     paint = document.createElement('style');
     paint.id = 'vx-chrome-paint';
     document.head.appendChild(paint);
   }
-  paint.textContent = `html,body,#root{background-color:${color}!important}`;
-  let meta = document.querySelector('meta[name="theme-color"]');
-  if (!meta) {
-    meta = document.createElement('meta');
-    meta.setAttribute('name', 'theme-color');
-    document.head.appendChild(meta);
+  paint.textContent = [
+    `html,body,#root{background-color:${color}!important;color-scheme:${scheme}!important}`,
+    '#vx-chrome-safe-top{position:fixed;top:0;left:0;right:0;z-index:9999;pointer-events:none;background:#000;height:constant(safe-area-inset-top);height:env(safe-area-inset-top,0px)}',
+  ].join('');
+
+  let safeTop = document.getElementById('vx-chrome-safe-top');
+  if (!safeTop) {
+    safeTop = document.createElement('div');
+    safeTop.id = 'vx-chrome-safe-top';
+    safeTop.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(safeTop);
   }
+  safeTop.style.display = shorts ? 'block' : 'none';
+
+  document.querySelectorAll('meta[name="theme-color"]').forEach((node) => node.remove());
+  const meta = document.createElement('meta');
+  meta.setAttribute('name', 'theme-color');
   meta.setAttribute('content', color);
+  document.head.appendChild(meta);
+
   let apple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
   if (!apple) {
     apple = document.createElement('meta');
@@ -69,8 +89,11 @@ function TabLayout() {
     >
       <div
         aria-hidden
-        className={shorts ? 'fixed inset-x-0 top-0 z-40 bg-black' : 'fixed inset-x-0 top-0 z-40 bg-background'}
-        style={{ height: 'env(safe-area-inset-top, 0px)' }}
+        className={shorts ? 'pointer-events-none fixed inset-x-0 top-0 z-50' : 'pointer-events-none fixed inset-x-0 top-0 z-40 bg-background'}
+        style={{
+          height: 'env(safe-area-inset-top, 0px)',
+          backgroundColor: shorts ? '#000000' : undefined,
+        }}
       />
       <Outlet />
       <TabBar />
@@ -113,14 +136,23 @@ export function App() {
     track('pageview');
   }, [location.pathname]);
 
-  React.useLayoutEffect(() => {
+  const syncChrome = React.useCallback(() => {
     const shorts = location.pathname.startsWith('/shorts');
     const dark =
       shorts ||
       themeMode === 'dark' ||
       (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    applyChrome(dark);
+    applyChrome(dark, shorts);
   }, [location.pathname, themeMode]);
+
+  React.useLayoutEffect(() => {
+    syncChrome();
+  }, [syncChrome]);
+
+  // useTheme 在自己的 useEffect 里会把 color-scheme 改回用户主题，必须再盖一次。
+  React.useEffect(() => {
+    syncChrome();
+  }, [syncChrome]);
 
   const { data: site } = useQuery({ queryKey: ['site'], queryFn: contentApi.site, staleTime: 10 * 60_000 });
   React.useEffect(() => {

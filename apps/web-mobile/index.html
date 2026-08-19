@@ -35,7 +35,12 @@
             paint.id = 'vx-chrome-paint';
             document.head.appendChild(paint);
           }
-          paint.textContent = 'html,body,#root{background-color:' + color + '!important}';
+          paint.textContent =
+            'html,body,#root{background-color:' +
+            color +
+            '!important;color-scheme:' +
+            (dark ? 'dark' : 'light') +
+            '!important}';
           var meta = document.querySelector('meta[name="theme-color"]');
           if (meta) meta.setAttribute('content', color);
           var apple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
