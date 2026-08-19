@@ -20,7 +20,7 @@ function randomCode(prefix: string): string {
 const CATEGORIES = [
   { slug: 'featured', name: '精选推荐', icon: 'Sparkles', description: '编辑部精挑细选的高质量内容' },
   { slug: 'tech', name: '科技数码', icon: 'Cpu', description: '硬件评测、软件教程与前沿科技' },
-  { slug: 'film', name: '影视剪辑', icon: 'Clapperboard', description: '影视混剪、解说与幕后花絫' },
+  { slug: 'film', name: '影视剪辑', icon: 'Clapperboard', description: '影视混剪、解说与幕后花絮' },
   { slug: 'music', name: '音乐现场', icon: 'Music', description: 'Live 演出、翻唱与原创音乐' },
   { slug: 'game', name: '游戏竞技', icon: 'Gamepad2', description: '实况、攻略与赛事集锦' },
   { slug: 'life', name: '生活方式', icon: 'Coffee', description: '美食、旅行与日常 Vlog' },
