@@ -179,7 +179,7 @@ catalogRouter.get(
       maxDuration?: number;
     }>(req);
 
-    const result = await listVideos({ ...q, adminView: false });
+    const result = await listVideos({ ...q, adminView: false, kind: 'vod' });
     ok(res, paginated(result.items, result.total, q.page, q.pageSize));
   }),
 );
@@ -202,6 +202,7 @@ catalogRouter.get(
         SELECT id, title, poster_url, view_count
         FROM videos
         WHERE status IN ('ready','partially_ready') AND visibility = 'public'
+          AND kind = 'vod'
           AND (title ILIKE ${'%' + keyword + '%'} OR similarity(title, ${keyword}) > 0.15)
         ORDER BY (title ILIKE ${keyword + '%'}) DESC, similarity(title, ${keyword}) DESC, view_count DESC
         LIMIT 8
