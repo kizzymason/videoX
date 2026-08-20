@@ -60,15 +60,15 @@ export function GateVeil({ show, previewSeconds, onUnlock, loggedIn = true, onLo
           <p className="text-base font-semibold text-white">
             {previewSeconds ? `试看 ${previewSeconds} 秒已结束` : '订阅后即可播放'}
           </p>
-          <p className="text-sm text-white/60">开通会员即可观看完整视频，并解锁全站内容</p>
+          <p className="text-sm text-white/60">开通订阅即可观看完整视频，并解锁全站内容</p>
         </div>
         <div className="flex items-center gap-2 pt-1">
           <button
             type="button"
             onClick={onUnlock}
-            className="rounded-lg bg-black px-5 py-2 text-sm font-semibold text-white ring-1 ring-white/25 transition-opacity hover:bg-black/80"
+            className="rounded-lg bg-[#1e3a8a] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1e40af]"
           >
-            开通会员观看
+            开通订阅观看
           </button>
           {!loggedIn && onLogin ? (
             <button

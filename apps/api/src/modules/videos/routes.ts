@@ -51,12 +51,11 @@ videosRouter.get(
       sort: 'recommended' | 'latest' | 'popular' | 'trending' | 'most_liked' | 'longest' | 'shortest';
       minDuration?: number;
       maxDuration?: number;
-      orientation?: 'vertical' | 'horizontal';
       kind?: 'vod' | 'shorts';
     }>(req);
 
-    // 首页点播目录不混 Shorts：强制 kind=vod。横屏过滤对未知宽高放行（采集入库常无探测尺寸）。
-    const result = await listVideos({ ...q, adminView: false, orientation: 'horizontal', kind: 'vod' });
+    // 点播目录只按 kind=vod 与 Shorts 拆开，不按封面/画面比例过滤。
+    const result = await listVideos({ ...q, adminView: false, kind: 'vod' });
 
     if (req.auth && result.items.length > 0) {
       void recordImpressions(req.auth.id, result.items.map((v) => v.id));
@@ -66,7 +65,7 @@ videosRouter.get(
   }),
 );
 
-/** Shorts：只出竖屏。库存为空就空，不再回落点播。必须挂在 /:idOrSlug 前面。 */
+/** Shorts：只按 kind=shorts，不按宽高。必须挂在 /:idOrSlug 前面。 */
 videosRouter.get(
   '/shorts',
   optionalAuth,
@@ -80,7 +79,6 @@ videosRouter.get(
     const result = await listVideos({
       ...q,
       adminView: false,
-      orientation: 'vertical',
       kind: 'shorts',
     });
     if (req.auth && result.items.length > 0) {

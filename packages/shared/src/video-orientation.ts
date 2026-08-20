@@ -1,4 +1,6 @@
-/** 竖屏片：高大于宽。宽高未知的不进 Shorts。 */
+/**
+ * 画面比例辅助。前台列表不再用它们过滤，播放器横竖都支持。
+ */
 export function isVerticalVideo(video: {
   width: number | null;
   height: number | null;
@@ -6,10 +8,6 @@ export function isVerticalVideo(video: {
   return video.width != null && video.height != null && video.height > video.width;
 }
 
-/**
- * 点播列表：已知竖屏才排除。
- * 采集/热链入库经常没有探测宽高，未知尺寸按点收录，避免首页推荐/最新/热门空窗。
- */
 export function isHorizontalVideo(video: {
   width: number | null;
   height: number | null;

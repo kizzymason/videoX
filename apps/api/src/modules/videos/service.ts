@@ -130,7 +130,6 @@ export interface ListVideosOptions {
   sort?: SortOption;
   minDuration?: number;
   maxDuration?: number;
-  orientation?: 'vertical' | 'horizontal';
   kind?: 'vod' | 'shorts';
   /** 后台列表要能看到草稿与转码中的内容，前台只看可播的公开内容。 */
   adminView?: boolean;
@@ -178,14 +177,6 @@ export function buildVideoFilters(options: ListVideosOptions): SQL[] {
   if (options.maxDuration !== undefined) filters.push(lte(t.videos.durationSeconds, options.maxDuration));
   if (options.kind) {
     filters.push(eq(t.videos.kind, options.kind));
-  }
-  if (options.orientation === 'vertical') {
-    filters.push(sql`${t.videos.width} is not null and ${t.videos.height} is not null and ${t.videos.height} > ${t.videos.width}`);
-  } else if (options.orientation === 'horizontal') {
-    // 已知竖屏才排除。宽高为空（采集热链常见）仍进点播首页，不能再把列表筛空。
-    filters.push(
-      sql`(${t.videos.width} is null or ${t.videos.height} is null or ${t.videos.width} >= ${t.videos.height})`,
-    );
   }
   if (options.excludeIds?.length) {
     filters.push(sql`${t.videos.id} <> all(${uuidArray(options.excludeIds)})`);
