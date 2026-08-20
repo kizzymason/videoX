@@ -23,6 +23,7 @@ import { CollectionDashboardPage } from './pages/CollectionDashboardPage';
 import { CollectionVideosPage } from './pages/CollectionVideosPage';
 import { CollectionTasksPage } from './pages/CollectionTasksPage';
 import { CollectionSettingsPage } from './pages/CollectionSettingsPage';
+import { CollectionAiPage } from './pages/CollectionAiPage';
 
 // recharts 与 hash-wasm 都是重依赖，拆出去让登录页和常规列表页不必为它们买单。
 const lazyPage = <K extends string>(loader: () => Promise<Record<K, React.ComponentType>>, key: K) =>
@@ -90,6 +91,7 @@ export function App() {
           <Route path="collection/pools" element={<CollectionPoolPage />} />
           <Route path="collection/videos" element={<CollectionVideosPage />} />
           <Route path="collection/tasks" element={<CollectionTasksPage />} />
+          <Route path="collection/ai" element={<CollectionAiPage />} />
           <Route path="collection/settings" element={<CollectionSettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

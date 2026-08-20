@@ -522,3 +522,89 @@ export const collectionApi = {
   stats: () => api.get<CollectionStats>('/collection/stats'),
   trend: (days: number) => api.get<Array<{ date: string; count: number }>>('/collection/stats/trend', { days }),
 };
+
+// ==========================================================================
+// 采集系统 - AI 维护
+// ==========================================================================
+
+export interface CollectionAiProfile {
+  id: string;
+  name: string;
+  endpoint: string;
+  model: string;
+  /** 读取时脱敏为 •••••••• */
+  apiKey: string;
+  systemPrompt: string;
+  temperature: number;
+  maxSteps: number;
+  autoApprove: boolean;
+  isActive: boolean;
+  lastUsedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CollectionAiConversation {
+  id: string;
+  title: string;
+  status: 'idle' | 'awaiting_confirm';
+  profileId: string | null;
+  autoApprove: boolean;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CollectionAiToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
+export interface CollectionAiMessage {
+  id: string;
+  conversationId: string;
+  role: 'user' | 'assistant' | 'tool';
+  content: string;
+  toolCalls: CollectionAiToolCall[] | null;
+  toolCallId: string | null;
+  toolName: string | null;
+  toolStatus: 'pending' | 'executed' | 'rejected' | null;
+  createdAt: string;
+}
+
+export interface CollectionAiTurn {
+  status: 'idle' | 'awaiting_confirm';
+  messages: CollectionAiMessage[];
+}
+
+export interface CollectionAiToolInfo {
+  name: string;
+  label: string;
+  readOnly: boolean;
+  description: string;
+}
+
+export const collectionAiApi = {
+  profiles: () => api.get<CollectionAiProfile[]>('/collection/ai/profiles'),
+  createProfile: (body: Query) => api.post<CollectionAiProfile>('/collection/ai/profiles', body),
+  updateProfile: (id: string, body: Query) =>
+    api.put<CollectionAiProfile>(`/collection/ai/profiles/${id}`, body),
+  deleteProfile: (id: string) => api.delete<null>(`/collection/ai/profiles/${id}`),
+  testProfile: (id: string) => api.post<{ reply: string }>(`/collection/ai/profiles/${id}/test`),
+
+  tools: () => api.get<CollectionAiToolInfo[]>('/collection/ai/tools'),
+
+  conversations: () => api.get<CollectionAiConversation[]>('/collection/ai/conversations'),
+  createConversation: (body: Query) =>
+    api.post<CollectionAiConversation>('/collection/ai/conversations', body),
+  updateConversation: (id: string, body: Query) =>
+    api.put<CollectionAiConversation>(`/collection/ai/conversations/${id}`, body),
+  deleteConversation: (id: string) => api.delete<null>(`/collection/ai/conversations/${id}`),
+
+  messages: (id: string) => api.get<CollectionAiTurn>(`/collection/ai/conversations/${id}/messages`),
+  send: (id: string, content: string) =>
+    api.post<CollectionAiTurn>(`/collection/ai/conversations/${id}/messages`, { content }),
+  confirm: (id: string, approve: boolean) =>
+    api.post<CollectionAiTurn>(`/collection/ai/conversations/${id}/confirm`, { approve }),
+};

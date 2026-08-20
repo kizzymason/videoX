@@ -29,6 +29,13 @@
       "when": 1787166159912,
       "tag": "0003_oval_secret_warriors",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787195072706,
+      "tag": "0004_famous_sunspot",
+      "breakpoints": true
     }
   ]
 }

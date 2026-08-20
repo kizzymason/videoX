@@ -13,7 +13,9 @@ import { requireAuth, requireAdmin } from '../../middleware/auth.js';
 import { body, validate } from '../../middleware/validate.js';
 import { logger } from '../../core/logger.js';
 import { audit } from '../admin/audit.js';
+import { collectionAiRouter } from './ai/routes.js';
 import { AccountPoolManager } from './pool-manager.js';
+import { collectionSettingsPatchSchema } from './settings-schema.js';
 import {
   enqueueCollectionJob,
   getQueueStats,
@@ -40,6 +42,9 @@ export const collectionRouter: Router = Router();
 
 // 全部接口要求管理员权限
 collectionRouter.use(requireAuth, requireAdmin);
+
+// AI 维护（接口配置 / 会话 / 工具调用确认）
+collectionRouter.use('/ai', collectionAiRouter);
 
 const TARGET_SITE = 'yitongkan';
 
@@ -82,42 +87,7 @@ const importVideoSchema = z.object({
   categoryId: z.string().uuid().optional().nullable(),
 });
 
-const updateSettingsSchema = z.object({
-  storage: z
-    .object({
-      mode: z.enum(['hotlink_only', 'r2_only', 'hybrid']).optional(),
-      growthMode: z.enum(['slow', 'rapid']).optional(),
-      latestDays: z.number().int().min(1).max(365).optional(),
-      popularViewThreshold: z.number().int().min(0).optional(),
-      maxStorageGB: z.number().min(1).optional(),
-      monthlyBudgetUSD: z.number().min(0).optional(),
-    })
-    .optional(),
-  dailySchedule: z
-    .object({
-      enabled: z.boolean().optional(),
-      pageCountPerRun: z.number().int().min(1).max(200).optional(),
-      incremental: z.boolean().optional(),
-      startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-    })
-    .optional(),
-  weeklySchedule: z
-    .object({
-      enabled: z.boolean().optional(),
-      pageCountPerRun: z.number().int().min(1).max(500).optional(),
-      incremental: z.boolean().optional(),
-      startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-    })
-    .optional(),
-  pool: z
-    .object({
-      minAccountCount: z.number().int().min(1).optional(),
-      vipWeightMultiplier: z.number().int().min(1).max(20).optional(),
-      healthCheckIntervalMinutes: z.number().int().min(5).optional(),
-      autoRemoveFailedAfterAttempts: z.number().int().min(1).optional(),
-    })
-    .optional(),
-});
+const updateSettingsSchema = collectionSettingsPatchSchema;
 
 // ==========================================================================
 // 号池管理
