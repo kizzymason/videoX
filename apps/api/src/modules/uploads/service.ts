@@ -268,8 +268,8 @@ export async function completeUpload(params: {
       authorId: params.userId,
       categoryId: params.categoryId ?? null,
       status: 'queued',
-      // 新上传先待审：公开意图也压成 unlisted，后台通过才进前台。
-      visibility: params.visibility === 'private' ? 'private' : 'unlisted',
+      visibility: params.visibility,
+      publishedAt: params.visibility === 'public' ? new Date() : null,
       accessLevel: 'vip',
       kind: params.kind === 'shorts' ? 'shorts' : 'vod',
       sourceSizeBytes: stat.size,
@@ -361,8 +361,7 @@ export async function cloneFromExisting(params: {
       authorId: params.userId,
       categoryId: params.categoryId ?? null,
       status: 'ready',
-      // 秒传也走闸门：新纪录未审，不直接上前台。
-      visibility: params.visibility === 'private' ? 'private' : 'unlisted',
+      visibility: params.visibility,
       accessLevel: 'vip',
       kind: params.kind === 'shorts' ? 'shorts' : 'vod',
       // 直接指向同一批产物，不复制文件。
@@ -381,7 +380,7 @@ export async function cloneFromExisting(params: {
       fps: source.fps,
       renditions: source.renditions,
       isEncrypted: source.isEncrypted,
-      publishedAt: null,
+      publishedAt: params.visibility === 'public' ? new Date() : null,
     })
     .returning();
 
@@ -428,7 +427,8 @@ export async function finalizeInstantUpload(params: {
       authorId: params.userId,
       categoryId: params.categoryId ?? null,
       status: 'queued',
-      visibility: params.visibility === 'private' ? 'private' : 'unlisted',
+      visibility: params.visibility,
+      publishedAt: params.visibility === 'public' ? new Date() : null,
       accessLevel: 'vip',
       kind: params.kind === 'shorts' ? 'shorts' : 'vod',
       sourceKey: source.sourceKey,

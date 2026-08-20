@@ -180,10 +180,10 @@ export function WatchPage() {
                   <p className="text-sm text-white">订阅后即可播放</p>
                   <Button
                     size="sm"
-                    className="bg-black text-white ring-1 ring-white/25 hover:bg-black/80"
+                    className="border-0 bg-[#1e3a8a] text-white hover:bg-[#1e40af]"
                     onClick={() => navigate('/subscribe')}
                   >
-                    开通会员观看
+                    开通订阅观看
                   </Button>
                 </div>
               ) : (

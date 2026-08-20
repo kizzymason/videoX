@@ -243,7 +243,7 @@ function InPlacePlayer({ video, poster }: { video: VideoSummary; poster: string 
             {showSubscribe ? (
               <Link
                 to="/membership"
-                className="rounded-full bg-black px-5 py-2 text-sm font-semibold text-white ring-1 ring-white/25"
+                className="rounded-full bg-[#1e3a8a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1e40af]"
               >
                 去订阅
               </Link>

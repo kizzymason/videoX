@@ -93,7 +93,7 @@ export const videoListQuerySchema = paginationSchema.extend({
   sort: z.enum(SORT_OPTIONS).default('latest'),
   minDuration: z.coerce.number().int().min(0).optional(),
   maxDuration: z.coerce.number().int().min(0).optional(),
-  /** vertical = Shorts 信息流，只出高大于宽的已通过可播片。 */
+  /** 兼容旧客户端；列表不再按宽高过滤，播放器横竖都支持。 */
   orientation: z.enum(['vertical', 'horizontal']).optional(),
   /** 后台目录拆分：shorts 与 vod 独立库存。 */
   kind: z.enum(VIDEO_KINDS).optional(),

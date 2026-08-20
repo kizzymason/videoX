@@ -1,8 +1,6 @@
-import * as React from 'react';
 import { Link } from 'react-router-dom';
 import { formatCount, formatDuration, formatRelativeTime, type VideoSummary } from '@videox/shared';
 import { Badge, Skeleton, cn } from '@videox/ui';
-import { contentApi } from '../../lib/api';
 import { prefetchWatchPage } from '../../lib/prefetch-watch';
 
 export interface VideoCardProps {
@@ -15,46 +13,15 @@ export interface VideoCardProps {
 }
 
 /**
- * 视频卡片。极简策略：无边框无阴影，靠 16:9 封面本身分区；信息只留标题、
- * 作者、播放量与时间四项，其余全部让位给留白。
+ * 视频卡片。点播有会员门禁，封面不挂悬停预览片。
  */
 export function VideoCard({ video, progressPercent, className, layout = 'grid' }: VideoCardProps) {
-  const [hovering, setHovering] = React.useState(false);
-  const prefetched = React.useRef(false);
-  const hoverTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const videoRef = React.useRef<HTMLVideoElement | null>(null);
-
-  const onEnter = () => {
-    prefetchWatchPage();
-    // 悬停 400ms 才认为是真的想看，避免鼠标划过就发一堆预取请求。
-    hoverTimer.current = setTimeout(() => {
-      setHovering(true);
-      if (!prefetched.current) {
-        prefetched.current = true;
-        void contentApi.video(video.id).catch(() => undefined);
-      }
-    }, 400);
-  };
-
-  const onLeave = () => {
-    if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    setHovering(false);
-    videoRef.current?.pause();
-  };
-
-  React.useEffect(() => {
-    return () => {
-      if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    };
-  }, []);
-
   const isRow = layout === 'row';
 
   return (
     <Link
       to={`/watch/${video.slug || video.id}`}
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
+      onMouseEnter={prefetchWatchPage}
       className={cn('group/card block', isRow ? 'flex gap-3' : 'space-y-2.5', className)}
     >
       <div
@@ -70,19 +37,6 @@ export function VideoCard({ video, progressPercent, className, layout = 'grid' }
             loading="lazy"
             decoding="async"
             className="size-full object-cover"
-          />
-        ) : null}
-
-        {/* 悬停预览片段：只有存在预览文件时才挂 video 元素 */}
-        {hovering && video.previewUrl ? (
-          <video
-            ref={videoRef}
-            src={video.previewUrl}
-            autoPlay
-            muted
-            loop
-            playsInline
-            className="absolute inset-0 size-full object-cover duration-200 animate-in fade-in-0"
           />
         ) : null}
 

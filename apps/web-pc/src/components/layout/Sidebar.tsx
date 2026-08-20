@@ -88,7 +88,7 @@ export function Sidebar() {
         <NavItem
           to={user ? '/membership' : '/auth-required?redirect=/membership'}
           matchPath={user ? '/membership' : '/auth-required'}
-          label="开通会员"
+          label="订阅"
           icon={Flame}
           collapsed={collapsed}
         />
@@ -141,20 +141,13 @@ function NavItem({
       to={to}
       end={end}
       className={cn(
-        'relative flex w-full items-center rounded-lg text-[15px] transition-colors duration-200',
+        'flex w-full items-center rounded-lg text-[15px] transition-colors duration-200',
         collapsed ? 'h-11 justify-center px-0' : 'gap-3.5 px-3 py-2.5',
         isActive
           ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
           : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground',
       )}
     >
-      <span
-        aria-hidden
-        className={cn(
-          'absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-r bg-foreground transition-opacity duration-200',
-          isActive ? 'opacity-100' : 'opacity-0',
-        )}
-      />
       <Icon className="size-[22px] shrink-0" />
       {!collapsed ? <span className="truncate">{label}</span> : null}
     </NavLink>
