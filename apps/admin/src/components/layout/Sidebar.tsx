@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import {
   Activity,
   BarChart3,
+  Bot,
   Boxes,
   Clapperboard,
   CreditCard,
@@ -73,6 +74,7 @@ export const NAV_GROUPS: Group[] = [
       { to: '/collection/pools', label: '账号管理', icon: Users },
       { to: '/collection/videos', label: '采集视频', icon: Video },
       { to: '/collection/tasks', label: '采集任务', icon: ListTodo },
+      { to: '/collection/ai', label: 'AI 维护', icon: Bot },
       { to: '/collection/settings', label: '采集设置', icon: SlidersHorizontal },
     ],
   },

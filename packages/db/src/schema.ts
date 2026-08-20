@@ -796,3 +796,77 @@ export const collectedVideos = pgTable('collected_videos',
   ]
 );
 
+// ========================================================================
+// 采集系统 - AI 维护
+// ========================================================================
+
+/**
+ * AI 维护接入配置。
+ *
+ * 与 ai_profiles（视频重排跑批）刻意分开：维护助手要的是多轮对话 + function
+ * calling，用不上 batchSize / userPromptTemplate，混在一张表里两边都别扭。
+ */
+export const collectionAiProfiles = pgTable(
+  'collection_ai_profiles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 60 }).notNull(),
+    endpoint: varchar('endpoint', { length: 300 }).notNull(),
+    model: varchar('model', { length: 80 }).notNull(),
+    apiKey: text('api_key').notNull().default(''),
+    systemPrompt: text('system_prompt').notNull().default(''),
+    temperature: real('temperature').notNull().default(0.2),
+    /** 单轮对话里最多允许模型连续调用几轮工具，防止兜圈子烧 token */
+    maxSteps: integer('max_steps').notNull().default(8),
+    /** 默认是否放行写操作。关掉时写类工具要管理员逐条确认 */
+    autoApprove: boolean('auto_approve').notNull().default(false),
+    isActive: boolean('is_active').notNull().default(false),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index('collection_ai_profiles_active_idx').on(t.isActive)],
+);
+
+export const collectionAiConversations = pgTable(
+  'collection_ai_conversations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id').references(() => collectionAiProfiles.id, { onDelete: 'set null' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    title: varchar('title', { length: 120 }).notNull().default('新会话'),
+    /** idle | awaiting_confirm，后者表示有待确认的写操作卡在那里 */
+    status: varchar('status', { length: 20 }).notNull().default('idle'),
+    autoApprove: boolean('auto_approve').notNull().default(false),
+    ...timestamps,
+  },
+  (t) => [
+    index('collection_ai_conversations_user_idx').on(t.userId),
+    index('collection_ai_conversations_updated_idx').on(t.updatedAt),
+  ],
+);
+
+export const collectionAiMessages = pgTable(
+  'collection_ai_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => collectionAiConversations.id, { onDelete: 'cascade' }),
+    /** user | assistant | tool */
+    role: varchar('role', { length: 16 }).notNull(),
+    content: text('content').notNull().default(''),
+    /** assistant 轮次要求调用的工具，OpenAI tool_calls 原样存 */
+    toolCalls: jsonb('tool_calls').$type<Record<string, unknown>[]>(),
+    /** tool 轮次回填：对应哪一次调用 */
+    toolCallId: varchar('tool_call_id', { length: 80 }),
+    toolName: varchar('tool_name', { length: 60 }),
+    /** 写操作确认态：pending | executed | rejected；读操作与纯文本为 null */
+    toolStatus: varchar('tool_status', { length: 16 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(now),
+  },
+  (t) => [
+    index('collection_ai_messages_conv_idx').on(t.conversationId, t.createdAt),
+    index('collection_ai_messages_status_idx').on(t.toolStatus),
+  ],
+);
+
