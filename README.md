@@ -153,6 +153,33 @@ openssl rand -hex 32   # JWT_ACCESS_SECRET / JWT_REFRESH_SECRET / PLAY_TOKEN_SEC
 
 存储默认写本地磁盘 `./storage`。S3 兼容（MinIO / R2 / OSS）在管理后台「存储配置」里配置并持久化到数据库，支持「测试连接」与 CDN 域名，改完即时生效，不需要重启。
 
+---
+
+## 生产部署
+
+```bash
+cp .env.production.example .env       # 填密码与五个密钥
+sudo bash deploy/host-tuning.sh       # 宿主机内核 / fd 上限 / Docker 日志切分
+docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+```
+
+`.env` 里与性能相关的几项按机型调整，默认值是 4 核 8G：
+
+| 变量 | 作用 |
+| --- | --- |
+| `API_CLUSTER_WORKERS` | API 进程数。留一到两个核给 nginx 与 worker |
+| `DB_POOL_MAX` / `WORKER_DB_POOL_MAX` | 单进程连接池。`API 进程数 × DB_POOL_MAX + WORKER_DB_POOL_MAX` 要小于 `PG_MAX_CONNECTIONS` |
+| `UV_THREADPOOL_SIZE` | argon2 密码校验跑在 libuv 线程池上，默认 4 会让并发登录排队 |
+| `WORKER_CPU_LIMIT` / `WORKER_MEM_LIMIT` | 给 ffmpeg 设上限，转码时前台接口才有余量 |
+| `MEDIA_ACCEL_PREFIX` | 本地盘分片由 nginx `sendfile` 发送，Node 只做鉴权。置空回退到 Node 转发 |
+| `PG_*` | Postgres 内存与并行度。默认值假设整机 8G |
+| `EXTRA_CORS_ORIGINS` | 逗号分隔的额外来源，上域名或 CDN 回源时用 |
+
+反代配置在 `deploy/` 下：`nginx-main.conf` 是主配置，`nginx.conf` 是站点规则，
+`proxy-headers.conf` 是各 `location` 共用的转发头。**新增反代 location 必须
+`include` 这份头文件**——nginx 的 `proxy_set_header` 是整组覆盖，漏掉会让
+`X-Forwarded-For` 丢失，进而使全站用户共用一个限流桶。
+
 ## 已知取舍
 
 - 中文全文检索走 `pg_trgm` 三元组近似，没有引入 `zhparser`（需要自编译扩展镜像）。Postgres 内置分词器不切中文，这是精度换部署简单度。
