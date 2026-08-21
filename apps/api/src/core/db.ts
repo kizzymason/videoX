@@ -1,7 +1,7 @@
 import { getDb, getPool, closeDb, sql, type SQL } from '@videox/db';
 import { env } from '../config/env.js';
 
-export const db = getDb({ connectionString: env.DATABASE_URL, max: 20 });
+export const db = getDb({ connectionString: env.DATABASE_URL, max: env.DB_POOL_MAX });
 export const pool = getPool();
 export { closeDb };
 export * as t from '@videox/db/schema';
