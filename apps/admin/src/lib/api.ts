@@ -200,6 +200,7 @@ export const usersApi = {
   grantVip: (body: { userId: string; days: number; note?: string }) =>
     api.post<{ vipExpiresAt: string }>('/admin/users/grant-vip', body),
   revokeVip: (id: string) => api.post<null>(`/admin/users/${id}/revoke-vip`),
+  bulkDelete: (ids: string[]) => api.post<{ deleted: number }>('/admin/users/bulk-delete', { ids }),
 };
 
 export const commentsApi = {
@@ -241,6 +242,7 @@ export const membershipApi = {
   generateCodes: (body: { planId: string; count: number; prefix?: string; expiresAt?: string; note?: string }) =>
     api.post<{ batchId: string; codes: string[] }>('/admin/redeem-codes/generate', body),
   disableCode: (id: string) => api.post<null>(`/admin/redeem-codes/${id}/disable`),
+  bulkDeleteCodes: (ids: string[]) => api.post<{ deleted: number }>('/admin/redeem-codes/bulk-delete', { ids }),
 
   orders: (query: Query) => api.get<Paginated<Order>>('/admin/orders', query),
 };

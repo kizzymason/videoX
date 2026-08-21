@@ -1,11 +1,12 @@
 import { Router } from 'express';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, not, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   aiProfileSchema,
   algoWeightsSchema,
   bannerSchema,
   bulkVideoActionSchema,
+  bulkIdsSchema,
   categorySchema,
   commentListQuerySchema,
   generateCodesSchema,
@@ -549,6 +550,30 @@ adminRouter.post(
   }),
 );
 
+adminRouter.post(
+  '/users/bulk-delete',
+  validate({ body: bulkIdsSchema }),
+  asyncHandler(async (req, res) => {
+    const { ids } = body<{ ids: string[] }>(req);
+    const actorId = req.auth!.id;
+    const targets = [...new Set(ids)].filter((id) => id !== actorId);
+    if (targets.length === 0) throw AppError.badRequest('不能删除当前登录账号');
+
+    const [{ total: adminsLeft }] = await db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(t.users)
+      .where(and(eq(t.users.role, 'admin'), not(inArray(t.users.id, targets))));
+    if (Number(adminsLeft) < 1) {
+      throw AppError.badRequest('至少需要保留一名管理员');
+    }
+
+    const result = await db.delete(t.users).where(inArray(t.users.id, targets));
+    const deleted = result.rowCount ?? 0;
+    await audit(req, 'user.bulk_delete', undefined, { requested: ids.length, deleted });
+    ok(res, { deleted }, `已删除 ${deleted} 个用户`);
+  }),
+);
+
 // ==========================================================================
 // 评论审核
 // ==========================================================================
@@ -935,6 +960,19 @@ adminRouter.post(
     if (!row) throw AppError.badRequest('只能停用未使用的兑换码');
     await audit(req, 'redeem_code.disable', { type: 'redeem_code', id });
     ok(res, null, '兑换码已停用');
+  }),
+);
+
+adminRouter.post(
+  '/redeem-codes/bulk-delete',
+  validate({ body: bulkIdsSchema }),
+  asyncHandler(async (req, res) => {
+    const { ids } = body<{ ids: string[] }>(req);
+    const unique = [...new Set(ids)];
+    const result = await db.delete(t.redeemCodes).where(inArray(t.redeemCodes.id, unique));
+    const deleted = result.rowCount ?? 0;
+    await audit(req, 'redeem_code.bulk_delete', undefined, { requested: unique.length, deleted });
+    ok(res, { deleted }, `已删除 ${deleted} 张卡密`);
   }),
 );
 
