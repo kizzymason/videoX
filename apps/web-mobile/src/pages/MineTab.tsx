@@ -35,6 +35,7 @@ import { PullToRefresh } from '../components/PullToRefresh';
 import { MasonryFeed } from '../components/MasonryFeed';
 import { MobileVideoCard } from '../components/MobileVideoCard';
 import { LoggedOutGate } from '../components/LoggedOutGate';
+import { SiteFooter } from '../components/SiteFooter';
 
 const ENTRIES = [
   { to: '/history', label: '观看历史', icon: Clock },
@@ -177,6 +178,8 @@ export function MineTab() {
             退出登录
           </Button>
         ) : null}
+
+        <SiteFooter />
       </div>
     </>
   );

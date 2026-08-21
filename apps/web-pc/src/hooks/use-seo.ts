@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useSiteName } from './use-site';
 
 export interface SeoInput {
   title?: string;
@@ -31,6 +32,7 @@ function setMeta(selector: string, attr: 'name' | 'property', key: string, conte
  */
 export function useSeo(input: SeoInput | undefined): void {
   const serialized = JSON.stringify(input ?? {});
+  const siteName = useSiteName();
 
   React.useEffect(() => {
     const seo = JSON.parse(serialized) as SeoInput;
@@ -38,7 +40,7 @@ export function useSeo(input: SeoInput | undefined): void {
 
     if (seo.title) {
       const previous = document.title;
-      document.title = `${seo.title} - PandaGV`;
+      document.title = `${seo.title} - ${siteName}`;
       cleanups.push(() => {
         document.title = previous;
       });
@@ -64,5 +66,5 @@ export function useSeo(input: SeoInput | undefined): void {
     return () => {
       for (const cleanup of cleanups.reverse()) cleanup();
     };
-  }, [serialized]);
+  }, [serialized, siteName]);
 }

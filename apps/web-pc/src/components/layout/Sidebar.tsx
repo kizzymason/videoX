@@ -17,6 +17,7 @@ import {
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from '@videox/ui';
 import { useUiStore } from '../../stores/ui';
 import { useAuthStore } from '../../stores/auth';
+import { useSite, useSiteName } from '../../hooks/use-site';
 
 const PRIMARY_NAV = [
   { to: '/', label: '首页', icon: Home, end: true },
@@ -38,6 +39,8 @@ export function Sidebar() {
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const user = useAuthStore((s) => s.user);
+  const { data: site } = useSite();
+  const siteName = useSiteName();
 
   return (
     <aside
@@ -48,11 +51,15 @@ export function Sidebar() {
     >
       <div className={cn('flex h-16 shrink-0 items-center', collapsed ? 'justify-center px-0' : 'gap-2 px-4')}>
         {!collapsed ? (
-          <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
-            <span className="grid size-7 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <Sparkles className="size-4" />
-            </span>
-            PandaGV
+          <Link to="/" className="flex min-w-0 items-center gap-2 font-semibold tracking-tight">
+            {site?.logoUrl ? (
+              <img src={site.logoUrl} alt="" className="size-7 shrink-0 rounded-lg object-cover" />
+            ) : (
+              <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
+                <Sparkles className="size-4" />
+              </span>
+            )}
+            <span className="truncate">{siteName}</span>
           </Link>
         ) : null}
         <button

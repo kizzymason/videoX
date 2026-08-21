@@ -7,9 +7,11 @@ import { contentApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
 import { track } from '../lib/analytics';
 import { MasonryFeed } from '../components/MasonryFeed';
+import { useSiteName } from '../hooks/use-site';
 
 export function SearchPage() {
   const navigate = useNavigate();
+  const siteName = useSiteName();
   const [params, setParams] = useSearchParams();
   const q = params.get('q') ?? '';
 
@@ -62,7 +64,7 @@ export function SearchPage() {
           >
             <ChevronLeft className="size-5" />
           </button>
-          <h1 className="text-[20px] font-semibold tracking-tight">PandaGV</h1>
+          <h1 className="text-[20px] font-semibold tracking-tight">{siteName}</h1>
         </div>
         <div className="flex items-center gap-2 px-3 pt-2 pb-3">
           <div className="relative flex-1">

@@ -8,10 +8,12 @@ import { ApiError, membershipApi } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useAuthModalStore } from '../stores/auth-modal';
 import { useSeo } from '../hooks/use-seo';
+import { useSiteName } from '../hooks/use-site';
 import { PageContainer, PageHeader } from '../components/Page';
 
 export function MembershipPage() {
   useSeo({ title: '会员中心', description: '开通会员，解锁全站会员专享内容' });
+  const siteName = useSiteName();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const openAuth = useAuthModalStore((s) => s.openAuth);
@@ -71,7 +73,7 @@ export function MembershipPage() {
           </div>
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold">PandaGV 会员</p>
+              <p className="text-sm font-semibold">{siteName} 会员</p>
               {user && membership?.isVip ? (
                 <span className="rounded-full border border-background/25 px-2 py-0.5 text-[10px] font-medium">
                   生效中

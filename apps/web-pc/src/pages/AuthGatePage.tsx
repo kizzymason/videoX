@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@videox/ui';
 import { useAuthStore } from '../stores/auth';
 import { useAuthModalStore } from '../stores/auth-modal';
+import { useSiteName } from '../hooks/use-site';
 
 /** 保留 PC 顶栏和侧栏的内嵌登录门禁。 */
 export function AuthGatePage() {
@@ -12,6 +13,7 @@ export function AuthGatePage() {
   const user = useAuthStore((state) => state.user);
   const initializing = useAuthStore((state) => state.initializing);
   const openAuth = useAuthModalStore((state) => state.openAuth);
+  const siteName = useSiteName();
   const requested = params.get('redirect');
   const redirect = requested?.startsWith('/') && !requested.startsWith('//') ? requested : '/';
 
@@ -27,7 +29,7 @@ export function AuthGatePage() {
         </div>
         <h1 className="mt-8 text-4xl font-semibold tracking-tight">登录后继续</h1>
         <p className="mt-4 max-w-md text-lg leading-relaxed text-muted-foreground">
-          登录或注册 PandaGV，即可开通会员、收藏喜欢的内容并同步观看记录。
+          登录或注册 {siteName}，即可开通会员、收藏喜欢的内容并同步观看记录。
         </p>
         <Button
           size="lg"

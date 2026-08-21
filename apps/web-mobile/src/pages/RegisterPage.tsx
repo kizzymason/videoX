@@ -7,10 +7,13 @@ import { ApiError } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { AppHeader } from '../components/AppHeader';
 import { SlideCaptcha } from '../components/SlideCaptcha';
+import { SiteFooter } from '../components/SiteFooter';
 import { useSeo } from '../hooks/use-seo';
+import { useSiteName } from '../hooks/use-site';
 
 export function RegisterPage() {
   useSeo({ title: '注册' });
+  const siteName = useSiteName();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const redirect = params.get('redirect') ?? '/mine';
@@ -49,7 +52,7 @@ export function RegisterPage() {
       <div className="flex flex-1 flex-col items-center justify-center px-8 pb-16">
         <div className="w-full max-w-sm space-y-6">
           <div className="space-y-1.5 text-center">
-            <h1 className="text-3xl font-semibold tracking-tight">PandaGV</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">{siteName}</h1>
             <p className="text-sm text-muted-foreground">用户名即昵称，无需邮箱</p>
           </div>
           <div className="space-y-4">
@@ -97,6 +100,7 @@ export function RegisterPage() {
           </p>
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }
