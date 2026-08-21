@@ -45,6 +45,8 @@ const envSchema = z.object({
   SITE_PUBLIC_URL: z.string().default('http://localhost:5173'),
   MOBILE_PUBLIC_URL: z.string().default('http://localhost:5174'),
   ADMIN_PUBLIC_URL: z.string().default('http://localhost:5175'),
+  /** 逗号分隔的额外 CORS 来源，给多域名 / CDN 回源用。 */
+  EXTRA_CORS_ORIGINS: z.string().default(''),
 
   JWT_ACCESS_SECRET: z.string().min(16),
   JWT_REFRESH_SECRET: z.string().min(16),
@@ -149,6 +151,11 @@ export const env = {
     toOrigin(raw.SITE_PUBLIC_URL),
     toOrigin(raw.MOBILE_PUBLIC_URL),
     toOrigin(raw.ADMIN_PUBLIC_URL),
+    // 上域名、加 CDN 或多域名并存时，不用改代码就能放行。
+    ...raw.EXTRA_CORS_ORIGINS.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map(toOrigin),
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:5175',
