@@ -12,6 +12,10 @@ coverage/
 /storage/
 !/storage/.gitkeep
 
+# TLS 私钥与全链只放生产机，不要进 git
+/certs/*
+!/certs/.gitkeep
+
 *.log
 npm-debug.log*
 .DS_Store

@@ -4,7 +4,7 @@
 #   #填 POSTGRES_PASSWORD 和 5 个 openssl rand -hex 32 密钥
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 #
-# 对外开 80（主入口）和 8080（备用）。上域名/证书后再改公网 URL 并加 TLS。
+# 对外开 80（HTTP→HTTPS 跳转）和 443。证书放 SSL_CERTS_DIR，不要提交私钥。
 # 宿主机内核与 Docker 守护进程的配套调优见 deploy/host-tuning.sh。
 
 x-logging: &default-logging
@@ -223,10 +223,12 @@ services:
     ulimits: *default-ulimits
     ports:
       - "${HTTP_PORT:-80}:80"
-      - "${HTTP_ALT_PORT:-8080}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
       # X-Accel-Redirect 的落点：API 鉴权后由 nginx 直接 sendfile 这里的文件。
       - videox_storage:/data/storage:ro
+      # Let's Encrypt 全链 + 私钥。文件名必须是 domain.cert.pem / private.key.pem。
+      - ${SSL_CERTS_DIR:-./certs}:/etc/nginx/certs:ro
     depends_on:
       api:
         condition: service_healthy
