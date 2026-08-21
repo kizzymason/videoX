@@ -5,18 +5,76 @@
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 #
 # 对外开 80（主入口）和 8080（备用）。上域名/证书后再改公网 URL 并加 TLS。
+# 宿主机内核与 Docker 守护进程的配套调优见 deploy/host-tuning.sh。
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+x-ulimits: &default-ulimits
+  nofile:
+    soft: 65535
+    hard: 65535
 
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *default-logging
+    ulimits: *default-ulimits
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-videox}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-videox}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    # 默认参数是给 1GB 小机器准备的（shared_buffers 128MB / work_mem 4MB），
+    # 视频站的推荐召回与统计聚合会退化成磁盘排序。按 PG_* 变量整体上调。
+    command:
+      - postgres
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-200}
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-1536MB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-4GB}
+      - -c
+      - work_mem=${PG_WORK_MEM:-16MB}
+      - -c
+      - maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-256MB}
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - wal_buffers=16MB
+      - -c
+      - min_wal_size=1GB
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - default_statistics_target=200
+      - -c
+      - max_worker_processes=4
+      - -c
+      - max_parallel_workers=4
+      - -c
+      - max_parallel_workers_per_gather=2
+      - -c
+      - max_parallel_maintenance_workers=2
+      # 短查询占绝大多数，JIT 编译的开销通常大于收益。
+      - -c
+      - jit=off
+      - -c
+      - track_io_timing=on
+      - -c
+      - log_min_duration_statement=1000
     volumes:
       - videox_pgdata:/var/lib/postgresql/data
+    shm_size: 512mb
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -27,7 +85,23 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    logging: *default-logging
+    ulimits: *default-ulimits
+    # BullMQ 丢任务等于丢转码/采集，所以维持 noeviction；用 maxmemory 只做告警线之外的兜底。
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory-policy
+      - noeviction
+      - --tcp-backlog
+      - "4096"
+      - --tcp-keepalive
+      - "60"
+      - --io-threads
+      - "2"
     volumes:
       - videox_redisdata:/data
     healthcheck:
@@ -43,9 +117,17 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    logging: *default-logging
+    ulimits: *default-ulimits
     environment:
       NODE_ENV: production
       API_PORT: 4000
+      # 单进程只能吃一个核。cluster 下 1 号 worker 独占定时调度，其余只服务请求。
+      API_CLUSTER_WORKERS: ${API_CLUSTER_WORKERS:-2}
+      DB_POOL_MAX: ${DB_POOL_MAX:-20}
+      # argon2 校验密码走 libuv 线程池，默认 4 个线程会让登录排队。
+      UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-8}
+      NODE_OPTIONS: ${API_NODE_OPTIONS:---max-old-space-size=768}
       DATABASE_URL: postgresql://${POSTGRES_USER:-videox}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-videox}
       REDIS_URL: redis://redis:6379
       API_PUBLIC_URL: ${API_PUBLIC_URL:?set API_PUBLIC_URL}
@@ -60,6 +142,8 @@ services:
       STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
       STORAGE_LOCAL_ROOT: /data/storage
       UPLOAD_TMP_DIR: /data/storage/tmp
+      # 本地盘分片交给 nginx sendfile，Node 只做鉴权。S3/R2 驱动会自动忽略。
+      MEDIA_ACCEL_PREFIX: ${MEDIA_ACCEL_PREFIX:-/__accel}
     volumes:
       - videox_storage:/data/storage
     depends_on:
@@ -87,8 +171,13 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    logging: *default-logging
+    ulimits: *default-ulimits
     environment:
       NODE_ENV: production
+      DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-10}
+      UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-8}
+      NODE_OPTIONS: ${WORKER_NODE_OPTIONS:---max-old-space-size=1024}
       DATABASE_URL: postgresql://${POSTGRES_USER:-videox}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-videox}
       REDIS_URL: redis://redis:6379
       API_PUBLIC_URL: ${API_PUBLIC_URL}
@@ -115,6 +204,12 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
+    # ffmpeg 会把所有核吃满，导致 API 接口跟着超时。限住 CPU 让前台请求始终有余量。
+    deploy:
+      resources:
+        limits:
+          cpus: "${WORKER_CPU_LIMIT:-2.5}"
+          memory: ${WORKER_MEM_LIMIT:-3g}
     # 采集任务（list_crawl / detail_fetch / 热链刷新 / R2 转存）由同一 worker 消费。
     command: ["npm", "run", "start", "-w", "@videox/worker"]
     networks: [videox]
@@ -124,9 +219,14 @@ services:
       context: .
       dockerfile: Dockerfile.web
     restart: unless-stopped
+    logging: *default-logging
+    ulimits: *default-ulimits
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTP_ALT_PORT:-8080}:80"
+    volumes:
+      # X-Accel-Redirect 的落点：API 鉴权后由 nginx 直接 sendfile 这里的文件。
+      - videox_storage:/data/storage:ro
     depends_on:
       api:
         condition: service_healthy
