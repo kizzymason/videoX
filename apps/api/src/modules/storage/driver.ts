@@ -37,6 +37,8 @@ export interface Storage {
   head(key: string): Promise<ObjectMeta | null>;
   delete(key: string): Promise<void>;
   deletePrefix(prefix: string): Promise<number>;
+  /** 本地盘驱动才有：反代可以直接 sendfile 这个 key，Node 不必搬字节。 */
+  isLocal?: boolean;
 }
 
 const MIME: Record<string, string> = {
@@ -89,6 +91,8 @@ export function createStorageDriver(config: DriverConfig): Storage {
 }
 
 class LocalStorage implements Storage {
+  readonly isLocal = true;
+
   constructor(private readonly root: string) {}
 
   private resolve(key: string): string {
