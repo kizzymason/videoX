@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import pinoHttp from 'pino-http';
 import { env } from './config/env.js';
 import { logger } from './core/logger.js';
+import { AppError } from './core/errors.js';
 import { ok } from './core/respond.js';
 import { errorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { globalLimiter, requestContext } from './middleware/request-context.js';
@@ -52,7 +53,9 @@ export function createApp(): Express {
         // 无 origin 的请求（curl、<video> 直连、同源导航）一律放行。
         if (!origin || env.corsOrigins.includes(origin)) return callback(null, true);
         if (!env.isProd) return callback(null, true);
-        callback(new Error(`CORS 未授权的来源：${origin}`));
+        // 抛裸 Error 会被当成未捕获异常：返回 500 并打一整条堆栈。
+        // 把别人的域名解析到本机 IP 就能刷爆日志，这里降级成普通的 403。
+        callback(AppError.forbidden(`CORS 未授权的来源：${origin}`));
       },
       credentials: true,
       exposedHeaders: ['X-Request-Id', 'Content-Range', 'Accept-Ranges'],

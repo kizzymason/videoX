@@ -27,14 +27,26 @@ if (process.env.NODE_ENV !== 'production') {
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PORT: z.coerce.number().int().default(4000),
+  /** 0 或 1 为单进程；>1 时用 cluster 起多个 worker 吃满多核。 */
+  API_CLUSTER_WORKERS: z.coerce.number().int().min(0).max(32).default(0),
 
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
+  /** 每个进程的 PG 连接上限。cluster 下要保证 进程数 × 上限 < PG max_connections。 */
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(20),
+
+  /**
+   * 设为 nginx 内部 location（如 /__accel）后，本地盘的分片与静态资源改由反代
+   * sendfile 发出，Node 只做鉴权。留空则维持 Node 自己 pipe 文件流。
+   */
+  MEDIA_ACCEL_PREFIX: z.string().default(''),
 
   API_PUBLIC_URL: z.string().default('http://localhost:4000'),
   SITE_PUBLIC_URL: z.string().default('http://localhost:5173'),
   MOBILE_PUBLIC_URL: z.string().default('http://localhost:5174'),
   ADMIN_PUBLIC_URL: z.string().default('http://localhost:5175'),
+  /** 逗号分隔的额外 CORS 来源，给多域名 / CDN 回源用。 */
+  EXTRA_CORS_ORIGINS: z.string().default(''),
 
   JWT_ACCESS_SECRET: z.string().min(16),
   JWT_REFRESH_SECRET: z.string().min(16),
@@ -139,6 +151,11 @@ export const env = {
     toOrigin(raw.SITE_PUBLIC_URL),
     toOrigin(raw.MOBILE_PUBLIC_URL),
     toOrigin(raw.ADMIN_PUBLIC_URL),
+    // 上域名、加 CDN 或多域名并存时，不用改代码就能放行。
+    ...raw.EXTRA_CORS_ORIGINS.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map(toOrigin),
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:5175',

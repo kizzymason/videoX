@@ -308,7 +308,9 @@ async function main() {
   await db
     .insert(t.storageProfiles)
     .values([
-      { name: '本地磁盘', driver: 'local' as const, isActive: true, config: { root: './storage' } },
+      // root 留空表示跟随 STORAGE_LOCAL_ROOT。写死 './storage' 会让容器部署把产物
+      // 落到镜像可写层（相对仓库根解析），重建容器即丢，也绕开了挂载的数据卷。
+      { name: '本地磁盘', driver: 'local' as const, isActive: true, config: { root: '' } },
       {
         name: 'S3 兼容对象存储',
         driver: 's3' as const,
