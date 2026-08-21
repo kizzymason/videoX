@@ -72,8 +72,26 @@ vm.dirty_ratio = 15
 vm.dirty_background_ratio = 5
 EOF
 
+# sysctl --system 把 /etc/sysctl.conf 放在 /etc/sysctl.d/* 之后加载，云厂商镜像
+# 预置在那里的值（如 tcp_max_syn_backlog=1024、swappiness=0）会盖掉上面的配置。
+# 把冲突项注释掉，让 99-videox.conf 说话。
+MANAGED_KEYS=$(grep -oE '^[a-z0-9_.]+ *=' /etc/sysctl.d/99-videox.conf | tr -d ' =')
+if [[ -f /etc/sysctl.conf ]]; then
+  CONFLICTS=()
+  for key in $MANAGED_KEYS; do
+    if grep -qE "^[[:space:]]*${key//./\\.}[[:space:]]*=" /etc/sysctl.conf; then
+      CONFLICTS+=("$key")
+      sed -i -E "s|^([[:space:]]*${key//./\\.}[[:space:]]*=.*)$|# \1  # 由 videox host-tuning.sh 接管|" /etc/sysctl.conf
+    fi
+  done
+  if [[ ${#CONFLICTS[@]} -gt 0 ]]; then
+    echo "  已从 /etc/sysctl.conf 移交：${CONFLICTS[*]}"
+  fi
+fi
+
 sysctl --system >/dev/null
 echo "  拥塞控制=$(sysctl -n net.ipv4.tcp_congestion_control) qdisc=$(sysctl -n net.core.default_qdisc)"
+echo "  somaxconn=$(sysctl -n net.core.somaxconn) syn_backlog=$(sysctl -n net.ipv4.tcp_max_syn_backlog) swappiness=$(sysctl -n vm.swappiness)"
 
 echo "==> 文件句柄上限"
 cat > /etc/security/limits.d/99-videox.conf <<'EOF'
