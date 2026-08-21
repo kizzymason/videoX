@@ -27,6 +27,11 @@ export const paginationSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(PAGE_SIZE_MAX).default(PAGE_SIZE_DEFAULT),
 });
 
+/** 后台批量勾选删除：用户、卡密等共用。 */
+export const bulkIdsSchema = z.object({
+  ids: z.array(idSchema).min(1).max(200),
+});
+
 export const cursorSchema = z.object({
   cursor: z.string().max(256).optional(),
   limit: z.coerce.number().int().min(1).max(PAGE_SIZE_MAX).default(PAGE_SIZE_DEFAULT),

@@ -38,7 +38,7 @@ export function useSeo(input: SeoInput | undefined): void {
 
     if (seo.title) {
       const previous = document.title;
-      document.title = `${seo.title} - videoX`;
+      document.title = `${seo.title} - PandaGV`;
       cleanups.push(() => {
         document.title = previous;
       });

@@ -49,7 +49,7 @@ export function RegisterPage() {
       <div className="flex flex-1 flex-col items-center justify-center px-8 pb-16">
         <div className="w-full max-w-sm space-y-6">
           <div className="space-y-1.5 text-center">
-            <h1 className="text-3xl font-semibold tracking-tight">videoX</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">PandaGV</h1>
             <p className="text-sm text-muted-foreground">用户名即昵称，无需邮箱</p>
           </div>
           <div className="space-y-4">

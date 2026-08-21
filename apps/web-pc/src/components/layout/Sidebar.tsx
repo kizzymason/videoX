@@ -52,7 +52,7 @@ export function Sidebar() {
             <span className="grid size-7 place-items-center rounded-lg bg-primary text-primary-foreground">
               <Sparkles className="size-4" />
             </span>
-            videoX
+            PandaGV
           </Link>
         ) : null}
         <button

@@ -94,7 +94,7 @@ export function SubscribeTab() {
           <div className="relative space-y-1">
             <div className="flex items-center gap-2">
               <Flame className="size-5" />
-              <span className="text-base font-semibold">videoX 会员</span>
+              <span className="text-base font-semibold">PandaGV 会员</span>
               {membership?.isVip ? (
                 <span className="rounded-full border border-background/25 px-2 py-0.5 text-[10px] font-medium">
                   生效中

@@ -88,15 +88,15 @@ const PLANS = [
 ];
 
 const DEFAULT_SITE_SETTINGS = {
-  siteName: 'videoX',
+  siteName: 'PandaGV',
   siteTagline: '简约高级的视频平台',
-  siteDescription: 'videoX 是一个自建的现代视频平台，支持多码率 HLS 播放、会员订阅与智能推荐。',
-  siteKeywords: '视频,在线观看,HLS,会员,videoX',
+  siteDescription: 'PandaGV 是一个自建的现代视频平台，支持多码率 HLS 播放、会员订阅与智能推荐。',
+  siteKeywords: '视频,在线观看,HLS,会员,PandaGV',
   logoUrl: null,
   faviconUrl: null,
   defaultTheme: 'light',
   icpBeian: null,
-  footerText: '© videoX. 内容仅供演示。',
+  footerText: '© PandaGV. 内容仅供演示。',
   contactEmail: 'hello@videox.local',
   allowRegistration: true,
   commentsRequireApproval: false,
@@ -363,7 +363,7 @@ async function main() {
       passwordHash: adminHash,
       displayName: '站点管理员',
       role: 'admin' as const,
-      bio: '负责 videoX 的日常运营。',
+      bio: '负责 PandaGV 的日常运营。',
       vipExpiresAt: new Date(Date.now() + 3650 * 86_400_000),
     },
     {

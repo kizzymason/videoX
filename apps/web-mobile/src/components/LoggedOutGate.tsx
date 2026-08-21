@@ -18,7 +18,7 @@ export function LoggedOutGate({
         </AvatarFallback>
       </Avatar>
       <div className="mt-6 space-y-2">
-        <p className="text-[28px] leading-tight font-semibold tracking-tight">登录 videoX</p>
+        <p className="text-[28px] leading-tight font-semibold tracking-tight">登录 PandaGV</p>
         <p className="text-[15px] text-muted-foreground">{subtitle}</p>
       </div>
       <Button asChild className="mt-8 h-14 w-full max-w-sm rounded-full text-base font-medium">

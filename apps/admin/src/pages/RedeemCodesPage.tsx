@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Check, Copy, Download, KeyRound, Search, Sparkles } from 'lucide-react';
+import { Ban, Check, Copy, Download, KeyRound, Search, Sparkles, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { RedeemCode } from '@videox/shared';
 import {
@@ -43,6 +43,7 @@ export function RedeemCodesPage() {
   const [planId, setPlanId] = React.useState('all');
   const [generating, setGenerating] = React.useState(false);
   const [batch, setBatch] = React.useState<{ batchId: string; codes: string[] } | null>(null);
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
 
   const debouncedQ = useDebouncedValue(q.trim(), 300);
   React.useEffect(() => setPage(1), [debouncedQ, status, planId]);
@@ -69,6 +70,28 @@ export function RedeemCodesPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const bulkDelete = useMutation({
+    mutationFn: (ids: string[]) => membershipApi.bulkDeleteCodes(ids),
+    onSuccess: async (res) => {
+      toast.success(`已删除 ${res.deleted} 张卡密`);
+      setSelected(new Set());
+      await queryClient.invalidateQueries({ queryKey: ['redeem-codes'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const runBulkDelete = async () => {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    const ok = await confirm({
+      title: `删除 ${ids.length} 张卡密？`,
+      description: '已使用的卡密也会从记录中移除，不影响对应用户的会员状态。此操作不可撤销。',
+      confirmText: '删除',
+      destructive: true,
+    });
+    if (ok) bulkDelete.mutate(ids);
+  };
 
   const columns: Column<RedeemCode>[] = [
     {
@@ -204,12 +227,30 @@ export function RedeemCodesPage() {
         />
       </FilterBar>
 
+      {selected.size > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-xs font-medium tabular-nums">已选 {selected.size} 项</span>
+          <span className="mx-1 h-4 w-px bg-border" />
+          <Button variant="destructive" size="sm" disabled={bulkDelete.isPending} onClick={() => void runBulkDelete()}>
+            <Trash2 />
+            删除
+          </Button>
+          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setSelected(new Set())}>
+            <X />
+            取消选择
+          </Button>
+        </div>
+      ) : null}
+
       <DataTable
         columns={columns}
         rows={list.data?.items ?? []}
         rowKey={(row) => row.id}
         loading={list.isLoading}
         refreshing={list.isFetching && !list.isLoading}
+        selectable
+        selected={selected}
+        onSelectedChange={setSelected}
         skeletonRows={PAGE_SIZE}
         emptyText="还没有卡密"
       />

@@ -97,10 +97,10 @@ export function AuthModal() {
       <DialogContent className="w-full gap-5 bg-background p-8 sm:max-w-[400px]" showClose>
         <DialogTitle className="sr-only">{mode === 'login' ? '登录' : '注册'}</DialogTitle>
         <DialogDescription className="sr-only">
-          {mode === 'login' ? '使用用户名登录 videoX' : '使用用户名注册 videoX'}
+          {mode === 'login' ? '使用用户名登录 PandaGV' : '使用用户名注册 PandaGV'}
         </DialogDescription>
 
-        <p className="text-center text-2xl font-semibold tracking-tight">videoX</p>
+        <p className="text-center text-2xl font-semibold tracking-tight">PandaGV</p>
 
         <AuthModeTabs mode={mode} onChange={setMode} />
 

@@ -31,7 +31,7 @@ export function LoginPage() {
             <Gauge className="size-5" />
           </span>
           <div className="text-center">
-            <h1 className="text-lg font-semibold tracking-tight">videoX 管理后台</h1>
+            <h1 className="text-lg font-semibold tracking-tight">PandaGV 管理后台</h1>
             <p className="mt-0.5 text-sm text-muted-foreground">使用管理员账号登录</p>
           </div>
         </div>

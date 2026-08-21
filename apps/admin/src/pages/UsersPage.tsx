@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Crown, Search, ShieldBan, ShieldCheck } from 'lucide-react';
+import { Crown, Search, ShieldBan, ShieldCheck, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Avatar,
@@ -29,12 +29,14 @@ import { DataTable, Pagination, type Column } from '../components/DataTable';
 import { RoleBadge, StatusBadge } from '../components/StatusBadge';
 import { FilterSelect } from './VideosPage';
 import { useConfirm } from '../components/ConfirmDialog';
+import { useAuthStore } from '../stores/auth';
 
 const PAGE_SIZE = 20;
 
 export function UsersPage() {
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirm();
+  const me = useAuthStore((s) => s.user);
 
   const [page, setPage] = React.useState(1);
   const [q, setQ] = React.useState('');
@@ -42,6 +44,7 @@ export function UsersPage() {
   const [status, setStatus] = React.useState('all');
   const [vipOnly, setVipOnly] = React.useState('all');
   const [granting, setGranting] = React.useState<AdminUserRow | null>(null);
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
 
   const debouncedQ = useDebouncedValue(q.trim(), 300);
   React.useEffect(() => setPage(1), [debouncedQ, role, status, vipOnly]);
@@ -79,6 +82,31 @@ export function UsersPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const bulkDelete = useMutation({
+    mutationFn: (ids: string[]) => usersApi.bulkDelete(ids),
+    onSuccess: async (res) => {
+      toast.success(`已删除 ${res.deleted} 个用户`);
+      setSelected(new Set());
+      await invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const runBulkDelete = async () => {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    const skippingSelf = Boolean(me && selected.has(me.id));
+    const ok = await confirm({
+      title: `删除 ${ids.length} 个用户？`,
+      description: skippingSelf
+        ? '将永久删除选中账号及其观看记录、评论等。当前登录账号会自动跳过。此操作不可撤销。'
+        : '将永久删除选中账号及其观看记录、评论等。此操作不可撤销。',
+      confirmText: '删除',
+      destructive: true,
+    });
+    if (ok) bulkDelete.mutate(ids);
+  };
 
   const columns: Column<AdminUserRow>[] = [
     {
@@ -239,12 +267,30 @@ export function UsersPage() {
         />
       </FilterBar>
 
+      {selected.size > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+          <span className="text-xs font-medium tabular-nums">已选 {selected.size} 项</span>
+          <span className="mx-1 h-4 w-px bg-border" />
+          <Button variant="destructive" size="sm" disabled={bulkDelete.isPending} onClick={() => void runBulkDelete()}>
+            <Trash2 />
+            删除
+          </Button>
+          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setSelected(new Set())}>
+            <X />
+            取消选择
+          </Button>
+        </div>
+      ) : null}
+
       <DataTable
         columns={columns}
         rows={list.data?.items ?? []}
         rowKey={(row) => row.id}
         loading={list.isLoading}
         refreshing={list.isFetching && !list.isLoading}
+        selectable
+        selected={selected}
+        onSelectedChange={setSelected}
         skeletonRows={PAGE_SIZE}
         emptyText="没有符合条件的用户"
       />

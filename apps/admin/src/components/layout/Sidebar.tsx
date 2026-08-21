@@ -99,7 +99,7 @@ export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavig
           </span>
           {!collapsed ? (
             <span className="truncate text-sm font-semibold tracking-tight">
-              videoX <span className="font-normal text-muted-foreground">Console</span>
+              PandaGV <span className="font-normal text-muted-foreground">Console</span>
             </span>
           ) : null}
         </div>

@@ -62,7 +62,7 @@ export function SearchPage() {
           >
             <ChevronLeft className="size-5" />
           </button>
-          <h1 className="text-[20px] font-semibold tracking-tight">videoX</h1>
+          <h1 className="text-[20px] font-semibold tracking-tight">PandaGV</h1>
         </div>
         <div className="flex items-center gap-2 px-3 pt-2 pb-3">
           <div className="relative flex-1">
