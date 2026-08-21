@@ -104,9 +104,9 @@ export function MineTab() {
           >
             <Flame className="size-5" />
             <div className="flex-1">
-              <p className="text-sm font-medium">{user.isVip ? '会员生效中' : '开通会员'}</p>
+              <p className="text-sm font-medium">{user.isVip ? '会员生效中' : 'PandaGV-PRO'}</p>
               <p className="text-xs text-background/70">
-                {user.isVip && user.vipExpiresAt ? `有效期至 ${formatDate(user.vipExpiresAt)}` : '使用订阅码订阅'}
+                {user.isVip && user.vipExpiresAt ? `有效期至 ${formatDate(user.vipExpiresAt)}` : '访问所有媒体与Shorts'}
               </p>
             </div>
             <ChevronRight className="size-4 text-background/60" />

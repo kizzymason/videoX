@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Flame, Gift, Sparkles } from 'lucide-react';
+import { Check, Flame, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { daysUntil, formatDate, formatPrice } from '@videox/shared';
 import { Badge, Button, Card, CardContent, Input, Skeleton, cn } from '@videox/ui';
@@ -8,12 +8,10 @@ import { ApiError, membershipApi } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useAuthModalStore } from '../stores/auth-modal';
 import { useSeo } from '../hooks/use-seo';
-import { useSiteName } from '../hooks/use-site';
 import { PageContainer, PageHeader } from '../components/Page';
 
 export function MembershipPage() {
   useSeo({ title: '会员中心', description: '开通会员，解锁全站会员专享内容' });
-  const siteName = useSiteName();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const openAuth = useAuthModalStore((s) => s.openAuth);
@@ -73,7 +71,7 @@ export function MembershipPage() {
           </div>
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold">{siteName} 会员</p>
+              <p className="text-sm font-semibold">PandaGV-PRO</p>
               {user && membership?.isVip ? (
                 <span className="rounded-full border border-background/25 px-2 py-0.5 text-[10px] font-medium">
                   生效中
@@ -83,7 +81,7 @@ export function MembershipPage() {
             <p className="text-sm text-background/70">
               {user && membership?.isVip
                 ? `有效期至 ${formatDate(membership.vipExpiresAt)}${remaining !== null ? `（剩余 ${remaining} 天）` : ''}`
-                : '使用订阅码订阅'}
+                : '访问所有媒体与Shorts'}
             </p>
           </div>
         </div>
@@ -92,10 +90,7 @@ export function MembershipPage() {
       {/* 订阅码入口放在最上面：这是本站唯一的开通路径，不该藏在计划后面 */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <div className="flex items-center gap-2">
-            <Gift className="size-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">订阅会员</h2>
-          </div>
+          <h2 className="text-sm font-semibold">订阅</h2>
           <div className="flex flex-wrap gap-2">
             <Input
               value={code}
@@ -167,7 +162,7 @@ export function MembershipPage() {
                   <Button variant={plan.isRecommended ? 'default' : 'outline'} className="w-full" asChild>
                     <a href="#redeem" onClick={(e) => e.preventDefault()}>
                       <Sparkles />
-                      使用订阅码订阅
+                      访问所有媒体与Shorts
                     </a>
                   </Button>
                 </CardContent>
