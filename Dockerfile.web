@@ -13,7 +13,9 @@ RUN npm run build -w @videox/web-pc \
   && npm run build -w @videox/admin -- --base /admin/
 
 FROM nginx:1.27-alpine
+COPY deploy/nginx-main.conf /etc/nginx/nginx.conf
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+RUN mkdir -p /var/cache/nginx/videox /data/storage
 COPY --from=build /app/apps/web-pc/dist /usr/share/nginx/html
 COPY --from=build /app/apps/web-mobile/dist /usr/share/nginx/html/m
 COPY --from=build /app/apps/admin/dist /usr/share/nginx/html/admin
