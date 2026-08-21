@@ -203,6 +203,10 @@ export function App() {
             </RequireAuth>
           }
         />
+        {/* 电脑版路径被 nginx 加上 /m 前缀后落到这里，避免 * 把人丢回首页。 */}
+        <Route path="explore" element={<Navigate to="/" replace />} />
+        <Route path="membership" element={<Navigate to="/subscribe" replace />} />
+        <Route path="settings" element={<Navigate to="/mine" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

@@ -164,7 +164,7 @@ sudo bash deploy/host-tuning.sh       # 宿主机内核 / fd 上限 / Docker 日
 docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 ```
 
-nginx 只认 `pandagv.com` / `www.pandagv.com`（www 301 到 apex）。用 IP 或未知 Host 访问会直接断开，80 只做跳转与容器探活。
+nginx 只认 `pandagv.com` / `www.pandagv.com`（www 301 到 apex）。用 IP 或未知 Host 访问会直接断开，80 只做跳转与容器探活。手机 UA 打开电脑版路径会 302 到 `/m`（播放页、搜索等 path/query 保留）；iPad 与平板走电脑版。
 
 `.env` 里与性能相关的几项按机型调整，默认值是 4 核 8G：
 
