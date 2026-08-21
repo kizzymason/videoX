@@ -15,7 +15,7 @@ import { useSiteName } from '../hooks/use-site';
 const HIGHLIGHTS = [
   { icon: Flame, title: '全站会员内容', desc: '解锁所有视频与 Shorts' },
   { icon: Zap, title: '最高画质', desc: '1080p 及以上码率不限速' },
-  { icon: ShieldCheck, title: '无限制观看', desc: '点播与 Shorts 全部解锁，不再受 3 条试看限制' },
+  { icon: ShieldCheck, title: '无限制观看', desc: '视频与 Shorts 全部解锁，不再受 3 条试看限制' },
 ];
 
 /** 「订阅」Tab = 订阅权益 + 订阅码。本站只走订阅码，不接支付。 */
