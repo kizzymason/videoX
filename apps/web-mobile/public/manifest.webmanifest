@@ -1,7 +1,7 @@
 {
-  "name": "videoX",
-  "short_name": "videoX",
-  "description": "videoX 视频平台",
+  "name": "PandaGV",
+  "short_name": "PandaGV",
+  "description": "PandaGV 视频平台",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

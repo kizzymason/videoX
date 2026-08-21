@@ -61,7 +61,7 @@ export function HomeTab() {
     <>
       <header className="pt-safe sticky top-0 z-30 border-b border-border bg-background">
         <div className="flex items-center gap-2 px-4 pt-4 pb-3">
-          <h1 className="text-[20px] font-semibold tracking-tight">videoX</h1>
+          <h1 className="text-[20px] font-semibold tracking-tight">PandaGV</h1>
           <div className="flex-1" />
           <Link
             to="/search"

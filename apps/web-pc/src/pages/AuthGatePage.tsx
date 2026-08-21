@@ -27,7 +27,7 @@ export function AuthGatePage() {
         </div>
         <h1 className="mt-8 text-4xl font-semibold tracking-tight">登录后继续</h1>
         <p className="mt-4 max-w-md text-lg leading-relaxed text-muted-foreground">
-          登录或注册 videoX，即可开通会员、收藏喜欢的内容并同步观看记录。
+          登录或注册 PandaGV，即可开通会员、收藏喜欢的内容并同步观看记录。
         </p>
         <Button
           size="lg"

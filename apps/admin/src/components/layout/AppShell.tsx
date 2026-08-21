@@ -44,7 +44,7 @@ export function AppShell() {
   const title = useCurrentTitle();
 
   React.useEffect(() => {
-    document.title = `${title} · videoX 管理后台`;
+    document.title = `${title} · PandaGV 管理后台`;
   }, [title]);
 
   React.useEffect(() => {

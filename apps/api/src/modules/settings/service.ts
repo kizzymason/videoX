@@ -32,7 +32,7 @@ export async function getSiteSettings(): Promise<SiteSettings> {
   if (siteCache && siteCache.expiresAt > Date.now()) return siteCache.value;
   const raw = (await readSetting(SITE_KEY)) ?? {};
   // 用 schema 兜底：即使数据库里的记录缺字段，也能拿到完整的默认值。
-  const value = siteSettingsSchema.parse({ siteName: 'videoX', ...raw });
+  const value = siteSettingsSchema.parse({ siteName: 'PandaGV', ...raw });
   siteCache = { value, expiresAt: Date.now() + CACHE_TTL_MS };
   return value;
 }

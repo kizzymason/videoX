@@ -71,7 +71,7 @@ export function MembershipPage() {
           </div>
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold">videoX 会员</p>
+              <p className="text-sm font-semibold">PandaGV 会员</p>
               {user && membership?.isVip ? (
                 <span className="rounded-full border border-background/25 px-2 py-0.5 text-[10px] font-medium">
                   生效中
