@@ -5,6 +5,7 @@ import { useUiStore } from '../../stores/ui';
 import { track } from '../../lib/analytics';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { SiteFooter } from './SiteFooter';
 
 export function AppShell() {
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
@@ -31,20 +32,10 @@ export function AppShell() {
               </div>
             )}
           </main>
-          {fullBleed ? null : <Footer />}
+          {fullBleed ? null : <SiteFooter />}
         </div>
       </div>
     </TooltipProvider>
   );
 }
 
-function Footer() {
-  return (
-    <footer className="border-t border-border px-6 py-8 text-xs text-muted-foreground">
-      <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-6 gap-y-2">
-        <span>© {new Date().getFullYear()} PandaGV</span>
-        <span className="text-muted-foreground/60">简约高级的视频平台</span>
-      </div>
-    </footer>
-  );
-}

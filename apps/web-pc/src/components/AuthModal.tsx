@@ -16,6 +16,7 @@ import {
 import { ApiError } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useAuthModalStore } from '../stores/auth-modal';
+import { useSite, useSiteName } from '../hooks/use-site';
 import { SlideCaptcha } from './SlideCaptcha';
 
 export function AuthModal() {
@@ -28,6 +29,8 @@ export function AuthModal() {
   const user = useAuthStore((s) => s.user);
   const login = useAuthStore((s) => s.login);
   const register = useAuthStore((s) => s.register);
+  const siteName = useSiteName();
+  const { data: site } = useSite();
 
   const [identifier, setIdentifier] = React.useState('');
   const [username, setUsername] = React.useState('');
@@ -97,10 +100,13 @@ export function AuthModal() {
       <DialogContent className="w-full gap-5 bg-background p-8 sm:max-w-[400px]" showClose>
         <DialogTitle className="sr-only">{mode === 'login' ? '登录' : '注册'}</DialogTitle>
         <DialogDescription className="sr-only">
-          {mode === 'login' ? '使用用户名登录 PandaGV' : '使用用户名注册 PandaGV'}
+          {mode === 'login' ? `使用用户名登录 ${siteName}` : `使用用户名注册 ${siteName}`}
         </DialogDescription>
 
-        <p className="text-center text-2xl font-semibold tracking-tight">PandaGV</p>
+        <p className="text-center text-2xl font-semibold tracking-tight">{siteName}</p>
+        {site?.siteTagline ? (
+          <p className="-mt-3 text-center text-sm text-muted-foreground">{site.siteTagline}</p>
+        ) : null}
 
         <AuthModeTabs mode={mode} onChange={setMode} />
 

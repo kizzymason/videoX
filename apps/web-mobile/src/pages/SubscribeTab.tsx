@@ -10,6 +10,7 @@ import { useAuthStore } from '../stores/auth';
 import { track } from '../lib/analytics';
 import { AppHeader } from '../components/AppHeader';
 import { LoggedOutGate } from '../components/LoggedOutGate';
+import { useSiteName } from '../hooks/use-site';
 
 const HIGHLIGHTS = [
   { icon: Flame, title: '全站会员内容', desc: '解锁所有点播与 Shorts' },
@@ -23,6 +24,7 @@ export function SubscribeTab() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const initializing = useAuthStore((s) => s.initializing);
+  const siteName = useSiteName();
   const refreshUser = useAuthStore((s) => s.refreshUser);
   const [code, setCode] = React.useState('');
 
@@ -94,7 +96,7 @@ export function SubscribeTab() {
           <div className="relative space-y-1">
             <div className="flex items-center gap-2">
               <Flame className="size-5" />
-              <span className="text-base font-semibold">PandaGV 会员</span>
+              <span className="text-base font-semibold">{siteName} 会员</span>
               {membership?.isVip ? (
                 <span className="rounded-full border border-background/25 px-2 py-0.5 text-[10px] font-medium">
                   生效中

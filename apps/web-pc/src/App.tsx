@@ -1,10 +1,9 @@
 import * as React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { useTheme, Skeleton } from '@videox/ui';
-import { contentApi } from './lib/api';
 import { useAuthStore } from './stores/auth';
 import { useUiStore } from './stores/ui';
+import { useSite, useSiteHead } from './hooks/use-site';
 import { AppShell } from './components/layout/AppShell';
 import { HomePage } from './pages/HomePage';
 import { CategoriesPage, CategoryPage, ExplorePage, SearchPage } from './pages/BrowsePages';
@@ -86,16 +85,13 @@ export function App() {
     setMode(themeMode);
   }, [themeMode, setMode]);
 
-  const { data: site } = useQuery({ queryKey: ['site'], queryFn: contentApi.site, staleTime: 10 * 60_000 });
+  const { data: site } = useSite();
   React.useEffect(() => {
     if (!site) return;
     if (localStorage.getItem('videox:theme')) return;
     setTheme(site.defaultTheme);
   }, [site, setTheme]);
-
-  React.useEffect(() => {
-    if (site?.siteName) document.title = site.siteName;
-  }, [site?.siteName]);
+  useSiteHead();
 
   return (
     <>

@@ -1,11 +1,10 @@
 import * as React from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { Skeleton, useTheme } from '@videox/ui';
-import { contentApi } from './lib/api';
 import { track } from './lib/analytics';
 import { useAuthStore } from './stores/auth';
 import { useUiStore } from './stores/ui';
+import { useSite, useSiteHead } from './hooks/use-site';
 import { AppChrome } from './components/AppChrome';
 import { CategoryPage, ChannelPage } from './pages/CategoriesTab';
 import { FavoritesPage, FollowingPage, HistoryPage, ProfilePage } from './pages/MineTab';
@@ -151,10 +150,11 @@ export function App() {
     syncChrome();
   }, [syncChrome]);
 
-  const { data: site } = useQuery({ queryKey: ['site'], queryFn: contentApi.site, staleTime: 10 * 60_000 });
+  const { data: site } = useSite();
   React.useEffect(() => {
     if (site && !localStorage.getItem('videox:theme')) setTheme(site.defaultTheme);
   }, [site, setTheme]);
+  useSiteHead();
 
   return (
     <Routes>

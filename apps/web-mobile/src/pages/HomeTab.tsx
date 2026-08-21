@@ -6,6 +6,7 @@ import { Spinner, cn } from '@videox/ui';
 import { contentApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
 import { useAuthStore } from '../stores/auth';
+import { useSiteName } from '../hooks/use-site';
 import { PullToRefresh } from '../components/PullToRefresh';
 import { MobileVideoCard } from '../components/MobileVideoCard';
 
@@ -20,6 +21,7 @@ export function HomeTab() {
   const [feed, setFeed] = React.useState<(typeof FEEDS)[number]['key']>('recommend');
   const user = useAuthStore((s) => s.user);
   const initializing = useAuthStore((s) => s.initializing);
+  const siteName = useSiteName();
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
   const tabsRef = React.useRef<HTMLDivElement | null>(null);
   const [underline, setUnderline] = React.useState({ left: 0, width: 20 });
@@ -61,7 +63,7 @@ export function HomeTab() {
     <>
       <header className="pt-safe sticky top-0 z-30 border-b border-border bg-background">
         <div className="flex items-center gap-2 px-4 pt-4 pb-3">
-          <h1 className="text-[20px] font-semibold tracking-tight">PandaGV</h1>
+          <h1 className="text-[20px] font-semibold tracking-tight">{siteName}</h1>
           <div className="flex-1" />
           <Link
             to="/search"

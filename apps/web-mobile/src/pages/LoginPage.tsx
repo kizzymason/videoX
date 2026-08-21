@@ -5,10 +5,14 @@ import { Button, Input } from '@videox/ui';
 import { ApiError } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { AppHeader } from '../components/AppHeader';
+import { SiteFooter } from '../components/SiteFooter';
 import { useSeo } from '../hooks/use-seo';
+import { useSite, useSiteName } from '../hooks/use-site';
 
 export function LoginPage() {
   useSeo({ title: '登录' });
+  const siteName = useSiteName();
+  const { data: site } = useSite();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const redirect = params.get('redirect') ?? '/mine';
@@ -43,8 +47,8 @@ export function LoginPage() {
       <form onSubmit={submit} className="flex flex-1 flex-col items-center justify-center px-8 pb-16">
         <div className="w-full max-w-sm space-y-6">
           <div className="space-y-1.5 text-center">
-            <h1 className="text-3xl font-semibold tracking-tight">PandaGV</h1>
-            <p className="text-sm text-muted-foreground">登录后同步观看记录</p>
+            <h1 className="text-3xl font-semibold tracking-tight">{siteName}</h1>
+            <p className="text-sm text-muted-foreground">{site?.siteTagline || '登录后同步观看记录'}</p>
           </div>
           <div className="space-y-3">
             <Input
@@ -79,6 +83,7 @@ export function LoginPage() {
           </p>
         </div>
       </form>
+      <SiteFooter />
     </div>
   );
 }
