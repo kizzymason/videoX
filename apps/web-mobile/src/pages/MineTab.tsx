@@ -106,7 +106,7 @@ export function MineTab() {
             <div className="flex-1">
               <p className="text-sm font-medium">{user.isVip ? '会员生效中' : '开通会员'}</p>
               <p className="text-xs text-background/70">
-                {user.isVip && user.vipExpiresAt ? `有效期至 ${formatDate(user.vipExpiresAt)}` : '卡密即时激活'}
+                {user.isVip && user.vipExpiresAt ? `有效期至 ${formatDate(user.vipExpiresAt)}` : '使用订阅码订阅'}
               </p>
             </div>
             <ChevronRight className="size-4 text-background/60" />

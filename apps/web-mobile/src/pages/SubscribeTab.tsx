@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Flame, Gift, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import { Check, Flame, Gift, ShieldCheck, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { daysUntil, formatDate, formatPrice } from '@videox/shared';
 import { Button, Input, Skeleton, cn } from '@videox/ui';
@@ -13,12 +13,12 @@ import { LoggedOutGate } from '../components/LoggedOutGate';
 import { useSiteName } from '../hooks/use-site';
 
 const HIGHLIGHTS = [
-  { icon: Flame, title: '全站会员内容', desc: '解锁所有点播与 Shorts' },
+  { icon: Flame, title: '全站会员内容', desc: '解锁所有视频与 Shorts' },
   { icon: Zap, title: '最高画质', desc: '1080p 及以上码率不限速' },
   { icon: ShieldCheck, title: '无限制观看', desc: '点播与 Shorts 全部解锁，不再受 3 条试看限制' },
 ];
 
-/** 「订阅」Tab = 会员权益 + 卡密激活。本站只走卡密，不接支付。 */
+/** 「订阅」Tab = 订阅权益 + 订阅码。本站只走订阅码，不接支付。 */
 export function SubscribeTab() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -82,7 +82,7 @@ export function SubscribeTab() {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <AppHeader title="订阅" />
-        <LoggedOutGate subtitle="登录后开通会员" redirect="/subscribe" />
+        <LoggedOutGate subtitle="登录后即可订阅" redirect="/subscribe" />
       </div>
     );
   }
@@ -110,37 +110,37 @@ export function SubscribeTab() {
                   {remaining !== null ? `（剩余 ${remaining} 天）` : ''}
                 </p>
               ) : (
-                <p className="text-sm text-background/70">尚未开通，使用卡密即可立即生效</p>
+                <p className="text-sm text-background/70">使用订阅码订阅</p>
               )
             ) : (
-              <p className="text-sm text-background/70">登录后即可激活会员</p>
+              <p className="text-sm text-background/70">登录后即可订阅</p>
             )}
           </div>
         </div>
 
-        {/* 卡密激活 */}
+        {/* 订阅会员 */}
         <section className="space-y-3">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold">
             <Gift className="size-4" />
-            卡密激活
+            订阅会员
           </h2>
           <Input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="输入卡密"
+            placeholder="输入订阅码"
             inputMode="text"
             autoCapitalize="characters"
             className="h-12 text-center font-mono text-base tracking-widest"
           />
           <Button size="lg" className="h-12 w-full" onClick={submit} disabled={redeemMutation.isPending || !code.trim()}>
-            {redeemMutation.isPending ? '激活中…' : '立即激活'}
+            {redeemMutation.isPending ? '订阅中…' : '立即订阅'}
           </Button>
-          <p className="text-center text-xs text-muted-foreground">已是会员时激活会自动顺延到期时间</p>
+          <p className="text-center text-xs text-muted-foreground">已是订阅会员时自动叠加时间。</p>
         </section>
 
         {/* 权益 */}
         <section className="space-y-2.5">
-          <h2 className="text-sm font-semibold">会员权益</h2>
+          <h2 className="text-sm font-semibold">订阅权益</h2>
           <div className="space-y-2">
             {HIGHLIGHTS.map(({ icon: Icon, title, desc }) => (
               <div key={title} className="flex items-center gap-3 rounded-xl border border-border p-3">
@@ -156,9 +156,9 @@ export function SubscribeTab() {
           </div>
         </section>
 
-        {/* 套餐 */}
+        {/* 计划 */}
         <section className="space-y-2.5">
-          <h2 className="text-sm font-semibold">套餐</h2>
+          <h2 className="text-sm font-semibold">计划</h2>
           {isLoading ? (
             <div className="grid grid-cols-2 gap-2.5">
               {Array.from({ length: 4 }, (_, i) => (
@@ -196,11 +196,6 @@ export function SubscribeTab() {
             </div>
           )}
         </section>
-
-        <p className="flex items-center justify-center gap-1 pt-2 text-xs text-muted-foreground">
-          <Sparkles className="size-3" />
-          卡密可在管理后台批量生成
-        </p>
       </div>
     </>
   );
