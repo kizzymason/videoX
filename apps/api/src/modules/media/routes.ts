@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import { eq } from 'drizzle-orm';
 import { deriveHlsContentKey } from '@videox/shared/play-token';
@@ -140,10 +141,12 @@ function setCors(res: Response): void {
  * 几百路并发就足以把 API 拖慢到接口超时。X-Accel-Redirect 让 nginx 用 sendfile
  * 直接发本地盘，Range 也由 nginx 处理，Node 这边只剩下鉴权那几毫秒。
  *
- * 只有本地盘驱动能这么做；S3/R2 仍然回落到流式转发。
+ * 只有本地盘驱动能这么做；S3/R2 仍然回落到流式转发。存储配置里的 root 被改到
+ * STORAGE_LOCAL_ROOT 之外时也必须回落——反代的 alias 指的是后者，不然会 404。
  */
 function tryAccelRedirect(res: Response, storage: Storage, key: string): boolean {
-  if (!env.MEDIA_ACCEL_PREFIX || !storage.isLocal) return false;
+  if (!env.MEDIA_ACCEL_PREFIX) return false;
+  if (!storage.localRoot || storage.localRoot !== path.resolve(env.storageRoot)) return false;
 
   const target = `${env.MEDIA_ACCEL_PREFIX.replace(/\/+$/, '')}/${key.split('/').map(encodeURIComponent).join('/')}`;
   res.setHeader('X-Accel-Redirect', target);

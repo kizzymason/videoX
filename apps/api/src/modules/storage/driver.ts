@@ -37,8 +37,8 @@ export interface Storage {
   head(key: string): Promise<ObjectMeta | null>;
   delete(key: string): Promise<void>;
   deletePrefix(prefix: string): Promise<number>;
-  /** 本地盘驱动才有：反代可以直接 sendfile 这个 key，Node 不必搬字节。 */
-  isLocal?: boolean;
+  /** 本地盘驱动的绝对根目录。反代要用它确认自己的 alias 指向同一份文件。 */
+  localRoot?: string;
 }
 
 const MIME: Record<string, string> = {
@@ -91,9 +91,11 @@ export function createStorageDriver(config: DriverConfig): Storage {
 }
 
 class LocalStorage implements Storage {
-  readonly isLocal = true;
+  readonly localRoot: string;
 
-  constructor(private readonly root: string) {}
+  constructor(private readonly root: string) {
+    this.localRoot = path.resolve(root);
+  }
 
   private resolve(key: string): string {
     const safe = sanitizeKey(key);

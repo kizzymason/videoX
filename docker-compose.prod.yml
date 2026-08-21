@@ -143,7 +143,7 @@ services:
       STORAGE_LOCAL_ROOT: /data/storage
       UPLOAD_TMP_DIR: /data/storage/tmp
       # 本地盘分片交给 nginx sendfile，Node 只做鉴权。S3/R2 驱动会自动忽略。
-      MEDIA_ACCEL_PREFIX: ${MEDIA_ACCEL_PREFIX:-/__accel}
+      MEDIA_ACCEL_PREFIX: ${MEDIA_ACCEL_PREFIX-/__accel}
     volumes:
       - videox_storage:/data/storage
     depends_on:
