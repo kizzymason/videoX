@@ -114,14 +114,28 @@ function toOrigin(url: string): string {
   }
 }
 
+function isHttpsUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export const env = {
   ...raw,
   isProd: raw.NODE_ENV === 'production',
   isDev: raw.NODE_ENV === 'development',
+  // 未上证书前用 http://IP 访问时不能写 Secure cookie，否则浏览器会丢登录态。
+  cookieSecure:
+    isHttpsUrl(raw.API_PUBLIC_URL) ||
+    isHttpsUrl(raw.SITE_PUBLIC_URL) ||
+    isHttpsUrl(raw.ADMIN_PUBLIC_URL),
   storageRoot: absolute(raw.STORAGE_LOCAL_ROOT),
   uploadTmpDir: absolute(raw.UPLOAD_TMP_DIR),
   /** CORS 白名单：三个前端 + 本机常见变体。只比 origin，路径 /m /admin 不进比对。 */
   corsOrigins: [
+    toOrigin(raw.API_PUBLIC_URL),
     toOrigin(raw.SITE_PUBLIC_URL),
     toOrigin(raw.MOBILE_PUBLIC_URL),
     toOrigin(raw.ADMIN_PUBLIC_URL),

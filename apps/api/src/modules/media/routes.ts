@@ -32,7 +32,7 @@ function setDirectoryPlayCookie(res: Response, videoId: string, token: string, e
   res.cookie(PLAY_TOKEN_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: env.isProd,
+    secure: env.cookieSecure,
     path: `/media/hls/${videoId}/`,
     maxAge,
   });

@@ -4,7 +4,7 @@
 #   #填 POSTGRES_PASSWORD 和 5 个 openssl rand -hex 32 密钥
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 #
-# 对外只开 80。公网 https 由本机反代 / cloudflared 接，不要再起 Vite。
+# 对外开 80（主入口）和 8080（备用）。上域名/证书后再改公网 URL 并加 TLS。
 
 services:
   postgres:
@@ -38,6 +38,7 @@ services:
     networks: [videox]
 
   api:
+    image: videox-node:prod
     build:
       context: .
       dockerfile: Dockerfile
@@ -81,6 +82,7 @@ services:
     networks: [videox]
 
   worker:
+    image: videox-node:prod
     build:
       context: .
       dockerfile: Dockerfile
@@ -111,6 +113,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      api:
+        condition: service_healthy
     # 采集任务（list_crawl / detail_fetch / 热链刷新 / R2 转存）由同一 worker 消费。
     command: ["npm", "run", "start", "-w", "@videox/worker"]
     networks: [videox]
@@ -122,6 +126,7 @@ services:
     restart: unless-stopped
     ports:
       - "${HTTP_PORT:-80}:80"
+      - "${HTTP_ALT_PORT:-8080}:80"
     depends_on:
       api:
         condition: service_healthy

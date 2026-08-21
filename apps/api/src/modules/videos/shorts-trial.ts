@@ -51,7 +51,7 @@ export async function persistShortsTrialIds(
     httpOnly: true,
     signed: true,
     sameSite: 'lax',
-    secure: env.isProd,
+    secure: env.cookieSecure,
     maxAge: COOKIE_MAX_AGE_MS,
     path: '/',
   });

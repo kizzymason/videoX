@@ -61,7 +61,7 @@ export function setRefreshCookie(res: Response, raw: string, expiresAt: Date): v
     httpOnly: true,
     // 开发期三个前端跑在不同端口，同站不同源，lax 足够且能跟随顶层导航。
     sameSite: env.isProd ? 'strict' : 'lax',
-    secure: env.isProd,
+    secure: env.cookieSecure,
     path: '/api/auth',
     expires: expiresAt,
     signed: false,
