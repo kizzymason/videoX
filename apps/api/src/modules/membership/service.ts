@@ -1,23 +1,12 @@
-import { randomInt } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import type { MembershipPlan, Order, RedeemCode, RedeemResult, Subscription } from '@videox/shared';
+import { compactRedeemCode, normalizeRedeemInput } from '@videox/shared';
 import { db, t, sqlRows } from '../../core/db.js';
 import { AppError, ErrorCode } from '../../core/errors.js';
 import { logger } from '../../core/logger.js';
+import { generateCode, randomSegment } from './codes.js';
 
-/** 去掉容易混淆的 0/O/1/I/L，降低手动输入出错率。 */
-const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-function randomSegment(length: number): string {
-  let out = '';
-  for (let i = 0; i < length; i += 1) out += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
-  return out;
-}
-
-export function generateCode(prefix?: string): string {
-  const body = [randomSegment(4), randomSegment(4), randomSegment(4), randomSegment(4)].join('-');
-  return prefix ? `${prefix.toUpperCase()}-${body}` : body;
-}
+export { generateCode } from './codes.js';
 
 export function toPlan(row: typeof t.plans.$inferSelect): MembershipPlan {
   return {
@@ -89,8 +78,11 @@ export async function redeemCode(params: { code: string; userId: string }): Prom
 
 function runRedeem(params: { code: string; userId: string }, expired: { codeId?: string }): Promise<RedeemResult> {
   return db.transaction(async (tx) => {
+    const typed = normalizeRedeemInput(params.code);
+    const compact = compactRedeemCode(params.code);
     // 走原生 SQL 才能拿到 FOR UPDATE，代价是绕过了 drizzle 的列映射：
     // node-postgres 在 drizzle 下把 timestamptz 解析成字符串，这里必须自己转。
+    // 新码是 12 位无连字符；旧码带 -，两种写法都能对上。
     const locked = await sqlRows<{
       id: string;
       plan_id: string;
@@ -100,7 +92,7 @@ function runRedeem(params: { code: string; userId: string }, expired: { codeId?:
       sql`
         SELECT id, plan_id, status, expires_at
         FROM redeem_codes
-        WHERE code = ${params.code}
+        WHERE code = ${typed} OR replace(code, '-', '') = ${compact}
         FOR UPDATE
       `,
       tx,

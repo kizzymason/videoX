@@ -94,10 +94,12 @@ export function MembershipPage() {
           <div className="flex flex-wrap gap-2">
             <Input
               value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              onChange={(e) => setCode(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && submitRedeem()}
-              placeholder="输入订阅码，例如 VIP-XXXX-XXXX-XXXX"
-              className="h-10 max-w-md flex-1 font-mono tracking-wider"
+              placeholder="请输入订阅码"
+              className="h-10 max-w-md flex-1"
+              autoComplete="off"
+              spellCheck={false}
             />
             <Button size="lg" onClick={submitRedeem} disabled={redeemMutation.isPending || !code.trim()}>
               {redeemMutation.isPending ? '订阅中…' : '立即订阅'}

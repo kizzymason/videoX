@@ -171,9 +171,18 @@ suite('卡密兑换行锁防双花', async () => {
   });
 
   it('不存在的卡密报 404 而不是静默放行', async () => {
-    await expect(redeemCode({ code: 'DEFINITELY-NOT-A-CODE', userId: userIds[0]! })).rejects.toMatchObject({
+    await expect(redeemCode({ code: 'DEFINITELYNO', userId: userIds[0]! })).rejects.toMatchObject({
       status: 404,
     });
+  });
+
+  it('新格式 12 位卡密可用小写或夹空格兑换', async () => {
+    const code = await mintCode();
+    expect(code).toMatch(/^VT[A-Z0-9]{10}$/);
+    const userId = userIds[0]!;
+    const spaced = `${code.slice(0, 3).toLowerCase()} ${code.slice(3).toLowerCase()}`;
+    const result = await redeemCode({ code: spaced, userId });
+    expect(result.durationDays).toBe(30);
   });
 
   it('过期卡密兑换失败，并被顺手标记成 expired', async () => {
@@ -219,6 +228,6 @@ suite('卡密兑换行锁防双花', async () => {
     expect(batchId).toBeTruthy();
     expect(codes).toHaveLength(50);
     expect(new Set(codes).size).toBe(50);
-    expect(codes.every((v) => v.startsWith('VTBULK'))).toBe(true);
+    expect(codes.every((v) => v.startsWith('VTBULK') && v.length === 12 && !v.includes('-'))).toBe(true);
   });
 });

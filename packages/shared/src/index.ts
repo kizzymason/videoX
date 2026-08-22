@@ -1,6 +1,7 @@
 export * from './constants.js';
 export * from './types.js';
 export * from './schemas.js';
+export * from './redeem-code.js';
 export * from './format.js';
 export * from './api-client.js';
 export * from './publish-gate.js';
