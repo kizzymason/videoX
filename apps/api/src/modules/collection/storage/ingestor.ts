@@ -26,6 +26,15 @@ export interface UpsertCollectedVideoParams {
   page?: number;
 }
 
+/** 标题为空时给一个可落库的占位，完整原文仍在 metadata。 */
+export function resolveCollectedTitle(title: unknown, externalId: string): string {
+  if (typeof title === 'string') {
+    const trimmed = title.replace(/\s+/g, ' ').trim();
+    if (trimmed) return trimmed;
+  }
+  return `未命名 ${externalId}`;
+}
+
 /**
  * 插入或更新采集到的视频记录
  * 如果已存在（同 externalId + targetSite），则更新元数据；否则插入新记录
@@ -35,6 +44,8 @@ export async function upsertCollectedVideo(params: UpsertCollectedVideoParams): 
   id: string;
   isNew: boolean;
 }> {
+  const title = resolveCollectedTitle(params.title, params.externalId);
+
   // 1. 先查询是否已存在
   const existing = await db
     .select()
@@ -50,7 +61,7 @@ export async function upsertCollectedVideo(params: UpsertCollectedVideoParams): 
     const [updated] = await db
       .update(t.collectedVideos)
       .set({
-        title: params.title,
+        title,
         metadata: params.metadata,
         ...(existing[0]!.status === 'imported' || existing[0]!.status === 'archived'
           ? {}
@@ -72,7 +83,7 @@ export async function upsertCollectedVideo(params: UpsertCollectedVideoParams): 
         externalId: params.externalId,
         targetSite: params.targetSite,
         kind: params.kind,
-        title: params.title,
+        title,
         metadata: params.metadata,
         status: params.status,
         ...(params.page && { page: params.page }),

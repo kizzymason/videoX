@@ -37,6 +37,7 @@ export {
   getCollectedVideoByExternalId,
   markAsImported,
   getPendingImportVideos,
+  resolveCollectedTitle,
   type UpsertCollectedVideoParams,
 } from './storage/ingestor.js';
 

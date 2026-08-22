@@ -104,29 +104,43 @@ async function crawlListJob(job: Job<ListCrawlJobData>): Promise<void> {
   }
 
   // 3. 逐条 upsert 到 collected_videos（newExternalIds 记录新发现的 externalId，供级联详情任务用）
+  // 单条写库失败只跳过这一条，不打断同页其余视频和后续翻页。
   const newExternalIds = new Set<string>();
   let newCount = 0;
+  let skipped = 0;
   for (const item of result.data.list) {
-    const { isNew } = await upsertCollectedVideo({
-      externalId: String(item.id),
-      targetSite,
-      kind,
-      title: item.title,
-      metadata: { ...item, fetchedAt: new Date().toISOString() },
-      status: 'pending',
-      page,
-    });
-    if (isNew) {
-      newExternalIds.add(String(item.id));
-      newCount++;
+    try {
+      const { isNew } = await upsertCollectedVideo({
+        externalId: String(item.id),
+        targetSite,
+        kind,
+        title: item.title,
+        metadata: { ...item, fetchedAt: new Date().toISOString() },
+        status: 'pending',
+        page,
+      });
+      if (isNew) {
+        newExternalIds.add(String(item.id));
+        newCount++;
+      }
+    } catch (error) {
+      skipped += 1;
+      const message = error instanceof Error ? error.message : String(error);
+      await logCollectionJob(
+        collectionJobId,
+        'warn',
+        `跳过无法入库的视频 ${item.id}：${message.slice(0, 180)}`,
+        { externalId: item.id, page, kind },
+      );
+      logger.warn({ externalId: item.id, kind, page, err: error }, '单条采集入库失败，已跳过');
     }
   }
 
   await logCollectionJob(
     collectionJobId,
     'info',
-    `抓取 ${kind.toUpperCase()} 第 ${page} 页：共 ${result.data.list.length} 条，新增 ${newCount} 条`,
-    { page, total: result.data.total, newCount },
+    `抓取 ${kind.toUpperCase()} 第 ${page} 页：共 ${result.data.list.length} 条，新增 ${newCount} 条${skipped ? `，跳过 ${skipped} 条` : ''}`,
+    { page, total: result.data.total, newCount, skipped },
   );
 
   // 4. 为本页新发现的视频级联生成详情任务（已存在的跳过，避免任务爆炸）
