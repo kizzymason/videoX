@@ -544,11 +544,23 @@ export const collectionApi = {
     priority?: number;
   }) => api.post<{ collectionJobId: string; bullmqJobId: string }>('/collection/tasks', body),
   retryTask: (id: string) => api.post<unknown>(`/collection/tasks/${id}/retry`),
-  fullCrawl: (body: { kinds: Array<'gv' | 'mv' | 'tv'>; maxPages: number }) =>
-    api.post<{ runId: string; enqueued: number; kinds: string[]; maxPages: number }>(
-      '/collection/tasks/full-crawl',
-      body,
-    ),
+  fullCrawl: (body: {
+    kinds: Array<'gv' | 'mv' | 'tv'>;
+    endPage: number;
+    pagesPerBatch: number;
+    batchIntervalSeconds: number;
+  }) =>
+    api.post<{
+      runId: string;
+      enqueued: number;
+      kinds: string[];
+      endPage: number;
+      maxPages: number;
+      pagesPerBatch: number;
+      batchIntervalSeconds: number;
+      batchCount: number;
+      lastBatchPages: number;
+    }>('/collection/tasks/full-crawl', body),
 
   // 采集视频
   videos: (query: Query) => api.get<Paginated<CollectedVideoRow>>('/collection/videos', query),

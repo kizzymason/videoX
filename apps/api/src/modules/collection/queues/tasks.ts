@@ -22,9 +22,12 @@ export interface ListCrawlJobData {
   kind: 'gv' | 'mv' | 'tv';
   page: number;
   totalPages?: number;
-  /** 增量：本页没有新视频就停；全量：一直翻到末页或 maxPages */
+  /** 增量：本页没有新视频就停；全量：一直翻到结束页，按批次间隔自动切批 */
   incremental?: boolean;
   maxPages?: number;
+  endPage?: number;
+  pagesPerBatch?: number;
+  batchIntervalSeconds?: number;
   runId?: string;
 }
 

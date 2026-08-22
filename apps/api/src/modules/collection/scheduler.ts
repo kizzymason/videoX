@@ -7,6 +7,7 @@ import * as cron from 'node-cron';
 import { lt } from 'drizzle-orm';
 import { db, t } from '../../core/db.js';
 import { logger } from '../../core/logger.js';
+import { planFullCrawl } from '@videox/shared';
 import { enqueueCollectionJob, type CollectionJobType } from './queues/tasks.js';
 import { getScheduleConfig, getPoolConfig } from './storage/config.js';
 import { AccountPoolManager } from './pool-manager.js';
@@ -130,51 +131,50 @@ async function runWeeklyFullCrawl(): Promise<void> {
 }
 
 /**
- * 管理员手动全量抓取：从第 1 页翻到源站末页或指定上限，已入库的跳过但继续翻页。
+ * 管理员手动全量抓取：从第 1 页翻到指定结束页，按批次间隔自动切批。
  */
 export async function enqueueFullCrawl(params?: {
   kinds?: Array<(typeof KINDS)[number]>;
+  endPage?: number;
   maxPages?: number;
-}): Promise<{ runId: string; enqueued: number; kinds: string[]; maxPages: number }> {
-  const kinds = params?.kinds?.length ? params.kinds : [...KINDS];
-  const maxPages = Math.min(2000, Math.max(1, params?.maxPages ?? 200));
-  const runId = `full_${Date.now()}`;
-  const enqueued = await enqueueCrawlRun({
-    runId,
-    incremental: false,
-    maxPages,
-    kinds,
-    priority: 120,
-  });
-  logger.info({ runId, kinds, maxPages, enqueued }, '手动全量抓取已入队');
-  return { runId, enqueued, kinds, maxPages };
-}
-
-async function enqueueCrawlRun(params: {
+  pagesPerBatch?: number;
+  batchIntervalSeconds?: number;
+}): Promise<{
   runId: string;
-  incremental: boolean;
+  enqueued: number;
+  kinds: string[];
+  endPage: number;
   maxPages: number;
-  kinds: Array<(typeof KINDS)[number]>;
-  priority: number;
-}): Promise<number> {
+  pagesPerBatch: number;
+  batchIntervalSeconds: number;
+  batchCount: number;
+  lastBatchPages: number;
+}> {
+  const kinds = params?.kinds?.length ? params.kinds : [...KINDS];
+  const plan = planFullCrawl(params);
+  const runId = `full_${Date.now()}`;
   let enqueued = 0;
-  for (const kind of params.kinds) {
+  for (const kind of kinds) {
     await enqueueCollectionJob({
-      taskId: `${params.runId}_${kind}_p1`,
+      taskId: `${runId}_${kind}_p1`,
       type: 'list_crawl',
       payload: {
         targetSite: TARGET_SITE,
         kind,
         page: 1,
-        incremental: params.incremental,
-        maxPages: params.maxPages,
-        runId: params.runId,
+        incremental: false,
+        maxPages: plan.endPage,
+        endPage: plan.endPage,
+        pagesPerBatch: plan.pagesPerBatch,
+        batchIntervalSeconds: plan.batchIntervalSeconds,
+        runId,
       },
-      priority: params.priority,
+      priority: 120,
     });
     enqueued += 1;
   }
-  return enqueued;
+  logger.info({ runId, kinds, enqueued, ...plan }, '手动全量抓取已入队');
+  return { runId, enqueued, kinds, maxPages: plan.endPage, ...plan };
 }
 
 /**

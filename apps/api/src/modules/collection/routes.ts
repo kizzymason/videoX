@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import { and, desc, eq, gte, ilike, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { describeFullCrawlPlan } from '@videox/shared';
 import { db, t } from '../../core/db.js';
 import { AppError } from '../../core/errors.js';
 import { asyncHandler, ok, paginated } from '../../core/respond.js';
@@ -106,7 +107,10 @@ const importVideoSchema = z
 
 const fullCrawlSchema = z.object({
   kinds: z.array(z.enum(['gv', 'mv', 'tv'])).min(1).max(3).default(['gv', 'mv', 'tv']),
-  maxPages: z.number().int().min(1).max(2000).default(200),
+  endPage: z.number().int().min(1).max(20_000).optional(),
+  maxPages: z.number().int().min(1).max(20_000).optional(),
+  pagesPerBatch: z.number().int().min(1).max(500).default(140),
+  batchIntervalSeconds: z.number().int().min(0).max(3600).default(60),
 });
 
 const updateSettingsSchema = collectionSettingsPatchSchema;
@@ -384,10 +388,17 @@ collectionRouter.post(
     const input = body<z.infer<typeof fullCrawlSchema>>(req);
     const result = await enqueueFullCrawl({
       kinds: input.kinds,
+      endPage: input.endPage,
       maxPages: input.maxPages,
+      pagesPerBatch: input.pagesPerBatch,
+      batchIntervalSeconds: input.batchIntervalSeconds,
     });
     await audit(req, 'collection.tasks.fullCrawl', undefined, result);
-    ok(res, result, `全量抓取已入队：${result.kinds.join('/')} 各最多 ${result.maxPages} 页`);
+    ok(
+      res,
+      result,
+      `全量抓取已入队：${result.kinds.join('/')} ${describeFullCrawlPlan(result)}`,
+    );
   }),
 );
 

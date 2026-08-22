@@ -7,3 +7,4 @@ export * from './publish-gate.js';
 export * from './video-orientation.js';
 export * from './shorts-trial.js';
 export * from './membership-gate.js';
+export * from './full-crawl.js';
