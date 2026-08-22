@@ -58,6 +58,14 @@ interface AccountCredentials {
   token: string;
 }
 
+export interface YitongKanLoginResult {
+  uid: string;
+  token: string;
+  username: string;
+  isVip: boolean;
+  vipExpiresAt?: string;
+}
+
 /**
  * 源站列表原始响应结构（实测 2026-08：items/cover/filters.count）
  */
@@ -85,6 +93,47 @@ export class YitongKanApiClient {
     if (credentials) {
       this.credentials = credentials;
     }
+  }
+
+  /** 登录源站并取得当前 token。登录响应可能是明文 JSON 或 AES-GCM。 */
+  static async login(username: string, password: string): Promise<YitongKanLoginResult> {
+    const response = await fetch('https://ytk-api.yitongcs.com/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36',
+        Referer: 'https://yitongkan.com/',
+        Origin: 'https://yitongkan.com',
+      },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const raw = Buffer.from(await response.arrayBuffer());
+    const text = raw.toString('utf8');
+    let payload: {
+      code?: string | number;
+      message?: string;
+      data?: { token?: string; user?: { id?: number | string; username?: string; isVIP?: boolean; vipTime?: number } };
+    };
+    try {
+      payload = JSON.parse(text) as typeof payload;
+    } catch {
+      payload = decrypt(text) as typeof payload;
+    }
+
+    if (!response.ok || String(payload.code) !== '200' || !payload.data?.token || !payload.data.user?.id) {
+      throw new Error(payload.message || `源站登录失败（HTTP ${response.status}）`);
+    }
+
+    const user = payload.data.user;
+    return {
+      uid: String(user.id),
+      token: payload.data.token,
+      username: user.username || username,
+      isVip: Boolean(user.isVIP),
+      vipExpiresAt: user.vipTime ? new Date(user.vipTime * 1000).toISOString() : undefined,
+    };
   }
   
   /**

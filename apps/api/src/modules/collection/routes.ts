@@ -15,6 +15,7 @@ import { logger } from '../../core/logger.js';
 import { audit } from '../admin/audit.js';
 import { collectionAiRouter } from './ai/routes.js';
 import { AccountPoolManager } from './pool-manager.js';
+import { getTokenMonitorSnapshot, serializePoolAccount } from './token-monitor.js';
 import { collectionSettingsPatchSchema } from './settings-schema.js';
 import {
   enqueueCollectionJob,
@@ -35,8 +36,10 @@ import { getPendingImportVideos, getCollectedVideoByExternalId } from './storage
 import {
   fromExternalImport,
   batchFromExternalImport,
+  importPendingVideos,
   unpublishCollectedVideo,
 } from './storage/import.js';
+import { enqueueFullCrawl } from './scheduler.js';
 
 export const collectionRouter: Router = Router();
 
@@ -60,6 +63,11 @@ const addAccountSchema = z.object({
   vipExpiresAt: z.string().datetime().optional().nullable(),
 });
 
+const addCredentialsSchema = z.object({
+  username: z.string().min(1).max(64),
+  password: z.string().min(1).max(256),
+});
+
 const bulkImportSchema = z.object({
   accounts: z.array(addAccountSchema).min(1),
 });
@@ -68,6 +76,8 @@ const updateAccountSchema = z.object({
   status: z.enum(['active', 'inactive', 'banned']).optional(),
   username: z.string().max(64).optional().nullable(),
   token: z.string().min(8).max(256).optional(),
+  loginUsername: z.string().min(1).max(64).optional(),
+  loginPassword: z.string().min(1).max(256).optional(),
   isVip: z.boolean().optional(),
 });
 
@@ -79,12 +89,24 @@ const createTaskSchema = z.object({
   priority: z.number().int().min(0).max(1000).default(100),
 });
 
-const importVideoSchema = z.object({
-  collectedVideoIds: z.array(z.string().uuid()).min(1),
-  autoPublish: z.boolean().default(true),
-  forceMode: z.enum(['hotlink', 'r2_transfer']).optional(),
-  accessLevel: z.enum(['free', 'login', 'vip']).default('vip'),
-  categoryId: z.string().uuid().optional().nullable(),
+const importVideoSchema = z
+  .object({
+    collectedVideoIds: z.array(z.string().uuid()).optional(),
+    allPending: z.boolean().optional(),
+    kind: z.enum(['gv', 'mv', 'tv']).optional(),
+    batchSize: z.number().int().min(1).max(80).optional(),
+    autoPublish: z.boolean().default(true),
+    forceMode: z.enum(['hotlink', 'r2_transfer']).optional(),
+    accessLevel: z.enum(['free', 'login', 'vip']).default('vip'),
+    categoryId: z.string().uuid().optional().nullable(),
+  })
+  .refine((value) => value.allPending || (value.collectedVideoIds && value.collectedVideoIds.length > 0), {
+    message: '请选择要导入的视频，或勾选导入全部未导入',
+  });
+
+const fullCrawlSchema = z.object({
+  kinds: z.array(z.enum(['gv', 'mv', 'tv'])).min(1).max(3).default(['gv', 'mv', 'tv']),
+  maxPages: z.number().int().min(1).max(2000).default(200),
 });
 
 const updateSettingsSchema = collectionSettingsPatchSchema;
@@ -120,6 +142,23 @@ collectionRouter.post(
   }),
 );
 
+/** POST /pools/credentials - 登录源站并自动加入号池 */
+collectionRouter.post(
+  '/pools/credentials',
+  validate({ body: addCredentialsSchema }),
+  asyncHandler(async (req, res) => {
+    const input = body<z.infer<typeof addCredentialsSchema>>(req);
+    const manager = AccountPoolManager.getInstance();
+    const id = await manager.addAccountWithCredentials({
+      targetSite: TARGET_SITE,
+      username: input.username,
+      password: input.password,
+    });
+    await audit(req, 'collection.pools.credentialsImport', { type: 'account', id });
+    ok(res, { id }, '登录成功，账号已加入号池');
+  }),
+);
+
 /** GET /pools - 账号列表（分页 + 筛选） */
 collectionRouter.get(
   '/pools',
@@ -138,13 +177,7 @@ collectionRouter.get(
       search,
     });
 
-    // token 是敏感信息，列表只回显前 8 位
-    const items = result.items.map((acc) => ({
-      ...acc,
-      token: `${acc.token.slice(0, 8)}…`,
-    }));
-
-    ok(res, paginated(items, result.total, page, pageSize));
+    ok(res, paginated(result.items.map(serializePoolAccount), result.total, page, pageSize));
   }),
 );
 
@@ -159,8 +192,20 @@ collectionRouter.put(
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (input.status !== undefined) patch.status = input.status;
     if (input.username !== undefined) patch.username = input.username;
-    if (input.token !== undefined) patch.token = input.token;
+    if (input.token !== undefined) {
+      patch.token = input.token;
+      patch.tokenUpdatedAt = new Date();
+    }
     if (input.isVip !== undefined) patch.isVip = input.isVip;
+
+    const manager = AccountPoolManager.getInstance();
+    if (input.loginUsername !== undefined || input.loginPassword !== undefined) {
+      if (!input.loginUsername || !input.loginPassword) {
+        throw AppError.badRequest('更新登录凭据时必须同时提供账号和密码');
+      }
+      await manager.updateAccountCredentials(id, input.loginUsername, input.loginPassword);
+      await manager.refreshAccountToken(id, 'credentials_update');
+    }
 
     const [updated] = await db
       .update(t.accountPools)
@@ -171,7 +216,7 @@ collectionRouter.put(
     if (!updated) throw AppError.notFound('账号不存在');
     await audit(req, 'collection.pools.update', { type: 'account', id });
 
-    ok(res, { ...updated, token: `${updated.token.slice(0, 8)}…` }, '更新成功');
+    ok(res, serializePoolAccount(updated as unknown as Parameters<typeof serializePoolAccount>[0]), '更新成功');
   }),
 );
 
@@ -188,6 +233,24 @@ collectionRouter.delete(
     await audit(req, 'collection.pools.delete', { type: 'account', id });
 
     ok(res, null, '删除成功');
+  }),
+);
+
+/** POST /pools/:id/refresh - 立即使用保存的凭据刷新 token */
+collectionRouter.post(
+  '/pools/:id/refresh',
+  asyncHandler(async (req, res) => {
+    const id = req.params.id!;
+    const manager = AccountPoolManager.getInstance();
+    const account = await manager.getAccountById(id);
+    if (!account) throw AppError.notFound('账号不存在');
+    if (!account.loginUsername || !account.loginPasswordEncrypted) {
+      throw AppError.badRequest('该账号没有保存登录凭据');
+    }
+    const refreshed = await manager.refreshAccountToken(id, 'manual');
+    if (!refreshed) throw AppError.badRequest('token 刷新失败');
+    await audit(req, 'collection.pools.refresh', { type: 'account', id });
+    ok(res, { id, tokenUpdatedAt: refreshed.tokenUpdatedAt ?? null }, 'token 已刷新');
   }),
 );
 
@@ -218,6 +281,14 @@ collectionRouter.get(
     const manager = AccountPoolManager.getInstance();
     const stats = await manager.getStats(TARGET_SITE);
     ok(res, stats);
+  }),
+);
+
+/** GET /pools/token-monitor - 自动取 token 监控快照（管理后台可视化） */
+collectionRouter.get(
+  '/pools/token-monitor',
+  asyncHandler(async (_req, res) => {
+    ok(res, await getTokenMonitorSnapshot(TARGET_SITE));
   }),
 );
 
@@ -302,6 +373,21 @@ collectionRouter.post(
 
     await audit(req, 'collection.tasks.create', undefined, { taskId, type: input.type });
     ok(res, result, '任务已创建');
+  }),
+);
+
+/** POST /tasks/full-crawl - 管理员手动全量抓取（站点冷启动铺量） */
+collectionRouter.post(
+  '/tasks/full-crawl',
+  validate({ body: fullCrawlSchema }),
+  asyncHandler(async (req, res) => {
+    const input = body<z.infer<typeof fullCrawlSchema>>(req);
+    const result = await enqueueFullCrawl({
+      kinds: input.kinds,
+      maxPages: input.maxPages,
+    });
+    await audit(req, 'collection.tasks.fullCrawl', undefined, result);
+    ok(res, result, `全量抓取已入队：${result.kinds.join('/')} 各最多 ${result.maxPages} 页`);
   }),
 );
 
@@ -391,17 +477,31 @@ collectionRouter.post(
     const input = body<z.infer<typeof importVideoSchema>>(req);
     const userId = req.auth!.id;
 
-    const result = await batchFromExternalImport({
-      collectedVideoIds: input.collectedVideoIds,
-      userId,
-      autoPublish: input.autoPublish,
-      forceMode: input.forceMode,
-      categoryId: input.categoryId,
-    });
+    const result = input.allPending
+      ? await importPendingVideos({
+          userId,
+          autoPublish: input.autoPublish,
+          forceMode: input.forceMode,
+          categoryId: input.categoryId,
+          kind: input.kind,
+          batchSize: input.batchSize,
+        })
+      : {
+          ...(await batchFromExternalImport({
+            collectedVideoIds: input.collectedVideoIds ?? [],
+            userId,
+            autoPublish: input.autoPublish,
+            forceMode: input.forceMode,
+            categoryId: input.categoryId,
+          })),
+          processed: input.collectedVideoIds?.length ?? 0,
+          remaining: 0,
+        };
 
-    await audit(req, 'collection.videos.import', undefined, {
+    await audit(req, input.allPending ? 'collection.videos.importPending' : 'collection.videos.import', undefined, {
       imported: result.imported.length,
       failed: result.failed.length,
+      remaining: result.remaining,
     });
 
     ok(res, result, `导入完成：${result.imported.length} 成功 / ${result.failed.length} 失败`);

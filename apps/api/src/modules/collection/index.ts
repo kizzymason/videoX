@@ -53,6 +53,7 @@ export { R2TransferService } from './storage/r2-transfer.js';
 export {
   fromExternalImport,
   batchFromExternalImport,
+  importPendingVideos,
   unpublishCollectedVideo,
 } from './storage/import.js';
 
@@ -73,6 +74,7 @@ export {
   scheduleCollectionTasks,
   stopScheduledTasks,
   triggerManualTask,
+  enqueueFullCrawl,
 } from './scheduler.js';
 
 // 共享类型

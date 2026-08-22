@@ -2,10 +2,21 @@
 // 号池管理系统
 // ========================================================================
 
-import { eq, and, or, gt, isNull, sql, like, ilike } from 'drizzle-orm';
+import { eq, and, or, sql, like, ilike } from 'drizzle-orm';
 import { db, t } from '../../core/db.js';
 import { logger } from '../../core/logger.js';
 import type { AccountPoolEntry } from './types.js';
+import { decryptCredential, encryptCredential } from './credential-vault.js';
+import { TOKEN_SILENT_REFRESH_MS, writePoolEvent, type TokenRefreshSource } from './token-monitor.js';
+import { YitongKanApiClient, createClientFromAccount } from './yitongkan/api-client.js';
+
+function sourceLabel(source: TokenRefreshSource): string {
+  if (source === 'checkout') return '采集取号前已自动登录并写入新 token';
+  if (source === 'health_check') return '健康检查发现失效后已自动登录并写入新 token';
+  if (source === 'credentials_update') return '更新登录凭据后已自动登录并写入新 token';
+  if (source === 'login') return '账号密码登录成功，已自动写入 token';
+  return '已手动刷新 token';
+}
 
 /**
  * 号池管理器
@@ -33,6 +44,8 @@ export class AccountPoolManager {
     username?: string;
     isVip: boolean;
     vipExpiresAt?: string;
+    loginUsername?: string;
+    loginPassword?: string;
   }): Promise<string> {
     const [account] = await db
       .insert(t.accountPools)
@@ -41,8 +54,11 @@ export class AccountPoolManager {
         uid: params.uid,
         token: params.token,
         username: params.username ?? null,
+        loginUsername: params.loginUsername ?? null,
+        loginPasswordEncrypted: params.loginPassword ? encryptCredential(params.loginPassword) : null,
         isVip: params.isVip,
         vipExpiresAt: params.vipExpiresAt ? new Date(params.vipExpiresAt) : null,
+        tokenUpdatedAt: new Date(),
         status: 'active',
         usageCount: 0,
       })
@@ -50,6 +66,34 @@ export class AccountPoolManager {
 
     logger.info({ accountId: account.id, targetSite: params.targetSite }, '账号添加成功');
     return account.id;
+  }
+
+  /** 登录并添加账号，管理员无需手工获取 token。 */
+  async addAccountWithCredentials(params: {
+    targetSite: string;
+    username: string;
+    password: string;
+  }): Promise<string> {
+    const login = await YitongKanApiClient.login(params.username, params.password);
+    const id = await this.addAccount({
+      targetSite: params.targetSite,
+      uid: login.uid,
+      token: login.token,
+      username: login.username,
+      isVip: login.isVip,
+      vipExpiresAt: login.vipExpiresAt,
+      loginUsername: params.username,
+      loginPassword: params.password,
+    });
+    await writePoolEvent({
+      level: 'info',
+      message: '账号密码登录成功，已自动写入 token 并开启监控',
+      accountId: id,
+      event: 'token_login',
+      uid: login.uid,
+      source: 'login',
+    });
+    return id;
   }
   
   /**
@@ -76,6 +120,7 @@ export class AccountPoolManager {
           vipExpiresAt: account.vipExpiresAt ? new Date(account.vipExpiresAt) : null,
           status: 'active',
           usageCount: 0,
+          tokenUpdatedAt: new Date(),
         })
         .returning();
       ids.push(newAccount.id);
@@ -113,7 +158,28 @@ export class AccountPoolManager {
       }
     }
     
-    const selected = weightedList[Math.floor(Math.random() * weightedList.length)];
+    let selected = weightedList[Math.floor(Math.random() * weightedList.length)];
+
+    // 源站 token 生命周期较短；有托管凭据且 token 接近过期时先静默刷新。
+    if (selected.loginUsername && selected.loginPasswordEncrypted) {
+      const updatedAt = selected.tokenUpdatedAt ? new Date(selected.tokenUpdatedAt).getTime() : 0;
+      if (!updatedAt || Date.now() - updatedAt >= TOKEN_SILENT_REFRESH_MS) {
+        try {
+          selected = (await this.refreshAccountToken(selected.id, 'checkout')) ?? selected;
+        } catch (error) {
+          await this.recordFailure(selected.id, error, false);
+          logger.warn({ accountId: selected.id }, '取号前 token 刷新失败，继续使用现有 token');
+          await writePoolEvent({
+            level: 'warn',
+            message: '取号前自动登录刷新 token 失败，继续使用现有 token',
+            accountId: selected.id,
+            event: 'token_refresh_failed',
+            uid: selected.uid,
+            source: 'checkout',
+          });
+        }
+      }
+    }
     
     // 更新使用计数
     await this.recordUsage(selected.id);
@@ -137,13 +203,6 @@ export class AccountPoolManager {
         and(
           eq(t.accountPools.targetSite, targetSite),
           eq(t.accountPools.status, 'active'),
-          or(
-            eq(t.accountPools.isVip, false),
-            and(
-              isNull(t.accountPools.vipExpiresAt),
-              eq(t.accountPools.isVip, false),
-            ),
-          ),
         ),
       );
 
@@ -182,6 +241,73 @@ export class AccountPoolManager {
     
     logger.info({ accountId, status }, '账号状态已更新');
   }
+
+  /** 使用加密保存的账号密码重新登录并原子更新 token。 */
+  async refreshAccountToken(
+    accountId: string,
+    source: TokenRefreshSource = 'manual',
+  ): Promise<AccountPoolEntry | null> {
+    const account = await this.getAccountById(accountId);
+    if (!account?.loginUsername || !account.loginPasswordEncrypted) return null;
+
+    const password = decryptCredential(account.loginPasswordEncrypted);
+    const login = await YitongKanApiClient.login(account.loginUsername, password);
+    const [updated] = await db
+      .update(t.accountPools)
+      .set({
+        uid: login.uid,
+        token: login.token,
+        username: login.username || account.username,
+        isVip: login.isVip,
+        vipExpiresAt: login.vipExpiresAt ? new Date(login.vipExpiresAt) : null,
+        tokenUpdatedAt: new Date(),
+        consecutiveFailures: 0,
+        lastError: null,
+        status: 'active',
+        lastCheckAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(t.accountPools.id, accountId))
+      .returning();
+
+    logger.info({ accountId, source }, '号池 token 已自动刷新');
+    await writePoolEvent({
+      level: 'info',
+      message: sourceLabel(source),
+      accountId,
+      event: 'token_refresh',
+      uid: login.uid,
+      source,
+    });
+    return (updated as unknown as AccountPoolEntry) ?? null;
+  }
+
+  /** 更新源站登录凭据；密码仅以密文写入数据库。 */
+  async updateAccountCredentials(accountId: string, username: string, password: string): Promise<void> {
+    await db
+      .update(t.accountPools)
+      .set({
+        loginUsername: username,
+        loginPasswordEncrypted: encryptCredential(password),
+        updatedAt: new Date(),
+      })
+      .where(eq(t.accountPools.id, accountId));
+  }
+
+  private async recordFailure(accountId: string, error: unknown, inactive: boolean): Promise<void> {
+    const message = error instanceof Error ? error.message : String(error);
+    const patch: Record<string, unknown> = {
+      consecutiveFailures: sql`${t.accountPools.consecutiveFailures} + 1`,
+      lastError: message.slice(0, 500),
+      lastCheckAt: new Date(),
+      updatedAt: new Date(),
+    };
+    if (inactive) patch.status = 'inactive';
+    await db
+      .update(t.accountPools)
+      .set(patch)
+      .where(eq(t.accountPools.id, accountId));
+  }
   
   /**
    * 健康检查 - 验证单个账号有效性
@@ -194,41 +320,70 @@ export class AccountPoolManager {
     }
 
     try {
-      const { createClientFromAccount } = await import('./yitongkan/api-client.js');
-      const client = createClientFromAccount(account);
-
-      // 调用会员接口测试有效性
-      const result = await client.getMemberInfo();
-
+      const result = await createClientFromAccount(account).getMemberInfo();
       if (result.code === '200') {
-        const isVip = result.data?.isVip ?? false;
-
-        await db
-          .update(t.accountPools)
-          .set({
-            status: 'active',
-            isVip,
-            vipExpiresAt: result.data?.vipExpiresAt ? new Date(result.data.vipExpiresAt) : null,
-            lastCheckAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(t.accountPools.id, accountId));
-
-        logger.info({ accountId, isVip }, '健康检查通过');
+        await this.markHealthy(accountId, result.data);
         return true;
-      } else {
-        await this.updateAccountStatus(accountId, 'inactive');
-        logger.warn({ accountId }, '健康检查失败 - 返回错误码');
+      }
+      if (account.loginUsername && account.loginPasswordEncrypted) {
+        return Boolean(await this.refreshAccountToken(accountId, 'health_check'));
+      }
+      await this.recordFailure(accountId, new Error('源站返回无效 token'), true);
+      await writePoolEvent({
+        level: 'warn',
+        message: 'token 已失效且未托管密码，无法自动续期',
+        accountId,
+        event: 'token_refresh_failed',
+        uid: account.uid,
+        source: 'health_check',
+      });
+      return false;
+    } catch (error) {
+      try {
+        if (account.loginUsername && account.loginPasswordEncrypted) {
+          return Boolean(await this.refreshAccountToken(accountId, 'health_check'));
+        }
+      } catch (refreshError) {
+        await this.recordFailure(accountId, refreshError, true);
+        logger.warn({ accountId, error: refreshError }, '账号自动登录失败');
+        await writePoolEvent({
+          level: 'error',
+          message: '健康检查后自动登录失败',
+          accountId,
+          event: 'token_refresh_failed',
+          uid: account.uid,
+          source: 'health_check',
+        });
         return false;
       }
-    } catch (error) {
+      await this.recordFailure(accountId, error, false);
       logger.error({ accountId, error }, '健康检查异常');
-      await db
-        .update(t.accountPools)
-        .set({ lastCheckAt: new Date() })
-        .where(eq(t.accountPools.id, accountId));
+      await writePoolEvent({
+        level: 'error',
+        message: '健康检查异常，且该账号没有托管密码',
+        accountId,
+        event: 'token_refresh_failed',
+        uid: account.uid,
+        source: 'health_check',
+      });
       return false;
     }
+  }
+
+  private async markHealthy(accountId: string, data: { isVip?: boolean; vipExpiresAt?: string; username?: string }): Promise<void> {
+    await db
+      .update(t.accountPools)
+      .set({
+        status: 'active',
+        isVip: data.isVip ?? false,
+        vipExpiresAt: data.vipExpiresAt ? new Date(data.vipExpiresAt) : null,
+        username: data.username,
+        consecutiveFailures: 0,
+        lastError: null,
+        lastCheckAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(t.accountPools.id, accountId));
   }
   
   /**
@@ -244,8 +399,6 @@ export class AccountPoolManager {
       .from(t.accountPools)
       .where(eq(t.accountPools.targetSite, targetSite));
 
-    const { createClientFromAccount } = await import('./yitongkan/api-client.js');
-
     let valid = 0;
     let invalid = 0;
     let failed = 0;
@@ -257,39 +410,20 @@ export class AccountPoolManager {
         continue;
       }
 
-      try {
-        const client = createClientFromAccount(account);
-        const member = await client.getMemberInfo();
-        if (member.code === '200') {
-          const isVip = member.data?.isVip ?? false;
-          const vipExpiresAt = member.data?.vipExpiresAt ? new Date(member.data.vipExpiresAt) : null;
-          await db
-            .update(t.accountPools)
-            .set({
-              status: 'active',
-              isVip,
-              vipExpiresAt,
-              username: member.data?.username ?? account.username,
-              lastCheckAt: new Date(),
-              updatedAt: new Date(),
-            })
-            .where(eq(t.accountPools.id, account.id));
-          valid++;
-        } else {
-          await this.updateAccountStatus(account.id, 'inactive');
-          invalid++;
-        }
-      } catch {
-        // 网络异常等：不改状态，只计失败
-        failed++;
-        await db
-          .update(t.accountPools)
-          .set({ lastCheckAt: new Date() })
-          .where(eq(t.accountPools.id, account.id));
-      }
+      const ok = await this.healthCheckAccount(account.id);
+      const latest = await this.getAccountById(account.id);
+      if (ok) valid++;
+      else if (latest?.status === 'inactive') invalid++;
+      else failed++;
     }
 
     logger.info({ targetSite, valid, invalid, failed }, '批量健康检查结果');
+    await writePoolEvent({
+      level: valid === 0 ? 'warn' : 'info',
+      message: `号池巡检完成：${valid} 有效 / ${invalid} 失效 / ${failed} 失败`,
+      event: 'pool_health_check',
+      extra: { valid, invalid, failed, targetSite },
+    });
 
     return { valid, invalid, failed };
   }

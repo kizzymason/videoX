@@ -3,7 +3,7 @@
 // ========================================================================
 
 import * as React from 'react';
-import { Check, Database, Loader2, Save, Settings2, Users } from 'lucide-react';
+import { Check, Database, Loader2, Play, Save, Settings2, Users } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -91,6 +91,10 @@ export function CollectionSettingsPage() {
     healthCheckIntervalMinutes: '60',
     autoRemoveFailedAfterAttempts: '3',
   });
+  const [fullKinds, setFullKinds] = React.useState({ gv: true, mv: true, tv: true });
+  const [fullMaxPages, setFullMaxPages] = React.useState('200');
+  const [fullRunning, setFullRunning] = React.useState(false);
+  const [fullResult, setFullResult] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -162,6 +166,36 @@ export function CollectionSettingsPage() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleFullCrawl() {
+    const kinds = (['gv', 'mv', 'tv'] as const).filter((k) => fullKinds[k]);
+    if (kinds.length === 0) {
+      setFullResult('请至少选择一种类型');
+      return;
+    }
+    if (
+      !window.confirm(
+        `确认启动手动全量抓取？将抓取 ${kinds.join('/').toUpperCase()} 各最多 ${Math.max(1, Number(fullMaxPages) || 200)} 页。每日/每周定时任务不受影响。`,
+      )
+    ) {
+      return;
+    }
+    setFullRunning(true);
+    setFullResult(null);
+    try {
+      const result = await collectionApi.fullCrawl({
+        kinds,
+        maxPages: Math.max(1, Math.min(2000, Number(fullMaxPages) || 200)),
+      });
+      setFullResult(
+        `已入队 ${result.enqueued} 条起始任务（${result.kinds.join('/')}，每类最多 ${result.maxPages} 页）。进度请到「采集任务」查看。`,
+      );
+    } catch (e) {
+      setFullResult(e instanceof Error ? e.message : String(e));
+    } finally {
+      setFullRunning(false);
     }
   }
 
@@ -320,6 +354,53 @@ export function CollectionSettingsPage() {
             maxPages={500}
             onChange={setWeekly}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <Play className="size-4" />
+            手动全量抓取
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            站点冷启动或需要整库铺量时使用。从第 1 页翻到源站末页或指定上限；已入库的会跳过但仍继续翻页。不改每日/每周定时任务。
+          </p>
+          <div className="flex flex-wrap gap-4">
+            {(['gv', 'mv', 'tv'] as const).map((k) => (
+              <label key={k} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-foreground"
+                  checked={fullKinds[k]}
+                  onChange={(e) => setFullKinds((prev) => ({ ...prev, [k]: e.target.checked }))}
+                />
+                {k.toUpperCase()}
+              </label>
+            ))}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label>每类最多抓取页数（1-2000）</Label>
+              <Input
+                type="number"
+                min={1}
+                max={2000}
+                value={fullMaxPages}
+                onChange={(e) => setFullMaxPages(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">每页约 20 条。200 页大约 4000 条/类型。</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={() => void handleFullCrawl()} disabled={fullRunning}>
+              {fullRunning ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Play className="mr-2 size-4" />}
+              开始全量抓取
+            </Button>
+            {fullResult ? <p className="text-sm text-muted-foreground">{fullResult}</p> : null}
+          </div>
         </CardContent>
       </Card>
 

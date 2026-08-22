@@ -48,10 +48,13 @@ export function CollectionVideosPage() {
 
   // 导入弹窗
   const [importOpen, setImportOpen] = React.useState(false);
+  const [importScope, setImportScope] = React.useState<'selected' | 'all'>('selected');
+  const [pendingTotal, setPendingTotal] = React.useState(0);
   const [autoPublish, setAutoPublish] = React.useState(true);
   const [forceMode, setForceMode] = React.useState('auto');
   const [importing, setImporting] = React.useState(false);
   const [importResult, setImportResult] = React.useState<string | null>(null);
+  const [importProgress, setImportProgress] = React.useState<string | null>(null);
 
   const pageSize = 20;
 
@@ -68,6 +71,8 @@ export function CollectionVideosPage() {
       setVideos(result.items);
       setMeta(result.meta);
       setSelected(new Set());
+      const pending = await collectionApi.pendingCount();
+      setPendingTotal(pending.count);
     } catch (error) {
       console.error('获取采集视频失败:', error);
     } finally {
@@ -97,29 +102,68 @@ export function CollectionVideosPage() {
   }
 
   async function handleImport() {
-    const ids = Array.from(selected);
-    if (ids.length === 0) return;
+    if (importScope === 'selected' && selected.size === 0) return;
+    if (importScope === 'all' && pendingTotal === 0) return;
 
     setImporting(true);
     setImportResult(null);
+    setImportProgress(null);
+    const force = forceMode !== 'auto' ? (forceMode as 'hotlink' | 'r2_transfer') : undefined;
+    const kindFilter = importScope === 'all' && kind !== 'all' ? (kind as 'gv' | 'mv' | 'tv') : undefined;
+
     try {
-      const result = await collectionApi.importVideos({
-        collectedVideoIds: ids,
-        autoPublish,
-        ...(forceMode !== 'auto' && { forceMode: forceMode as 'hotlink' | 'r2_transfer' }),
-      });
-      setImportResult(
-        `导入完成：${result.imported.length} 成功，${result.failed.length} 失败` +
-          (result.failed.length > 0
-            ? `\n失败详情：${result.failed.map((f) => f.error).slice(0, 3).join('；')}`
-            : ''),
-      );
+      if (importScope === 'selected') {
+        const result = await collectionApi.importVideos({
+          collectedVideoIds: Array.from(selected),
+          autoPublish,
+          ...(force && { forceMode: force }),
+        });
+        setImportResult(formatImportResult(result.imported.length, result.failed));
+      } else {
+        let imported = 0;
+        let failed: Array<{ collectedVideoId: string; error: string }> = [];
+        let remaining = pendingTotal;
+        while (remaining > 0) {
+          setImportProgress(`正在导入，已成功 ${imported} 条，还剩约 ${remaining} 条…`);
+          const result = await collectionApi.importVideos({
+            allPending: true,
+            autoPublish,
+            batchSize: 40,
+            ...(force && { forceMode: force }),
+            ...(kindFilter && { kind: kindFilter }),
+          });
+          imported += result.imported.length;
+          failed = failed.concat(result.failed);
+          remaining = result.remaining ?? 0;
+          if ((result.processed ?? 0) === 0) break;
+        }
+        setImportProgress(null);
+        setImportResult(formatImportResult(imported, failed));
+      }
       await fetchVideos();
     } catch (error) {
+      setImportProgress(null);
       setImportResult(`导入失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setImporting(false);
     }
+  }
+
+  function formatImportResult(
+    imported: number,
+    failed: Array<{ collectedVideoId: string; error: string }>,
+  ): string {
+    return (
+      `导入完成：${imported} 成功，${failed.length} 失败` +
+      (failed.length > 0 ? `\n失败详情：${failed.map((f) => f.error).slice(0, 3).join('；')}` : '')
+    );
+  }
+
+  function openImport(scope: 'selected' | 'all') {
+    setImportScope(scope);
+    setImportResult(null);
+    setImportProgress(null);
+    setImportOpen(true);
   }
 
   async function handleUnpublish(id: string) {
@@ -239,9 +283,17 @@ export function CollectionVideosPage() {
               {loading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
               刷新
             </Button>
-            <Button disabled={selected.size === 0} onClick={() => setImportOpen(true)}>
+            <Button
+              variant="outline"
+              disabled={pendingTotal === 0 || importing}
+              onClick={() => openImport('all')}
+            >
               <Download className="mr-2 size-4" />
-              导入发布{selected.size > 0 ? `（${selected.size}）` : ''}
+              导入全部未导入{pendingTotal > 0 ? `（${pendingTotal}）` : ''}
+            </Button>
+            <Button disabled={selected.size === 0} onClick={() => openImport('selected')}>
+              <Download className="mr-2 size-4" />
+              导入选中{selected.size > 0 ? `（${selected.size}）` : ''}
             </Button>
           </>
         }
@@ -314,7 +366,11 @@ export function CollectionVideosPage() {
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>导入 {selected.size} 个视频</DialogTitle>
+            <DialogTitle>
+              {importScope === 'all'
+                ? `导入全部未导入（${kind !== 'all' ? `${kind.toUpperCase()} ` : ''}${pendingTotal}）`
+                : `导入选中的 ${selected.size} 个视频`}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="flex items-center justify-between rounded-lg border p-3">
@@ -337,9 +393,12 @@ export function CollectionVideosPage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                热链模式即时完成；R2 转存会下载全部分片（较慢，任务量大时建议分批）
+                {importScope === 'all'
+                  ? '会按批次导入所有待导入记录，直到队列清空。热链较快；R2 转存很慢，量大时请分批观察。'
+                  : '热链模式即时完成；R2 转存会下载全部分片（较慢，任务量大时建议分批）'}
               </p>
             </div>
+            {importProgress ? <p className="text-sm text-muted-foreground">{importProgress}</p> : null}
             {importResult ? (
               <pre className="max-h-32 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">
                 {importResult}

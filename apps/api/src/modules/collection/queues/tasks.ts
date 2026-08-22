@@ -22,6 +22,10 @@ export interface ListCrawlJobData {
   kind: 'gv' | 'mv' | 'tv';
   page: number;
   totalPages?: number;
+  /** 增量：本页没有新视频就停；全量：一直翻到末页或 maxPages */
+  incremental?: boolean;
+  maxPages?: number;
+  runId?: string;
 }
 
 export interface DetailFetchJobData {

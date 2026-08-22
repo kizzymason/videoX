@@ -679,11 +679,16 @@ export const accountPools = pgTable('account_pools',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     targetSite: varchar('target_site').notNull(), // 'yitongkan'
-    uid: varchar('uid').notNull(),
-    token: varchar('token').notNull(),
-    username: varchar('username'),
-    isVip: boolean('is_vip').notNull().default(false),
-    vipExpiresAt: timestamp('vip_expires_at', { withTimezone: true }),
+      uid: varchar('uid').notNull(),
+      token: varchar('token').notNull(),
+      username: varchar('username'),
+      loginUsername: varchar('login_username'),
+      loginPasswordEncrypted: text('login_password_encrypted'),
+      isVip: boolean('is_vip').notNull().default(false),
+      vipExpiresAt: timestamp('vip_expires_at', { withTimezone: true }),
+      tokenUpdatedAt: timestamp('token_updated_at', { withTimezone: true }),
+      consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+      lastError: text('last_error'),
     status: varchar('status', { length: 16 }).notNull().default('active'), // active | inactive | banned
     usageCount: integer('usage_count').notNull().default(0),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
@@ -869,4 +874,3 @@ export const collectionAiMessages = pgTable(
     index('collection_ai_messages_status_idx').on(t.toolStatus),
   ],
 );
-

@@ -364,6 +364,7 @@ export interface PoolAccountRow {
   uid: string;
   token: string;
   username: string | null;
+  loginUsername: string | null;
   isVip: boolean;
   vipExpiresAt: string | null;
   status: 'active' | 'inactive' | 'banned';
@@ -371,6 +372,14 @@ export interface PoolAccountRow {
   lastUsedAt: string | null;
   lastCheckAt: string | null;
   createdAt: string;
+  tokenUpdatedAt: string | null;
+  consecutiveFailures: number;
+  lastError: string | null;
+  hasCredentials: boolean;
+  autoRefreshEnabled: boolean;
+  tokenAgeSeconds: number | null;
+  tokenFreshness: 'fresh' | 'due' | 'stale' | 'unknown';
+  nextSilentRefreshAt: string | null;
 }
 
 export interface PoolStats {
@@ -424,7 +433,38 @@ export interface CollectionLogRow {
   level: 'info' | 'warn' | 'error';
   message: string;
   context: Record<string, unknown> | null;
+  accountId?: string | null;
   createdAt: string;
+}
+
+export interface TokenMonitorEvent {
+  id: string;
+  createdAt: string;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+  accountId: string | null;
+  event: string | null;
+  uid: string | null;
+  source: string | null;
+}
+
+export interface TokenMonitorSnapshot {
+  silentRefreshAfterSeconds: number;
+  staleAfterSeconds: number;
+  healthCheckIntervalMinutes: number;
+  lastHealthCheckAt: string | null;
+  nextHealthCheckAt: string | null;
+  counts: {
+    total: number;
+    withCredentials: number;
+    withoutCredentials: number;
+    autoRefreshReady: number;
+    fresh: number;
+    due: number;
+    stale: number;
+    unknown: number;
+  };
+  events: TokenMonitorEvent[];
 }
 
 export interface CollectionStorageStrategy {
@@ -480,8 +520,13 @@ export const collectionApi = {
   poolStats: () => api.get<PoolStats>('/collection/pools/stats'),
   importPools: (accounts: Array<{ uid: string; token: string; username?: string; isVip: boolean }>) =>
     api.post<{ ids: string[] }>('/collection/pools', { accounts }),
+  addCredentialPool: (body: { username: string; password: string }) =>
+    api.post<{ id: string }>('/collection/pools/credentials', body),
   updatePool: (id: string, body: Query) => api.put<PoolAccountRow>(`/collection/pools/${id}`, body),
   deletePool: (id: string) => api.delete<null>(`/collection/pools/${id}`),
+  refreshPool: (id: string) =>
+    api.post<{ id: string; tokenUpdatedAt: string | null }>(`/collection/pools/${id}/refresh`),
+  tokenMonitor: () => api.get<TokenMonitorSnapshot>('/collection/pools/token-monitor'),
   healthCheck: (accountId?: string) =>
     api.post<{ valid?: number; valid_count?: number; invalid?: number; failed?: number }>(
       '/collection/pools/health-check',
@@ -499,18 +544,28 @@ export const collectionApi = {
     priority?: number;
   }) => api.post<{ collectionJobId: string; bullmqJobId: string }>('/collection/tasks', body),
   retryTask: (id: string) => api.post<unknown>(`/collection/tasks/${id}/retry`),
+  fullCrawl: (body: { kinds: Array<'gv' | 'mv' | 'tv'>; maxPages: number }) =>
+    api.post<{ runId: string; enqueued: number; kinds: string[]; maxPages: number }>(
+      '/collection/tasks/full-crawl',
+      body,
+    ),
 
   // 采集视频
   videos: (query: Query) => api.get<Paginated<CollectedVideoRow>>('/collection/videos', query),
   pendingCount: () => api.get<{ count: number }>('/collection/videos/pending-count'),
   importVideos: (body: {
-    collectedVideoIds: string[];
+    collectedVideoIds?: string[];
+    allPending?: boolean;
+    kind?: 'gv' | 'mv' | 'tv';
+    batchSize?: number;
     autoPublish: boolean;
     forceMode?: 'hotlink' | 'r2_transfer';
   }) =>
     api.post<{
       imported: Array<{ collectedVideoId: string; videoId: string; importMode: string }>;
       failed: Array<{ collectedVideoId: string; error: string }>;
+      processed?: number;
+      remaining?: number;
     }>('/collection/videos/import', body),
   publishVideo: (id: string) => api.post<null>(`/collection/videos/${id}/publish`),
   unpublishVideo: (id: string) => api.post<null>(`/collection/videos/${id}/unpublish`),

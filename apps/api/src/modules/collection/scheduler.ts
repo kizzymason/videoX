@@ -8,7 +8,7 @@ import { lt } from 'drizzle-orm';
 import { db, t } from '../../core/db.js';
 import { logger } from '../../core/logger.js';
 import { enqueueCollectionJob, type CollectionJobType } from './queues/tasks.js';
-import { getScheduleConfig } from './storage/config.js';
+import { getScheduleConfig, getPoolConfig } from './storage/config.js';
 import { AccountPoolManager } from './pool-manager.js';
 
 const TARGET_SITE = 'yitongkan' as const;
@@ -18,6 +18,7 @@ const scheduledTasks: cron.ScheduledTask[] = [];
 
 /** 简易防重入锁：上一个 cron 触发还没跑完时跳过本次 */
 const runningFlags = new Map<string, boolean>();
+let lastPoolHealthCheckAt = 0;
 
 async function runExclusively(key: string, fn: () => Promise<void>): Promise<void> {
   if (runningFlags.get(key)) {
@@ -49,17 +50,20 @@ export function scheduleCollectionTasks(): void {
     cron.schedule('0 4 * * 0', () => void runExclusively('weekly', runWeeklyFullCrawl)),
   );
 
-  // 3. 每小时号池健康检查（第 10 分钟，避开整点高峰）
+  // 3. 号池健康检查：每 5 分钟唤醒一次，实际间隔由号池配置决定。
   scheduledTasks.push(
-    cron.schedule('10 * * * *', () => void runExclusively('healthcheck', runHourlyHealthCheck)),
+    cron.schedule('*/5 * * * *', () => void runExclusively('healthcheck', runScheduledHealthCheck)),
   );
+
+  // 进程重启后立即校验并恢复账号，避免等待下一个整点窗口。
+  void runExclusively('healthcheck-startup', runScheduledHealthCheck);
 
   // 4. 定期清理过期日志（每周一凌晨 5 点）
   scheduledTasks.push(
     cron.schedule('0 5 * * 1', () => void runExclusively('logcleanup', runLogCleanup)),
   );
 
-  logger.info('采集调度器已就绪：每日增量(03:00) / 每周全量(周日 04:00) / 健康检查(每小时) / 日志清理(周一 05:00)');
+  logger.info('采集调度器已就绪：每日增量(03:00) / 每周全量(周日 04:00) / 号池健康检查(按配置，最小 5 分钟) / 日志清理(周一 05:00)');
 }
 
 /**
@@ -95,7 +99,7 @@ async function runDailyIncrementalCrawl(): Promise<void> {
 }
 
 /**
- * 每周全量抓取：gv/mv/tv 各 50 页（页间 0.5s 延迟）
+ * 每周全量抓取：gv/mv/tv 各 N 页（页间 0.5s 延迟）
  */
 async function runWeeklyFullCrawl(): Promise<void> {
   logger.info('开始每周全量抓取任务');
@@ -126,6 +130,54 @@ async function runWeeklyFullCrawl(): Promise<void> {
 }
 
 /**
+ * 管理员手动全量抓取：从第 1 页翻到源站末页或指定上限，已入库的跳过但继续翻页。
+ */
+export async function enqueueFullCrawl(params?: {
+  kinds?: Array<(typeof KINDS)[number]>;
+  maxPages?: number;
+}): Promise<{ runId: string; enqueued: number; kinds: string[]; maxPages: number }> {
+  const kinds = params?.kinds?.length ? params.kinds : [...KINDS];
+  const maxPages = Math.min(2000, Math.max(1, params?.maxPages ?? 200));
+  const runId = `full_${Date.now()}`;
+  const enqueued = await enqueueCrawlRun({
+    runId,
+    incremental: false,
+    maxPages,
+    kinds,
+    priority: 120,
+  });
+  logger.info({ runId, kinds, maxPages, enqueued }, '手动全量抓取已入队');
+  return { runId, enqueued, kinds, maxPages };
+}
+
+async function enqueueCrawlRun(params: {
+  runId: string;
+  incremental: boolean;
+  maxPages: number;
+  kinds: Array<(typeof KINDS)[number]>;
+  priority: number;
+}): Promise<number> {
+  let enqueued = 0;
+  for (const kind of params.kinds) {
+    await enqueueCollectionJob({
+      taskId: `${params.runId}_${kind}_p1`,
+      type: 'list_crawl',
+      payload: {
+        targetSite: TARGET_SITE,
+        kind,
+        page: 1,
+        incremental: params.incremental,
+        maxPages: params.maxPages,
+        runId: params.runId,
+      },
+      priority: params.priority,
+    });
+    enqueued += 1;
+  }
+  return enqueued;
+}
+
+/**
  * 每小时号池健康检查：
  * 逐账号调用源站 /api/member/me，自动标记失效账号、刷新 VIP 状态
  */
@@ -141,6 +193,18 @@ async function runHourlyHealthCheck(): Promise<void> {
     }
   } catch (error) {
     logger.error({ err: error }, '小时号池健康检查失败');
+  }
+}
+
+async function runScheduledHealthCheck(): Promise<void> {
+  try {
+    const config = await getPoolConfig(TARGET_SITE);
+    const intervalMs = Math.max(5, config.healthCheckIntervalMinutes || 60) * 60 * 1000;
+    if (Date.now() - lastPoolHealthCheckAt < intervalMs) return;
+    lastPoolHealthCheckAt = Date.now();
+    await runHourlyHealthCheck();
+  } catch (error) {
+    logger.error({ err: error }, '号池健康检查调度失败');
   }
 }
 

@@ -53,6 +53,8 @@ const envSchema = z.object({
   PLAY_TOKEN_SECRET: z.string().min(16),
   HLS_KEY_SECRET: z.string().min(16),
   COOKIE_SECRET: z.string().min(16),
+  /** AES-256 key material for encrypted upstream account passwords. */
+  ACCOUNT_CREDENTIALS_KEY: z.string().min(16),
 
   ACCESS_TOKEN_TTL: z.string().default('15m'),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().default(30),
@@ -98,6 +100,7 @@ const SECRET_FIELDS = [
   'PLAY_TOKEN_SECRET',
   'HLS_KEY_SECRET',
   'COOKIE_SECRET',
+  'ACCOUNT_CREDENTIALS_KEY',
 ] as const;
 
 function isInsecureSecret(value: string): boolean {

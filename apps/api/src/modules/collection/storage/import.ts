@@ -2,7 +2,7 @@
 // 采集系统 - 视频导入发布服务
 // ========================================================================
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db, t } from '../../../core/db.js';
 import { logger } from '../../../core/logger.js';
 import { AppError } from '../../../core/errors.js';
@@ -151,6 +151,62 @@ export async function batchFromExternalImport(params: {
   }
 
   return { imported, failed };
+}
+
+const IMPORT_BATCH_MAX = 80;
+
+/**
+ * 导入下一批待入库记录。allPending 场景由前端循环调用直到 remaining=0。
+ */
+export async function importPendingVideos(params: {
+  userId: string;
+  autoPublish: boolean;
+  forceMode?: 'hotlink' | 'r2_transfer';
+  categoryId?: string | null;
+  kind?: 'gv' | 'mv' | 'tv';
+  batchSize?: number;
+}): Promise<{
+  imported: Array<{ collectedVideoId: string; videoId: string; importMode: string }>;
+  failed: Array<{ collectedVideoId: string; error: string }>;
+  processed: number;
+  remaining: number;
+}> {
+  const batchSize = Math.min(IMPORT_BATCH_MAX, Math.max(1, params.batchSize ?? 40));
+  const conditions = [
+    eq(t.collectedVideos.targetSite, 'yitongkan'),
+    eq(t.collectedVideos.status, 'pending'),
+  ];
+  if (params.kind) conditions.push(eq(t.collectedVideos.kind, params.kind));
+
+  const rows = await db
+    .select({ id: t.collectedVideos.id })
+    .from(t.collectedVideos)
+    .where(and(...conditions))
+    .orderBy(t.collectedVideos.createdAt)
+    .limit(batchSize);
+
+  const ids = rows.map((row) => row.id);
+  const result =
+    ids.length === 0
+      ? { imported: [], failed: [] }
+      : await batchFromExternalImport({
+          collectedVideoIds: ids,
+          userId: params.userId,
+          autoPublish: params.autoPublish,
+          forceMode: params.forceMode,
+          categoryId: params.categoryId,
+        });
+
+  const [countRow] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(t.collectedVideos)
+    .where(and(...conditions));
+
+  return {
+    ...result,
+    processed: ids.length,
+    remaining: Number(countRow?.total ?? 0),
+  };
 }
 
 /**

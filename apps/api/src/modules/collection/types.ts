@@ -20,12 +20,18 @@ export interface AccountPoolEntry {
   uid: string;
   token: string;
   username?: string;
+  loginUsername?: string | null;
+  loginPasswordEncrypted?: string | null;
   isVip: boolean;
   vipExpiresAt?: string | null;
+  tokenUpdatedAt?: string | null;
+  consecutiveFailures?: number;
+  lastError?: string | null;
   status: 'active' | 'inactive' | 'banned';
   usageCount: number;
   lastUsedAt?: string | null;
   lastCheckAt?: string | null;
+  createdAt?: string;
 }
 
 export interface StorageStrategyConfig {
