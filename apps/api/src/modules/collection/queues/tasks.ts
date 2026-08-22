@@ -234,5 +234,23 @@ export async function getQueueStats(): Promise<{ waiting: number; active: number
   };
 }
 
+export async function removeQueueJob(taskId: string): Promise<void> {
+  try {
+    const job = await getCollectionQueue().getJob(taskId);
+    if (job) await job.remove();
+  } catch {
+    // 队列里没有同名任务时忽略，DB 记录仍可单独处理
+  }
+}
+
+export async function cleanFailedQueueJobs(): Promise<number> {
+  try {
+    const removed = await getCollectionQueue().clean(0, 10_000, 'failed');
+    return removed.length;
+  } catch {
+    return 0;
+  }
+}
+
 /** 导出 BullMQ Job 类型给 worker 使用 */
 export type CollectionBullmqJob = Job<CollectionJobData>;

@@ -41,6 +41,12 @@ import {
   unpublishCollectedVideo,
 } from './storage/import.js';
 import { enqueueFullCrawl } from './scheduler.js';
+import {
+  clearFailedCollectionJobs,
+  countFailedCollectionJobs,
+  dedupeCollectedLibrary,
+  retryFailedCollectionJobs,
+} from './task-maintenance.js';
 
 export const collectionRouter: Router = Router();
 
@@ -337,11 +343,12 @@ collectionRouter.get(
   '/tasks/queue-stats',
   asyncHandler(async (_req, res) => {
     try {
-      const stats = await getQueueStats();
-      ok(res, stats);
+      const [stats, dbFailed] = await Promise.all([getQueueStats(), countFailedCollectionJobs()]);
+      ok(res, { ...stats, dbFailed });
     } catch {
       // Redis 未就绪时不影响面板打开
-      ok(res, { waiting: 0, active: 0, failed: 0 });
+      const dbFailed = await countFailedCollectionJobs().catch(() => 0);
+      ok(res, { waiting: 0, active: 0, failed: 0, dbFailed });
     }
   }),
 );
@@ -399,6 +406,26 @@ collectionRouter.post(
       result,
       `全量抓取已入队：${result.kinds.join('/')} ${describeFullCrawlPlan(result)}`,
     );
+  }),
+);
+
+/** POST /tasks/clear-failed - 删除全部失败任务（含号池空窗留下的历史错误） */
+collectionRouter.post(
+  '/tasks/clear-failed',
+  asyncHandler(async (req, res) => {
+    const result = await clearFailedCollectionJobs();
+    await audit(req, 'collection.tasks.clearFailed', undefined, result);
+    ok(res, result, result.deleted === 0 ? '没有失败任务可清除' : `已清除 ${result.deleted} 条失败任务`);
+  }),
+);
+
+/** POST /tasks/retry-failed - 重试全部失败任务，不限当前页 */
+collectionRouter.post(
+  '/tasks/retry-failed',
+  asyncHandler(async (req, res) => {
+    const result = await retryFailedCollectionJobs();
+    await audit(req, 'collection.tasks.retryFailed', undefined, result);
+    ok(res, result, result.retried === 0 ? '没有失败任务可重试' : `已重试 ${result.retried} 条失败任务`);
   }),
 );
 
@@ -516,6 +543,23 @@ collectionRouter.post(
     });
 
     ok(res, result, `导入完成：${result.imported.length} 成功 / ${result.failed.length} 失败`);
+  }),
+);
+
+/** POST /videos/dedupe - 按外部 ID / 标题检查并去掉重复采集记录 */
+collectionRouter.post(
+  '/videos/dedupe',
+  asyncHandler(async (req, res) => {
+    const result = await dedupeCollectedLibrary();
+    await audit(req, 'collection.videos.dedupe', undefined, result);
+    const changed = result.removedCollected + result.archivedCollected + result.hiddenVideos;
+    ok(
+      res,
+      result,
+      changed === 0
+        ? `已检查 ${result.scanned} 条采集记录，没有重复视频`
+        : `去重完成：删除 ${result.removedCollected} 条、归档 ${result.archivedCollected} 条、隐藏 ${result.hiddenVideos} 个已导入视频`,
+    );
   }),
 );
 
