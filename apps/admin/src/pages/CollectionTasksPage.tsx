@@ -3,7 +3,7 @@
 // ========================================================================
 
 import * as React from 'react';
-import { Activity, Loader2, Plus, RefreshCw, RotateCcw, ScrollText } from 'lucide-react';
+import { Activity, Copy, Loader2, Plus, RefreshCw, RotateCcw, ScrollText, Trash2 } from 'lucide-react';
 import type { PageMeta } from '@videox/shared';
 import {
   Badge,
@@ -63,9 +63,14 @@ export function CollectionTasksPage() {
   const [type, setType] = React.useState('all');
 
   // 队列实时状态
-  const [queueStats, setQueueStats] = React.useState<{ waiting: number; active: number; failed: number } | null>(
-    null,
-  );
+  const [queueStats, setQueueStats] = React.useState<{
+    waiting: number;
+    active: number;
+    failed: number;
+    dbFailed?: number;
+  } | null>(null);
+  const [actionBusy, setActionBusy] = React.useState<string | null>(null);
+  const [actionResult, setActionResult] = React.useState<string | null>(null);
 
   // 创建任务弹窗
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -177,14 +182,63 @@ export function CollectionTasksPage() {
     }
   }
 
-  // 批量重试当前页全部失败任务
-  async function handleRetryAllFailed() {
-    const failed = jobs.filter((j) => j.status === 'failed');
-    if (failed.length === 0) return;
-    if (!window.confirm(`确定批量重试本页 ${failed.length} 个失败任务？`)) return;
-    for (const job of failed) {
-      await handleRetry(job.id);
+  const failedTotal = queueStats?.dbFailed ?? jobs.filter((j) => j.status === 'failed').length;
+
+  async function runAction(key: string, fn: () => Promise<string>) {
+    setActionBusy(key);
+    setActionResult(null);
+    try {
+      const message = await fn();
+      setActionResult(message);
+      await fetchJobs();
+    } catch (error) {
+      setActionResult(error instanceof Error ? error.message : String(error));
+    } finally {
+      setActionBusy(null);
     }
+  }
+
+  async function handleRetryAllFailed() {
+    if (failedTotal === 0) return;
+    if (!window.confirm(`确定重试全部 ${failedTotal} 条失败任务？不限当前页。`)) return;
+    await runAction('retry', async () => {
+      const result = await collectionApi.retryFailedTasks();
+      return result.retried === 0
+        ? '没有失败任务可重试'
+        : `已重试 ${result.retried} 条失败任务${result.remaining ? `，仍有 ${result.remaining} 条` : ''}`;
+    });
+  }
+
+  async function handleClearAllFailed() {
+    if (failedTotal === 0) return;
+    if (
+      !window.confirm(
+        `确定清除全部 ${failedTotal} 条失败任务？用于清掉号池空窗留下的历史错误，清除后不可恢复。`,
+      )
+    ) {
+      return;
+    }
+    await runAction('clear', async () => {
+      const result = await collectionApi.clearFailedTasks();
+      return result.deleted === 0 ? '没有失败任务可清除' : `已清除 ${result.deleted} 条失败任务`;
+    });
+  }
+
+  async function handleDedupeVideos() {
+    if (
+      !window.confirm(
+        '检查采集索引和已导入视频的重复项（同一外部 ID 或相同标题），多余的待导入记录会删除，已导入的会归档并隐藏重复视频。继续？',
+      )
+    ) {
+      return;
+    }
+    await runAction('dedupe', async () => {
+      const result = await collectionApi.dedupeVideos();
+      const changed = result.removedCollected + result.archivedCollected + result.hiddenVideos;
+      return changed === 0
+        ? `已检查 ${result.scanned} 条采集记录，没有重复视频`
+        : `去重完成：删除 ${result.removedCollected} 条、归档 ${result.archivedCollected} 条、隐藏 ${result.hiddenVideos} 个已导入视频`;
+    });
   }
 
   function viewJobLogs(job: CollectionJobRow) {
@@ -193,8 +247,6 @@ export function CollectionTasksPage() {
     // 滚动到日志区域
     document.getElementById('collection-logs')?.scrollIntoView({ behavior: 'smooth' });
   }
-
-  const failedOnPage = jobs.filter((j) => j.status === 'failed').length;
 
   const columns: Array<Column<CollectionJobRow>> = [
     {
@@ -288,9 +340,37 @@ export function CollectionTasksPage() {
               {loading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
               刷新
             </Button>
-            <Button variant="outline" onClick={() => void handleRetryAllFailed()} disabled={failedOnPage === 0}>
-              <RotateCcw className="mr-2 size-4" />
-              重试失败{failedOnPage > 0 ? `（${failedOnPage}）` : ''}
+            <Button
+              variant="outline"
+              onClick={() => void handleRetryAllFailed()}
+              disabled={failedTotal === 0 || actionBusy !== null}
+            >
+              {actionBusy === 'retry' ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <RotateCcw className="mr-2 size-4" />
+              )}
+              重试全部失败{failedTotal > 0 ? `（${failedTotal}）` : ''}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void handleClearAllFailed()}
+              disabled={failedTotal === 0 || actionBusy !== null}
+            >
+              {actionBusy === 'clear' ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 size-4" />
+              )}
+              清除全部失败
+            </Button>
+            <Button variant="outline" onClick={() => void handleDedupeVideos()} disabled={actionBusy !== null}>
+              {actionBusy === 'dedupe' ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Copy className="mr-2 size-4" />
+              )}
+              检查并去除重复
             </Button>
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="mr-2 size-4" />
@@ -299,6 +379,8 @@ export function CollectionTasksPage() {
           </>
         }
       />
+
+      {actionResult ? <p className="text-sm text-muted-foreground">{actionResult}</p> : null}
 
       {/* 队列实时状态 */}
       {queueStats ? (
@@ -309,6 +391,9 @@ export function CollectionTasksPage() {
           </Badge>
           <Badge variant="outline" className="gap-1.5 py-1">
             等待 {queueStats.waiting}
+          </Badge>
+          <Badge variant={failedTotal > 0 ? 'destructive' : 'outline'} className="gap-1.5 py-1">
+            失败任务 {failedTotal}
           </Badge>
           <Badge variant={queueStats.failed > 0 ? 'destructive' : 'outline'} className="gap-1.5 py-1">
             BullMQ 失败 {queueStats.failed}

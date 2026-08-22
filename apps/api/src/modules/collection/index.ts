@@ -14,6 +14,8 @@ export {
   markJobFailed,
   markJobRetry,
   getQueueStats,
+  removeQueueJob,
+  cleanFailedQueueJobs,
   closeCollectionQueue,
   type CollectionJobData,
   type CollectionJobType,

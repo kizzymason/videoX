@@ -535,7 +535,8 @@ export const collectionApi = {
 
   // 任务
   tasks: (query: Query) => api.get<Paginated<CollectionJobRow>>('/collection/tasks', query),
-  queueStats: () => api.get<{ waiting: number; active: number; failed: number }>('/collection/tasks/queue-stats'),
+  queueStats: () =>
+    api.get<{ waiting: number; active: number; failed: number; dbFailed?: number }>('/collection/tasks/queue-stats'),
   createTask: (body: {
     type: 'list_crawl' | 'detail_fetch' | 'play_url_refresh';
     kind: 'gv' | 'mv' | 'tv';
@@ -544,6 +545,17 @@ export const collectionApi = {
     priority?: number;
   }) => api.post<{ collectionJobId: string; bullmqJobId: string }>('/collection/tasks', body),
   retryTask: (id: string) => api.post<unknown>(`/collection/tasks/${id}/retry`),
+  retryFailedTasks: () => api.post<{ retried: number; remaining: number }>('/collection/tasks/retry-failed'),
+  clearFailedTasks: () => api.post<{ deleted: number; queueCleaned: number }>('/collection/tasks/clear-failed'),
+  dedupeVideos: () =>
+    api.post<{
+      scanned: number;
+      duplicateGroups: number;
+      removedCollected: number;
+      archivedCollected: number;
+      hiddenVideos: number;
+      samples: Array<{ key: string; keptTitle: string; dropped: number }>;
+    }>('/collection/videos/dedupe'),
   fullCrawl: (body: {
     kinds: Array<'gv' | 'mv' | 'tv'>;
     endPage: number;
