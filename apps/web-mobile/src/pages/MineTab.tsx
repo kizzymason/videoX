@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronRight,
   Clock,
@@ -14,7 +14,7 @@ import {
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatCount, formatDate, watchPercent } from '@videox/shared';
+import { formatCount, formatDate } from '@videox/shared';
 import {
   Avatar,
   AvatarFallback,
@@ -33,7 +33,6 @@ import { useUiStore } from '../stores/ui';
 import { AppHeader } from '../components/AppHeader';
 import { PullToRefresh } from '../components/PullToRefresh';
 import { MasonryFeed } from '../components/MasonryFeed';
-import { MobileVideoCard } from '../components/MobileVideoCard';
 import { LoggedOutGate } from '../components/LoggedOutGate';
 import { SiteFooter } from '../components/SiteFooter';
 
@@ -49,12 +48,6 @@ export function MineTab() {
   const logout = useAuthStore((s) => s.logout);
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
-
-  const { data: continueWatching } = useQuery({
-    queryKey: ['continue-watching'],
-    queryFn: () => socialApi.continueWatching(6),
-    enabled: Boolean(user),
-  });
 
   if (initializing) {
     return (
@@ -111,22 +104,6 @@ export function MineTab() {
             </div>
             <ChevronRight className="size-4 text-background/60" />
           </Link>
-        ) : null}
-
-        {continueWatching && continueWatching.length > 0 ? (
-          <section className="space-y-2.5">
-            <h2 className="text-sm font-semibold">继续观看</h2>
-            <div className="-mx-4 flex gap-3 overflow-x-auto px-4 scrollbar-none">
-              {continueWatching.map((item) => (
-                <div key={item.id} className="w-36 shrink-0">
-                  <MobileVideoCard
-                    video={item.video}
-                    progressPercent={watchPercent(item.positionSeconds, item.durationSeconds)}
-                  />
-                </div>
-              ))}
-            </div>
-          </section>
         ) : null}
 
         <section className="overflow-hidden rounded-2xl border border-border">

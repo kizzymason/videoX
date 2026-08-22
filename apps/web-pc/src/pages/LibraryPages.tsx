@@ -33,7 +33,6 @@ export function HistoryPage() {
     onSuccess: () => {
       toast.success('历史记录已清空');
       void queryClient.invalidateQueries({ queryKey: ['history'] });
-      void queryClient.invalidateQueries({ queryKey: ['continue-watching'] });
     },
   });
 

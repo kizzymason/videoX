@@ -152,9 +152,20 @@ function buildOrderBy(sort: SortOption | undefined): SQL[] {
         sql`(${t.videos.viewCount} + ${t.videos.likeCount} * 5) / power(extract(epoch from (now() - coalesce(${t.videos.publishedAt}, ${t.videos.createdAt}))) / 3600 + 2, 1.5) DESC`,
       ];
     case 'latest':
+      return sourceLatestOrderBy();
     default:
+      // recommended 等未单独分支的排序保持导入时间，避免动到首页「推荐」。
       return [desc(sql`coalesce(${t.videos.publishedAt}, ${t.videos.createdAt})`)];
   }
+}
+
+function sourceLatestOrderBy(): SQL[] {
+  return [
+    sql`CASE WHEN ${t.collectedVideos.id} IS NULL THEN 0 ELSE 1 END ASC`,
+    sql`${t.collectedVideos.page} ASC NULLS LAST`,
+    sql`${t.collectedVideos.createdAt} ASC NULLS LAST`,
+    desc(sql`coalesce(${t.videos.publishedAt}, ${t.videos.createdAt})`),
+  ];
 }
 
 export function buildVideoFilters(options: ListVideosOptions): SQL[] {
@@ -226,12 +237,22 @@ export async function listVideos(options: ListVideosOptions): Promise<{ items: V
       ]
     : buildOrderBy(options.sort);
 
+  const sourceLatest = !options.q && options.sort === 'latest';
+
   const [rows, countResult] = await Promise.all([
-    db
-      .select(summaryColumns)
-      .from(t.videos)
-      .leftJoin(t.categories, eq(t.categories.id, t.videos.categoryId))
-      .leftJoin(t.users, eq(t.users.id, t.videos.authorId))
+    (sourceLatest
+      ? db
+          .select(summaryColumns)
+          .from(t.videos)
+          .leftJoin(t.categories, eq(t.categories.id, t.videos.categoryId))
+          .leftJoin(t.users, eq(t.users.id, t.videos.authorId))
+          .leftJoin(t.collectedVideos, eq(t.collectedVideos.videoId, t.videos.id))
+      : db
+          .select(summaryColumns)
+          .from(t.videos)
+          .leftJoin(t.categories, eq(t.categories.id, t.videos.categoryId))
+          .leftJoin(t.users, eq(t.users.id, t.videos.authorId))
+    )
       .where(where)
       .orderBy(...orderBy)
       .limit(options.pageSize)
