@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Flame, Gift, Sparkles } from 'lucide-react';
+import { Check, Flame, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { daysUntil, formatDate, formatPrice } from '@videox/shared';
 import { Badge, Button, Card, CardContent, Input, Skeleton, cn } from '@videox/ui';
@@ -8,12 +8,10 @@ import { ApiError, membershipApi } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useAuthModalStore } from '../stores/auth-modal';
 import { useSeo } from '../hooks/use-seo';
-import { useSiteName } from '../hooks/use-site';
 import { PageContainer, PageHeader } from '../components/Page';
 
 export function MembershipPage() {
   useSeo({ title: '会员中心', description: '开通会员，解锁全站会员专享内容' });
-  const siteName = useSiteName();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const openAuth = useAuthModalStore((s) => s.openAuth);
@@ -46,7 +44,7 @@ export function MembershipPage() {
       void queryClient.invalidateQueries({ queryKey: ['membership-orders'] });
     },
     onError: (error) => {
-      toast.error(error instanceof ApiError ? error.message : '兑换失败，请检查卡密');
+      toast.error(error instanceof ApiError ? error.message : '兑换失败，请检查订阅码');
     },
   });
 
@@ -64,7 +62,7 @@ export function MembershipPage() {
 
   return (
     <PageContainer>
-      <PageHeader title="会员中心" description="卡密即时到账，支持叠加续期" />
+      <PageHeader title="会员中心" description="订阅码即时到账，支持叠加续期" />
 
       <div className="overflow-hidden rounded-xl bg-foreground p-5 text-background">
         <div className="flex flex-wrap items-center gap-4">
@@ -73,7 +71,7 @@ export function MembershipPage() {
           </div>
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold">{siteName} 会员</p>
+              <p className="text-sm font-semibold">PandaGV-PRO</p>
               {user && membership?.isVip ? (
                 <span className="rounded-full border border-background/25 px-2 py-0.5 text-[10px] font-medium">
                   生效中
@@ -83,37 +81,34 @@ export function MembershipPage() {
             <p className="text-sm text-background/70">
               {user && membership?.isVip
                 ? `有效期至 ${formatDate(membership.vipExpiresAt)}${remaining !== null ? `（剩余 ${remaining} 天）` : ''}`
-                : '尚未开通，使用卡密即可立即生效'}
+                : '访问所有媒体与Shorts'}
             </p>
           </div>
         </div>
       </div>
 
-      {/* 卡密兑换放在最上面：这是本站唯一的开通路径，不该藏在套餐后面 */}
+      {/* 订阅码入口放在最上面：这是本站唯一的开通路径，不该藏在计划后面 */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <div className="flex items-center gap-2">
-            <Gift className="size-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">卡密兑换</h2>
-          </div>
+          <h2 className="text-sm font-semibold">订阅</h2>
           <div className="flex flex-wrap gap-2">
             <Input
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === 'Enter' && submitRedeem()}
-              placeholder="输入卡密，例如 VIP-XXXX-XXXX-XXXX"
+              placeholder="输入订阅码，例如 VIP-XXXX-XXXX-XXXX"
               className="h-10 max-w-md flex-1 font-mono tracking-wider"
             />
             <Button size="lg" onClick={submitRedeem} disabled={redeemMutation.isPending || !code.trim()}>
-              {redeemMutation.isPending ? '兑换中…' : '立即兑换'}
+              {redeemMutation.isPending ? '订阅中…' : '立即订阅'}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">已是会员时兑换会自动顺延到期时间，不会覆盖剩余天数。</p>
+          <p className="text-xs text-muted-foreground">已是订阅会员时自动叠加时间。</p>
         </CardContent>
       </Card>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold tracking-tight">套餐</h2>
+        <h2 className="text-lg font-semibold tracking-tight">计划</h2>
         {isLoading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 3 }, (_, i) => (
@@ -167,7 +162,7 @@ export function MembershipPage() {
                   <Button variant={plan.isRecommended ? 'default' : 'outline'} className="w-full" asChild>
                     <a href="#redeem" onClick={(e) => e.preventDefault()}>
                       <Sparkles />
-                      使用卡密开通
+                      访问所有媒体与Shorts
                     </a>
                   </Button>
                 </CardContent>
@@ -185,7 +180,7 @@ export function MembershipPage() {
               <thead className="bg-muted/50 text-xs text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2.5 text-left font-medium">订单号</th>
-                  <th className="px-4 py-2.5 text-left font-medium">套餐</th>
+                  <th className="px-4 py-2.5 text-left font-medium">计划</th>
                   <th className="px-4 py-2.5 text-left font-medium">来源</th>
                   <th className="px-4 py-2.5 text-right font-medium">金额</th>
                   <th className="px-4 py-2.5 text-right font-medium">时间</th>
@@ -197,7 +192,7 @@ export function MembershipPage() {
                     <td className="px-4 py-2.5 font-mono text-xs">{order.orderNo}</td>
                     <td className="px-4 py-2.5">{order.planName ?? '-'}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">
-                      {order.source === 'redeem_code' ? '卡密兑换' : order.source === 'manual_grant' ? '后台赠送' : '支付'}
+                      {order.source === 'redeem_code' ? '订阅码' : order.source === 'manual_grant' ? '后台赠送' : '支付'}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{formatPrice(order.amountCents)}</td>
                     <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">

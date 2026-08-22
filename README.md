@@ -158,10 +158,13 @@ openssl rand -hex 32   # JWT_ACCESS_SECRET / JWT_REFRESH_SECRET / PLAY_TOKEN_SEC
 ## 生产部署
 
 ```bash
-cp .env.production.example .env       # 填密码与五个密钥
+cp .env.production.example .env       # 填密码、五个密钥，公网 URL 写成 https://域名
+# 把签发机构给的 domain.cert.pem（完整链）和 private.key.pem 放到 $SSL_CERTS_DIR（默认 ./certs）
 sudo bash deploy/host-tuning.sh       # 宿主机内核 / fd 上限 / Docker 日志切分
 docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 ```
+
+nginx 只认 `pandagv.com` / `www.pandagv.com`（www 301 到 apex）。用 IP 或未知 Host 访问会直接断开，80 只做跳转与容器探活。手机 UA 打开电脑版路径会 302 到 `/m`（播放页、搜索等 path/query 保留）；iPad 与平板走电脑版。
 
 `.env` 里与性能相关的几项按机型调整，默认值是 4 核 8G：
 
@@ -176,9 +179,10 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 | `EXTRA_CORS_ORIGINS` | 逗号分隔的额外来源，上域名或 CDN 回源时用 |
 
 反代配置在 `deploy/` 下：`nginx-main.conf` 是主配置，`nginx.conf` 是站点规则，
-`proxy-headers.conf` 是各 `location` 共用的转发头。**新增反代 location 必须
-`include` 这份头文件**——nginx 的 `proxy_set_header` 是整组覆盖，漏掉会让
-`X-Forwarded-For` 丢失，进而使全站用户共用一个限流桶。
+`videox-locations.conf` 是 HTTPS 站点的 location，`ssl-params.conf` / `hsts.conf`
+是证书与 HSTS，`proxy-headers.conf` 是各 `location` 共用的转发头。**新增反代
+location 必须 `include` 这份头文件**——nginx 的 `proxy_set_header` 是整组覆盖，
+漏掉会让 `X-Forwarded-For` 丢失，进而使全站用户共用一个限流桶。
 
 ## 已知取舍
 
