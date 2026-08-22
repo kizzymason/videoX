@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps ./apps
 COPY packages ./packages
-RUN npm ci
+RUN npm ci && npm rebuild lightningcss --foreground-scripts
 
 ENV VITE_API_BASE_URL=/api
 RUN npm run build -w @videox/web-pc \
