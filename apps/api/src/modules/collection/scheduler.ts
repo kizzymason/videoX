@@ -9,6 +9,7 @@ import { db, t } from '../../core/db.js';
 import { logger } from '../../core/logger.js';
 import { planFullCrawl } from '@videox/shared';
 import { enqueueCollectionJob, type CollectionJobType } from './queues/tasks.js';
+import { resolveHealthCheckIntervalMinutes } from './pool-schedule.js';
 import { getScheduleConfig, getPoolConfig } from './storage/config.js';
 import { AccountPoolManager } from './pool-manager.js';
 
@@ -51,20 +52,20 @@ export function scheduleCollectionTasks(): void {
     cron.schedule('0 4 * * 0', () => void runExclusively('weekly', runWeeklyFullCrawl)),
   );
 
-  // 3. 号池健康检查：每 5 分钟唤醒一次，实际间隔由号池配置决定。
+  // 3. 号池维护：每分钟唤醒。到期 token 立即重新登录；完整 /me 巡检按配置间隔。
   scheduledTasks.push(
-    cron.schedule('*/5 * * * *', () => void runExclusively('healthcheck', runScheduledHealthCheck)),
+    cron.schedule('* * * * *', () => void runExclusively('pool-maintain', runScheduledPoolMaintain)),
   );
 
-  // 进程重启后立即校验并恢复账号，避免等待下一个整点窗口。
-  void runExclusively('healthcheck-startup', runScheduledHealthCheck);
+  // 进程重启后立即换到期 token 并巡检，避免等待下一个整分钟。
+  void runExclusively('pool-maintain-startup', runScheduledPoolMaintain);
 
   // 4. 定期清理过期日志（每周一凌晨 5 点）
   scheduledTasks.push(
     cron.schedule('0 5 * * 1', () => void runExclusively('logcleanup', runLogCleanup)),
   );
 
-  logger.info('采集调度器已就绪：每日增量(03:00) / 每周全量(周日 04:00) / 号池健康检查(按配置，最小 5 分钟) / 日志清理(周一 05:00)');
+  logger.info('采集调度器已就绪：每日增量(03:00) / 每周全量(周日 04:00) / 号池每分钟自动换 token + 按配置巡检 / 日志清理(周一 05:00)');
 }
 
 /**
@@ -196,16 +197,32 @@ async function runHourlyHealthCheck(): Promise<void> {
   }
 }
 
+async function runScheduledTokenRefresh(): Promise<void> {
+  try {
+    const result = await AccountPoolManager.getInstance().refreshDueTokens(TARGET_SITE);
+    if (result.due > 0) {
+      logger.info({ ...result }, '定时自动刷新到期 token 完成');
+    }
+  } catch (error) {
+    logger.error({ err: error }, '定时自动刷新 token 失败');
+  }
+}
+
 async function runScheduledHealthCheck(): Promise<void> {
   try {
     const config = await getPoolConfig(TARGET_SITE);
-    const intervalMs = Math.max(5, config.healthCheckIntervalMinutes || 60) * 60 * 1000;
+    const intervalMs = resolveHealthCheckIntervalMinutes(config.healthCheckIntervalMinutes) * 60 * 1000;
     if (Date.now() - lastPoolHealthCheckAt < intervalMs) return;
     lastPoolHealthCheckAt = Date.now();
     await runHourlyHealthCheck();
   } catch (error) {
     logger.error({ err: error }, '号池健康检查调度失败');
   }
+}
+
+async function runScheduledPoolMaintain(): Promise<void> {
+  await runScheduledTokenRefresh();
+  await runScheduledHealthCheck();
 }
 
 /**

@@ -454,6 +454,7 @@ export interface TokenMonitorSnapshot {
   healthCheckIntervalMinutes: number;
   lastHealthCheckAt: string | null;
   nextHealthCheckAt: string | null;
+  lastTokenRefreshAt?: string | null;
   counts: {
     total: number;
     withCredentials: number;

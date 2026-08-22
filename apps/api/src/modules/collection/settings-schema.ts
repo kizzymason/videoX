@@ -36,7 +36,7 @@ export const collectionSettingsPatchSchema = z.object({
     .object({
       minAccountCount: z.number().int().min(1).optional(),
       vipWeightMultiplier: z.number().int().min(1).max(20).optional(),
-      healthCheckIntervalMinutes: z.number().int().min(5).optional(),
+      healthCheckIntervalMinutes: z.number().int().min(1).max(120).optional(),
       autoRemoveFailedAfterAttempts: z.number().int().min(1).optional(),
     })
     .optional(),

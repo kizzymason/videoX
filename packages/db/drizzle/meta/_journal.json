@@ -50,6 +50,13 @@
       "when": 1787379600000,
       "tag": "0006_title_text",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787383200000,
+      "tag": "0007_pool_health_interval",
+      "breakpoints": true
     }
   ]
 }

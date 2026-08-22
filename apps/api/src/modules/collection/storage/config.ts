@@ -5,6 +5,10 @@
 import { eq } from 'drizzle-orm';
 import { db, t } from '../../../core/db.js';
 import { logger } from '../../../core/logger.js';
+import {
+  DEFAULT_HEALTH_CHECK_INTERVAL_MINUTES,
+  resolveHealthCheckIntervalMinutes,
+} from '../pool-schedule.js';
 import type { StorageStrategyConfig, CollectionScheduleConfig, CollectionPoolConfig } from '../types.js';
 
 /**
@@ -67,7 +71,7 @@ const DEFAULT_SCHEDULE_CONFIG: CollectionScheduleConfig = {
 const DEFAULT_POOL_CONFIG: CollectionPoolConfig = {
   minAccountCount: 3,
   vipWeightMultiplier: 3,
-  healthCheckIntervalMinutes: 60,
+  healthCheckIntervalMinutes: DEFAULT_HEALTH_CHECK_INTERVAL_MINUTES,
   autoRemoveFailedAfterAttempts: 5,
 };
 
@@ -92,11 +96,19 @@ export async function setScheduleConfig(kind: 'daily' | 'weekly', config: Partia
 }
 
 export async function getPoolConfig(targetSite: string): Promise<CollectionPoolConfig> {
-  const raw = await getCollectionConfig(`pool:${targetSite}`);
-  return { ...DEFAULT_POOL_CONFIG, ...(raw ?? {}) } as CollectionPoolConfig;
+  const raw = (await getCollectionConfig(`pool:${targetSite}`)) ?? {};
+  const merged = { ...DEFAULT_POOL_CONFIG, ...raw } as CollectionPoolConfig;
+  return {
+    ...merged,
+    healthCheckIntervalMinutes: resolveHealthCheckIntervalMinutes(merged.healthCheckIntervalMinutes),
+  };
 }
 
 export async function setPoolConfig(targetSite: string, config: Partial<CollectionPoolConfig>): Promise<void> {
   const current = await getPoolConfig(targetSite);
-  await setCollectionConfig(`pool:${targetSite}`, { ...current, ...config });
+  const next = { ...current, ...config };
+  if (config.healthCheckIntervalMinutes !== undefined) {
+    next.healthCheckIntervalMinutes = resolveHealthCheckIntervalMinutes(config.healthCheckIntervalMinutes);
+  }
+  await setCollectionConfig(`pool:${targetSite}`, next);
 }
