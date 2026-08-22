@@ -43,6 +43,13 @@
       "when": 1787375494158,
       "tag": "0005_harsh_lethal_legion",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787379600000,
+      "tag": "0006_title_text",
+      "breakpoints": true
     }
   ]
 }

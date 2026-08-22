@@ -140,7 +140,7 @@ export const videos = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     slug: varchar('slug', { length: 120 }).notNull(),
-    title: varchar('title', { length: 200 }).notNull(),
+    title: text('title').notNull(),
     description: text('description'),
     authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
     categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
@@ -778,7 +778,7 @@ export const collectedVideos = pgTable('collected_videos',
     targetSite: varchar('target_site').notNull(),
     sourceKey: varchar('source_key', { length: 500 }), // 对应 videos.sourceKey
     videoId: uuid('video_id').references(() => videos.id, { onDelete: 'set null' }),
-    title: varchar('title', { length: 200 }).notNull(),
+    title: text('title').notNull(),
     kind: varchar('kind', { length: 16 }).notNull(), // gv | mv | tv
     page: integer('page').notNull().default(1),
     fetchUrl: varchar('fetch_url', { length: 500 }),

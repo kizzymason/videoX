@@ -105,7 +105,7 @@ export const videoListQuerySchema = paginationSchema.extend({
 });
 
 export const createVideoSchema = z.object({
-  title: z.string().min(1, '标题不能为空').max(200),
+  title: z.string().min(1, '标题不能为空').max(5000),
   description: z.string().max(5000).nullable().optional(),
   categoryId: idSchema.nullable().optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
@@ -140,7 +140,7 @@ export const uploadInitSchema = z.object({
 });
 
 export const uploadCompleteSchema = z.object({
-  title: z.string().min(1).max(200).optional(),
+  title: z.string().min(1).max(5000).optional(),
   description: z.string().max(5000).optional(),
   categoryId: idSchema.nullable().optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
