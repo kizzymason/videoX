@@ -145,11 +145,13 @@ npm test
 
 ## 环境变量
 
-见 `.env.example`，每一项都有注释。生产部署必须替换的是五个密钥：
+见 `.env.example`，每一项都有注释。生产部署必须替换的是六个密钥：
 
 ```bash
-openssl rand -hex 32   # JWT_ACCESS_SECRET / JWT_REFRESH_SECRET / PLAY_TOKEN_SECRET / HLS_KEY_SECRET / COOKIE_SECRET
+openssl rand -hex 32   # JWT_ACCESS_SECRET / JWT_REFRESH_SECRET / PLAY_TOKEN_SECRET / HLS_KEY_SECRET / COOKIE_SECRET / ACCOUNT_CREDENTIALS_KEY
 ```
+
+`ACCOUNT_CREDENTIALS_KEY` 加密号池里托管的上游账号密码，自动取 token 依赖它。换掉这个值等于作废已存的密码，号池要重新填一次密码才能继续自动登录。
 
 存储默认写本地磁盘 `./storage`。S3 兼容（MinIO / R2 / OSS）在管理后台「存储配置」里配置并持久化到数据库，支持「测试连接」与 CDN 域名，改完即时生效，不需要重启。
 
@@ -158,7 +160,7 @@ openssl rand -hex 32   # JWT_ACCESS_SECRET / JWT_REFRESH_SECRET / PLAY_TOKEN_SEC
 ## 生产部署
 
 ```bash
-cp .env.production.example .env       # 填密码、五个密钥，公网 URL 写成 https://域名
+cp .env.production.example .env       # 填密码、六个密钥，公网 URL 写成 https://域名
 # 把签发机构给的 domain.cert.pem（完整链）和 private.key.pem 放到 $SSL_CERTS_DIR（默认 ./certs）
 sudo bash deploy/host-tuning.sh       # 宿主机内核 / fd 上限 / Docker 日志切分
 docker compose -f docker-compose.prod.yml --env-file .env up -d --build
