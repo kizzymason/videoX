@@ -121,11 +121,13 @@ export function SubscribeTab() {
           <h2 className="text-sm font-semibold">订阅</h2>
           <Input
             value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="输入订阅码"
-            inputMode="text"
-            autoCapitalize="characters"
-            className="h-12 text-center font-mono text-base tracking-widest"
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="请输入订阅码"
+            className="h-12"
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
           />
           <Button size="lg" className="h-12 w-full" onClick={submit} disabled={redeemMutation.isPending || !code.trim()}>
             {redeemMutation.isPending ? '订阅中…' : '立即订阅'}

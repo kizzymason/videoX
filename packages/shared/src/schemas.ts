@@ -15,6 +15,7 @@ import {
   VIDEO_STATUSES,
   VIDEO_VISIBILITIES,
 } from './constants.js';
+import { normalizeRedeemInput, REDEEM_CODE_PREFIX_MAX } from './redeem-code.js';
 
 // --------------------------------------------------------------------------
 // 通用
@@ -185,7 +186,8 @@ export const redeemSchema = z.object({
     .string()
     .min(4)
     .max(64)
-    .transform((v) => v.trim().toUpperCase().replace(/\s+/g, '')),
+    .transform((v) => normalizeRedeemInput(v))
+    .refine((v) => /^[A-Z0-9-]+$/.test(v), '订阅码只能是字母、数字'),
 });
 
 export const planSchema = z.object({
@@ -205,7 +207,12 @@ export const planSchema = z.object({
 export const generateCodesSchema = z.object({
   planId: idSchema,
   count: z.coerce.number().int().min(1).max(5000),
-  prefix: z.string().max(12).regex(/^[A-Z0-9]*$/i, '前缀只能是字母数字').optional(),
+  prefix: z
+    .string()
+    .max(REDEEM_CODE_PREFIX_MAX)
+    .regex(/^[A-Z0-9]*$/i, '前缀只能是大写字母和数字')
+    .transform((v) => v.toUpperCase())
+    .optional(),
   expiresAt: z.string().datetime().nullable().optional(),
   note: z.string().max(200).optional(),
 });

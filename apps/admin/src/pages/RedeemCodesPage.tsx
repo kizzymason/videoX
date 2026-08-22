@@ -320,7 +320,7 @@ function GenerateDialog({
   const { data: plans } = useQuery({ queryKey: ['admin-plans'], queryFn: membershipApi.plans, staleTime: 5 * 60_000 });
   const [planId, setPlanId] = React.useState('');
   const [count, setCount] = React.useState('50');
-  const [prefix, setPrefix] = React.useState('VX');
+  const [prefix, setPrefix] = React.useState('VIP');
   const [expiresAt, setExpiresAt] = React.useState('');
   const [note, setNote] = React.useState('');
 
@@ -374,8 +374,13 @@ function GenerateDialog({
             <Field label="生成数量" hint="单批上限 10000">
               <Input type="number" min={1} max={10000} value={count} onChange={(e) => setCount(e.target.value)} />
             </Field>
-            <Field label="卡密前缀" hint="便于区分渠道">
-              <Input value={prefix} onChange={(e) => setPrefix(e.target.value.toUpperCase())} maxLength={8} />
+            <Field label="卡密前缀" hint="大写字母和数字，一般为 3 位；整码共 12 位，中间不加 -">
+              <Input
+                value={prefix}
+                onChange={(e) => setPrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                maxLength={8}
+                placeholder="VIP"
+              />
             </Field>
           </div>
           <Field label="卡密有效期" hint="留空表示永不过期；这是卡密本身的可兑换期限">

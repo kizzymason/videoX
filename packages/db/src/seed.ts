@@ -8,13 +8,13 @@ import * as t from './schema.js';
 const ARGON2_OPTIONS = { memoryCost: 19456, timeCost: 2, parallelism: 1 } as const;
 
 function randomCode(prefix: string): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let body = '';
-  for (let i = 0; i < 16; i += 1) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const clean = prefix.replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  let body = clean;
+  while (body.length < 12) {
     body += alphabet[Math.floor(Math.random() * alphabet.length)];
-    if (i % 4 === 3 && i !== 15) body += '-';
   }
-  return prefix ? `${prefix}-${body}` : body;
+  return body;
 }
 
 const CATEGORIES = [
