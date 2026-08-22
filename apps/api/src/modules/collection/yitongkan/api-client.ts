@@ -95,7 +95,11 @@ export class YitongKanApiClient {
     }
   }
 
-  /** 登录源站并取得当前 token。登录响应可能是明文 JSON 或 AES-GCM。 */
+  /**
+   * 登录源站并取得当前 token。登录响应可能是明文 JSON 或 AES-GCM。
+   * 实测只有 data.token + data.user.{id,username,isVIP,vipTime}，没有 expires/ttl；
+   * vipTime 是会员到期，不是 session 过期。有效性以 getMemberInfo()（/me）为准。
+   */
   static async login(username: string, password: string): Promise<YitongKanLoginResult> {
     const response = await fetch('https://ytk-api.yitongcs.com/api/auth/login', {
       method: 'POST',

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_HEALTH_CHECK_INTERVAL_MINUTES,
-  isTokenDueForRefresh,
+  isSourceAuthCode,
+  isSourceAuthFailure,
+  nextHealthCheckAt,
   resolveHealthCheckIntervalMinutes,
-  selectAccountsDueForTokenRefresh,
-  TOKEN_SILENT_REFRESH_MS,
+  tokenFreshnessFromCheck,
 } from '../apps/api/src/modules/collection/pool-schedule.ts';
 import { collectionSettingsPatchSchema } from '../apps/api/src/modules/collection/settings-schema.ts';
 
@@ -26,49 +27,29 @@ describe('号池巡检间隔', () => {
   });
 });
 
-describe('到期 token 选择', () => {
+describe('token 有效性按 /me 巡检，不按猜测寿命', () => {
   const now = Date.parse('2026-08-22T06:00:00.000Z');
 
-  it('从未写入或超过 4 分钟视为到期', () => {
-    expect(isTokenDueForRefresh(null, now)).toBe(true);
-    expect(isTokenDueForRefresh(new Date(now - TOKEN_SILENT_REFRESH_MS), now)).toBe(true);
-    expect(isTokenDueForRefresh(new Date(now - TOKEN_SILENT_REFRESH_MS + 1), now)).toBe(false);
+  it('从未巡检为 unknown，间隔内为 fresh，超过间隔为 due，两倍间隔为 stale', () => {
+    expect(tokenFreshnessFromCheck(null, 10, now)).toBe('unknown');
+    expect(tokenFreshnessFromCheck(new Date(now - 9 * 60_000), 10, now)).toBe('fresh');
+    expect(tokenFreshnessFromCheck(new Date(now - 10 * 60_000), 10, now)).toBe('due');
+    expect(tokenFreshnessFromCheck(new Date(now - 20 * 60_000), 10, now)).toBe('stale');
   });
 
-  it('只挑有密码、未封禁且到期的账号', () => {
-    const due = selectAccountsDueForTokenRefresh(
-      [
-        {
-          id: 'fresh',
-          status: 'active',
-          loginUsername: 'a',
-          loginPasswordEncrypted: 'x',
-          tokenUpdatedAt: new Date(now - 60_000),
-        },
-        {
-          id: 'due',
-          status: 'inactive',
-          loginUsername: 'b',
-          loginPasswordEncrypted: 'y',
-          tokenUpdatedAt: new Date(now - TOKEN_SILENT_REFRESH_MS),
-        },
-        {
-          id: 'banned',
-          status: 'banned',
-          loginUsername: 'c',
-          loginPasswordEncrypted: 'z',
-          tokenUpdatedAt: null,
-        },
-        {
-          id: 'static',
-          status: 'active',
-          loginUsername: null,
-          loginPasswordEncrypted: null,
-          tokenUpdatedAt: new Date(now - TOKEN_SILENT_REFRESH_MS * 3),
-        },
-      ],
-      now,
+  it('下次巡检 = 上次 /me + 间隔', () => {
+    expect(nextHealthCheckAt(new Date(now - 3 * 60_000), 10)?.toISOString()).toBe(
+      new Date(now + 7 * 60_000).toISOString(),
     );
-    expect(due.map((item) => item.id)).toEqual(['due']);
+    expect(nextHealthCheckAt(null, 10)).toBeNull();
+  });
+
+  it('识别源站鉴权失败，避免把普通业务错误当成 token 过期', () => {
+    expect(isSourceAuthCode('401')).toBe(true);
+    expect(isSourceAuthCode(403)).toBe(true);
+    expect(isSourceAuthCode('200')).toBe(false);
+    expect(isSourceAuthFailure(new Error('API request failed: 401 Unauthorized'))).toBe(true);
+    expect(isSourceAuthFailure(new Error('源站返回异常: 401 token 失效'))).toBe(true);
+    expect(isSourceAuthFailure(new Error('源站列表 API 异常: 500 timeout'))).toBe(false);
   });
 });

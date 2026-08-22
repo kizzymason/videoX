@@ -610,7 +610,7 @@ const healthCheckAccounts = defineTool({
   name: 'health_check_accounts',
   label: '账号健康检查',
   description:
-    '用目标站接口验证 token 是否还有效；托管了密码且 token 已到期时会重新登录换新 token（与手动刷新相同）。不传 accountId 就全量检查整个号池。',
+    '用目标站 /me 验证 token 是否还有效；只有失效且托管了密码时才会重新登录换新 token。不传 accountId 就全量检查整个号池。',
   readOnly: false,
   schema: z.object({ accountId: z.string().uuid().optional() }),
   execute: async (args) => {

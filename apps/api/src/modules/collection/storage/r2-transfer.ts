@@ -194,12 +194,16 @@ export class R2TransferService {
 
   /** 通过号池账号获取源站播放地址 */
   private async fetchPlayUrl(externalId: string, kind: string, targetSite: string): Promise<string> {
-    const poolManager = AccountPoolManager.getInstance();
-    const account = await poolManager.getAvailableAccount(targetSite);
-    if (!account) throw new Error('号池中无可用账号');
-
-    const client = createClientFromAccount(account);
-    const result = await client.getPlayUrl(Number(externalId), kind as 'gv' | 'mv' | 'tv');
+    const result = await AccountPoolManager.getInstance().runWithAccount(targetSite, async (account) => {
+      const play = await createClientFromAccount(account).getPlayUrl(
+        Number(externalId),
+        kind as 'gv' | 'mv' | 'tv',
+      );
+      if (play.code === '401' || play.code === '403') {
+        throw new Error(`源站 play API 异常: ${play.code}`);
+      }
+      return play;
+    });
 
     if (result.code !== '200' || !result.data?.url) {
       throw new Error(`源站 play API 异常: ${result.code}`);

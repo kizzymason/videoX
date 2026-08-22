@@ -449,6 +449,7 @@ export interface TokenMonitorEvent {
 }
 
 export interface TokenMonitorSnapshot {
+  tokenRefreshPolicy?: 'on_invalid';
   silentRefreshAfterSeconds: number;
   staleAfterSeconds: number;
   healthCheckIntervalMinutes: number;

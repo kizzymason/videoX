@@ -10,13 +10,13 @@ import {
   AccountPoolManager,
   createClientFromAccount,
   enqueueCollectionJob,
+  isSourceAuthCode,
   markJobCompleted,
   markJobFailed,
   markJobRunning,
   markJobRetry,
   upsertCollectedVideo,
   R2TransferService,
-  type AccountPoolEntry,
   type CollectionJobData,
   type DetailFetchJobData,
   type ListCrawlJobData,
@@ -88,17 +88,19 @@ async function crawlListJob(job: Job<ListCrawlJobData>): Promise<void> {
   const { targetSite, kind, page } = job.data;
   const collectionJobId = (job.data as { collectionJobId?: string }).collectionJobId;
 
-  // 1. 号池取账号
-  const account = await requireAccount(targetSite);
-
-  // 2. 调源站列表 API
-  const client = createClientFromAccount(account);
-  const result =
-    kind === 'gv'
-      ? await client.getGVList(page, 20)
-      : kind === 'mv'
-        ? await client.getMVList(page, 20)
-        : await client.getTVList(page, 20);
+  const result = await AccountPoolManager.getInstance().runWithAccount(targetSite, async (account) => {
+    const client = createClientFromAccount(account);
+    const list =
+      kind === 'gv'
+        ? await client.getGVList(page, 20)
+        : kind === 'mv'
+          ? await client.getMVList(page, 20)
+          : await client.getTVList(page, 20);
+    if (isSourceAuthCode(list.code)) {
+      throw new Error(`源站列表 API 异常: ${list.code} ${list.message ?? ''}`);
+    }
+    return list;
+  });
 
   if (result.code !== '200' || !Array.isArray(result.data?.list)) {
     throw new Error(`源站列表 API 异常: ${result.code} ${result.message ?? ''}`);
@@ -224,9 +226,13 @@ async function fetchDetailJob(job: Job<DetailFetchJobData>): Promise<void> {
   const { targetSite, kind, externalId } = job.data;
   const collectionJobId = (job.data as { collectionJobId?: string }).collectionJobId;
 
-  const account = await requireAccount(targetSite);
-  const client = createClientFromAccount(account);
-  const playResult = await client.getPlayUrl(externalId, kind);
+  const playResult = await AccountPoolManager.getInstance().runWithAccount(targetSite, async (account) => {
+    const result = await createClientFromAccount(account).getPlayUrl(externalId, kind);
+    if (isSourceAuthCode(result.code)) {
+      throw new Error(`源站 play API 异常: ${result.code} ${result.message ?? ''}`);
+    }
+    return result;
+  });
 
   if (playResult.code !== '200' || !playResult.data?.url) {
     throw new Error(`源站 play API 异常: ${playResult.code} ${playResult.message ?? ''}`);
@@ -291,9 +297,16 @@ async function refreshPlayUrlJob(job: Job<PlayUrlRefreshJobData>): Promise<void>
 
   if (!existing) throw new Error(`未找到外部 ID 为 ${externalId} 的视频`);
 
-  const account = await requireAccount(targetSite);
-  const client = createClientFromAccount(account);
-  const playResult = await client.getPlayUrl(externalId, existing.kind as 'gv' | 'mv' | 'tv');
+  const playResult = await AccountPoolManager.getInstance().runWithAccount(targetSite, async (account) => {
+    const result = await createClientFromAccount(account).getPlayUrl(
+      externalId,
+      existing.kind as 'gv' | 'mv' | 'tv',
+    );
+    if (isSourceAuthCode(result.code)) {
+      throw new Error(`源站 play API 异常: ${result.code}`);
+    }
+    return result;
+  });
 
   if (playResult.code !== '200' || !playResult.data?.url) {
     throw new Error(`源站 play API 异常: ${playResult.code}`);
@@ -344,12 +357,6 @@ async function r2TransferJob(job: Job<R2TransferJobData>): Promise<void> {
 // --------------------------------------------------------------------------
 // 辅助
 // --------------------------------------------------------------------------
-
-async function requireAccount(targetSite: string): Promise<AccountPoolEntry> {
-  const account = await AccountPoolManager.getInstance().getAvailableAccount(targetSite);
-  if (!account) throw new Error('号池中无可用账号');
-  return account;
-}
 
 async function logCollectionJob(
   collectionJobId: string | undefined,

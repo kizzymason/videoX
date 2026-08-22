@@ -1,12 +1,12 @@
 // ========================================================================
-// 号池巡检 / token 到期判定（纯函数，供调度器与测试共用）
+// 号池巡检 / token 有效性判定（纯函数，供调度器与测试共用）
 // ========================================================================
 
-/** 取号或定时巡检时，超过此时长且托管了密码，会重新登录换 token（与手动刷新相同）。 */
-export const TOKEN_SILENT_REFRESH_MS = 4 * 60 * 1000;
-export const TOKEN_FRESH_SECONDS = Math.floor(TOKEN_SILENT_REFRESH_MS / 1000);
-export const TOKEN_STALE_SECONDS = 10 * 60;
-
+/**
+ * 源站登录响应实测只有 token + user.{id,username,isVIP,vipTime}，没有 expires/ttl。
+ * vipTime 是会员到期，不是 session 过期；token 为 32 位 hex，不能解 JWT exp。
+ * 有效性以 /api/member/me 为准：巡检成功就继续用，只有失效才重新登录。
+ */
 export const DEFAULT_HEALTH_CHECK_INTERVAL_MINUTES = 10;
 export const MIN_HEALTH_CHECK_INTERVAL_MINUTES = 1;
 export const MAX_HEALTH_CHECK_INTERVAL_MINUTES = 120;
@@ -18,33 +18,46 @@ export function resolveHealthCheckIntervalMinutes(value: unknown): number {
   return n;
 }
 
-export function isTokenDueForRefresh(
-  tokenUpdatedAt: Date | string | null | undefined,
-  now = Date.now(),
-): boolean {
-  if (!tokenUpdatedAt) return true;
-  const ms = tokenUpdatedAt instanceof Date ? tokenUpdatedAt.getTime() : new Date(tokenUpdatedAt).getTime();
-  if (Number.isNaN(ms)) return true;
-  return now - ms >= TOKEN_SILENT_REFRESH_MS;
+export function toTimestamp(value: Date | string | null | undefined): number | null {
+  if (!value) return null;
+  const ms = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isNaN(ms) ? null : ms;
 }
 
-export interface TokenRefreshCandidate {
-  id: string;
-  status: string;
-  uid?: string | null;
-  loginUsername?: string | null;
-  loginPasswordEncrypted?: string | null;
-  tokenUpdatedAt?: Date | string | null;
+export type TokenFreshness = 'fresh' | 'due' | 'stale' | 'unknown';
+
+/** 按上次 /me 巡检时间判断展示状态，不是按猜测的 token 寿命。 */
+export function tokenFreshnessFromCheck(
+  lastCheckAt: Date | string | null | undefined,
+  intervalMinutes: unknown,
+  now = Date.now(),
+): TokenFreshness {
+  const ms = toTimestamp(lastCheckAt);
+  if (ms == null) return 'unknown';
+  const ageMs = Math.max(0, now - ms);
+  const intervalMs = resolveHealthCheckIntervalMinutes(intervalMinutes) * 60_000;
+  if (ageMs < intervalMs) return 'fresh';
+  if (ageMs < intervalMs * 2) return 'due';
+  return 'stale';
 }
 
-/** 有托管密码、未封禁、且 token 已到期或从未写入的账号。 */
-export function selectAccountsDueForTokenRefresh<T extends TokenRefreshCandidate>(
-  accounts: T[],
-  now = Date.now(),
-): T[] {
-  return accounts.filter((account) => {
-    if (account.status === 'banned') return false;
-    if (!account.loginUsername || !account.loginPasswordEncrypted) return false;
-    return isTokenDueForRefresh(account.tokenUpdatedAt, now);
-  });
+export function nextHealthCheckAt(
+  lastCheckAt: Date | string | null | undefined,
+  intervalMinutes: unknown,
+): Date | null {
+  const ms = toTimestamp(lastCheckAt);
+  if (ms == null) return null;
+  return new Date(ms + resolveHealthCheckIntervalMinutes(intervalMinutes) * 60_000);
+}
+
+export function isSourceAuthCode(code: unknown): boolean {
+  const value = String(code ?? '');
+  return value === '401' || value === '403';
+}
+
+export function isSourceAuthFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b401\b|\b403\b|unauthorized|unauthorised|invalid token|token.*(invalid|expired|失效)/i.test(
+    message,
+  );
 }

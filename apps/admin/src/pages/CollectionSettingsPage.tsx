@@ -477,7 +477,7 @@ export function CollectionSettingsPage() {
               onChange={(e) => setPool((s) => ({ ...s, healthCheckIntervalMinutes: e.target.value }))}
             />
             <p className="text-xs text-muted-foreground">
-              完整 /me 巡检间隔，默认 10 分钟。到期 token 由调度器每分钟自动登录换新，不必等这次巡检。
+              用源站 /me 验证 token 是否还有效，默认 10 分钟一次。源站登录不返回过期时间，只有巡检失败才会重新登录。
             </p>
           </div>
           <div className="space-y-2">

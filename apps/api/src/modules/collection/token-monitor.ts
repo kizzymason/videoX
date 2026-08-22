@@ -5,23 +5,22 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import { db, t } from '../../core/db.js';
 import {
-  TOKEN_FRESH_SECONDS,
-  TOKEN_SILENT_REFRESH_MS,
-  TOKEN_STALE_SECONDS,
+  nextHealthCheckAt,
+  resolveHealthCheckIntervalMinutes,
+  tokenFreshnessFromCheck,
+  type TokenFreshness,
 } from './pool-schedule.js';
 import { getPoolConfig } from './storage/config.js';
 import type { AccountPoolEntry } from './types.js';
 
-export { TOKEN_FRESH_SECONDS, TOKEN_SILENT_REFRESH_MS, TOKEN_STALE_SECONDS };
+export type { TokenFreshness };
 
-export type TokenFreshness = 'fresh' | 'due' | 'stale' | 'unknown';
 export type TokenRefreshSource =
-  | 'checkout'
+  | 'auth_retry'
   | 'manual'
   | 'health_check'
   | 'credentials_update'
-  | 'login'
-  | 'scheduled';
+  | 'login';
 
 export interface PublicPoolAccount {
   id: string;
@@ -59,17 +58,14 @@ export function tokenAgeSeconds(tokenUpdatedAt: string | Date | null | undefined
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
 }
 
-export function tokenFreshnessOf(ageSeconds: number | null): TokenFreshness {
-  if (ageSeconds === null) return 'unknown';
-  if (ageSeconds < TOKEN_FRESH_SECONDS) return 'fresh';
-  if (ageSeconds < TOKEN_STALE_SECONDS) return 'due';
-  return 'stale';
-}
-
-export function serializePoolAccount(acc: AccountPoolEntry): PublicPoolAccount {
+export function serializePoolAccount(
+  acc: AccountPoolEntry,
+  options?: { healthCheckIntervalMinutes?: number },
+): PublicPoolAccount {
+  const intervalMinutes = resolveHealthCheckIntervalMinutes(options?.healthCheckIntervalMinutes);
   const hasCredentials = Boolean(acc.loginUsername && acc.loginPasswordEncrypted);
   const age = tokenAgeSeconds(acc.tokenUpdatedAt);
-  const updatedAtMs = toIso(acc.tokenUpdatedAt);
+  const nextCheck = nextHealthCheckAt(acc.lastCheckAt, intervalMinutes);
   return {
     id: acc.id,
     targetSite: acc.targetSite,
@@ -90,11 +86,8 @@ export function serializePoolAccount(acc: AccountPoolEntry): PublicPoolAccount {
     hasCredentials,
     autoRefreshEnabled: hasCredentials && acc.status === 'active',
     tokenAgeSeconds: age,
-    tokenFreshness: tokenFreshnessOf(age),
-    nextSilentRefreshAt:
-      hasCredentials && updatedAtMs
-        ? new Date(new Date(updatedAtMs).getTime() + TOKEN_SILENT_REFRESH_MS).toISOString()
-        : null,
+    tokenFreshness: tokenFreshnessFromCheck(acc.lastCheckAt, intervalMinutes),
+    nextSilentRefreshAt: hasCredentials && nextCheck ? nextCheck.toISOString() : null,
   };
 }
 
@@ -127,6 +120,7 @@ export async function writePoolEvent(params: {
 
 export async function getTokenMonitorSnapshot(targetSite: string) {
   const pool = await getPoolConfig(targetSite);
+  const intervalMinutes = resolveHealthCheckIntervalMinutes(pool.healthCheckIntervalMinutes);
   const accounts = await db.select().from(t.accountPools).where(eq(t.accountPools.targetSite, targetSite));
 
   const counts = {
@@ -142,7 +136,7 @@ export async function getTokenMonitorSnapshot(targetSite: string) {
 
   for (const row of accounts) {
     const acc = row as unknown as AccountPoolEntry;
-    const publicAcc = serializePoolAccount(acc);
+    const publicAcc = serializePoolAccount(acc, { healthCheckIntervalMinutes: intervalMinutes });
     if (publicAcc.hasCredentials) counts.withCredentials += 1;
     else counts.withoutCredentials += 1;
     if (publicAcc.autoRefreshEnabled) counts.autoRefreshReady += 1;
@@ -166,8 +160,8 @@ export async function getTokenMonitorSnapshot(targetSite: string) {
   // 巡检时间只看巡检日志，不要和 token 刷新写入的 lastCheckAt 混在一起。
   const healthLogMs = latestHealth?.createdAt ? new Date(latestHealth.createdAt).getTime() : 0;
   const lastHealthCheckAt = healthLogMs ? new Date(healthLogMs).toISOString() : null;
-  const intervalMs = pool.healthCheckIntervalMinutes * 60 * 1000;
-  const nextHealthCheckAt = lastHealthCheckAt
+  const intervalMs = intervalMinutes * 60 * 1000;
+  const nextPoolHealthCheckAt = lastHealthCheckAt
     ? new Date(new Date(lastHealthCheckAt).getTime() + intervalMs).toISOString()
     : null;
   const lastTokenRefreshAt = latestRefresh?.createdAt
@@ -178,7 +172,7 @@ export async function getTokenMonitorSnapshot(targetSite: string) {
     .select()
     .from(t.collectionLogs)
     .where(
-      sql`${t.collectionLogs.context} ->> 'event' in ('token_login', 'token_refresh', 'token_refresh_failed', 'token_scheduled_refresh', 'pool_health_check')`,
+      sql`${t.collectionLogs.context} ->> 'event' in ('token_login', 'token_refresh', 'token_refresh_failed', 'pool_health_check')`,
     )
     .orderBy(desc(t.collectionLogs.createdAt))
     .limit(20);
@@ -198,11 +192,12 @@ export async function getTokenMonitorSnapshot(targetSite: string) {
   });
 
   return {
-    silentRefreshAfterSeconds: TOKEN_FRESH_SECONDS,
-    staleAfterSeconds: TOKEN_STALE_SECONDS,
-    healthCheckIntervalMinutes: pool.healthCheckIntervalMinutes,
+    tokenRefreshPolicy: 'on_invalid' as const,
+    silentRefreshAfterSeconds: intervalMinutes * 60,
+    staleAfterSeconds: intervalMinutes * 120,
+    healthCheckIntervalMinutes: intervalMinutes,
     lastHealthCheckAt,
-    nextHealthCheckAt,
+    nextHealthCheckAt: nextPoolHealthCheckAt,
     lastTokenRefreshAt,
     counts,
     events,

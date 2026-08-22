@@ -52,12 +52,12 @@ export function scheduleCollectionTasks(): void {
     cron.schedule('0 4 * * 0', () => void runExclusively('weekly', runWeeklyFullCrawl)),
   );
 
-  // 3. 号池维护：每分钟唤醒。到期 token 立即重新登录；完整 /me 巡检按配置间隔。
+  // 3. 号池维护：每分钟唤醒，按配置间隔做 /me 巡检；只有 token 失效才重新登录。
   scheduledTasks.push(
     cron.schedule('* * * * *', () => void runExclusively('pool-maintain', runScheduledPoolMaintain)),
   );
 
-  // 进程重启后立即换到期 token 并巡检，避免等待下一个整分钟。
+  // 进程重启后立刻巡检，避免等待下一个整分钟。
   void runExclusively('pool-maintain-startup', runScheduledPoolMaintain);
 
   // 4. 定期清理过期日志（每周一凌晨 5 点）
@@ -65,7 +65,7 @@ export function scheduleCollectionTasks(): void {
     cron.schedule('0 5 * * 1', () => void runExclusively('logcleanup', runLogCleanup)),
   );
 
-  logger.info('采集调度器已就绪：每日增量(03:00) / 每周全量(周日 04:00) / 号池每分钟自动换 token + 按配置巡检 / 日志清理(周一 05:00)');
+  logger.info('采集调度器已就绪：每日增量(03:00) / 每周全量(周日 04:00) / 号池按配置 /me 巡检（失效才换 token） / 日志清理(周一 05:00)');
 }
 
 /**
@@ -197,17 +197,6 @@ async function runHourlyHealthCheck(): Promise<void> {
   }
 }
 
-async function runScheduledTokenRefresh(): Promise<void> {
-  try {
-    const result = await AccountPoolManager.getInstance().refreshDueTokens(TARGET_SITE);
-    if (result.due > 0) {
-      logger.info({ ...result }, '定时自动刷新到期 token 完成');
-    }
-  } catch (error) {
-    logger.error({ err: error }, '定时自动刷新 token 失败');
-  }
-}
-
 async function runScheduledHealthCheck(): Promise<void> {
   try {
     const config = await getPoolConfig(TARGET_SITE);
@@ -221,7 +210,6 @@ async function runScheduledHealthCheck(): Promise<void> {
 }
 
 async function runScheduledPoolMaintain(): Promise<void> {
-  await runScheduledTokenRefresh();
   await runScheduledHealthCheck();
 }
 

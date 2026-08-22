@@ -7,18 +7,13 @@ import { db, t } from '../../core/db.js';
 import { logger } from '../../core/logger.js';
 import type { AccountPoolEntry } from './types.js';
 import { decryptCredential, encryptCredential } from './credential-vault.js';
-import {
-  isTokenDueForRefresh,
-  selectAccountsDueForTokenRefresh,
-  type TokenRefreshCandidate,
-} from './pool-schedule.js';
+import { isSourceAuthFailure } from './pool-schedule.js';
 import { writePoolEvent, type TokenRefreshSource } from './token-monitor.js';
 import { YitongKanApiClient, createClientFromAccount } from './yitongkan/api-client.js';
 
 function sourceLabel(source: TokenRefreshSource): string {
-  if (source === 'checkout') return '采集取号前已自动登录并写入新 token';
-  if (source === 'health_check') return '健康检查后已自动登录并写入新 token（与手动刷新相同）';
-  if (source === 'scheduled') return '定时自动登录并写入新 token（与手动刷新相同）';
+  if (source === 'auth_retry') return '源站接口鉴权失败后已自动登录并写入新 token';
+  if (source === 'health_check') return '健康检查发现 token 失效后已自动登录并写入新 token';
   if (source === 'credentials_update') return '更新登录凭据后已自动登录并写入新 token';
   if (source === 'login') return '账号密码登录成功，已自动写入 token';
   return '已手动刷新 token';
@@ -164,30 +159,48 @@ export class AccountPoolManager {
       }
     }
     
-    let selected = weightedList[Math.floor(Math.random() * weightedList.length)];
+    const selected = weightedList[Math.floor(Math.random() * weightedList.length)];
 
-    // 源站 token 生命周期较短；有托管凭据且 token 已到期时先静默刷新（与手动刷新相同）。
-    if (selected.loginUsername && selected.loginPasswordEncrypted && isTokenDueForRefresh(selected.tokenUpdatedAt)) {
-      try {
-        selected = (await this.refreshAccountToken(selected.id, 'checkout')) ?? selected;
-      } catch (error) {
-        await this.recordFailure(selected.id, error, false);
-        logger.warn({ accountId: selected.id }, '取号前 token 刷新失败，继续使用现有 token');
-        await writePoolEvent({
-          level: 'warn',
-          message: '取号前自动登录刷新 token 失败，继续使用现有 token',
-          accountId: selected.id,
-          event: 'token_refresh_failed',
-          uid: selected.uid,
-          source: 'checkout',
-        });
-      }
-    }
-    
     // 更新使用计数
     await this.recordUsage(selected.id);
     
     return selected;
+  }
+
+  /**
+   * 用号池账号调源站；遇到 401/失效且托管了密码时，重新登录再试一次。
+   * 源站不返回 session 过期时间，不要按猜测时长预先换 token。
+   */
+  async runWithAccount<T>(
+    targetSite: string,
+    fn: (account: AccountPoolEntry) => Promise<T>,
+  ): Promise<T> {
+    const account = await this.getAvailableAccount(targetSite);
+    if (!account) throw new Error('号池中无可用账号');
+
+    try {
+      return await fn(account);
+    } catch (error) {
+      if (!isSourceAuthFailure(error) || !account.loginUsername || !account.loginPasswordEncrypted) {
+        throw error;
+      }
+      try {
+        const refreshed = await this.refreshAccountToken(account.id, 'auth_retry');
+        if (!refreshed) throw error;
+        return await fn(refreshed);
+      } catch (refreshError) {
+        await this.recordFailure(account.id, refreshError, false);
+        await writePoolEvent({
+          level: 'warn',
+          message: '源站鉴权失败后自动登录刷新 token 失败',
+          accountId: account.id,
+          event: 'token_refresh_failed',
+          uid: account.uid,
+          source: 'auth_retry',
+        });
+        throw refreshError;
+      }
+    }
   }
   
   /**
@@ -323,15 +336,6 @@ export class AccountPoolManager {
     }
 
     try {
-      // 到期 token 直接重新登录，不再只在 /me 失败时才换号。
-      if (
-        account.loginUsername &&
-        account.loginPasswordEncrypted &&
-        isTokenDueForRefresh(account.tokenUpdatedAt)
-      ) {
-        return Boolean(await this.refreshAccountToken(accountId, 'health_check'));
-      }
-
       const result = await createClientFromAccount(account).getMemberInfo();
       if (result.code === '200') {
         await this.markHealthy(accountId, result.data);
@@ -440,62 +444,6 @@ export class AccountPoolManager {
     return { valid, invalid, failed };
   }
 
-  /**
-   * 定时自动刷新到期 token，效果与后台「刷新」按钮相同：重新登录并写入新 token。
-   * 不失效正在播放的热链 m3u8（播放地址缓存在独立缓存里）。
-   */
-  async refreshDueTokens(targetSite: string): Promise<{
-    due: number;
-    refreshed: number;
-    failed: number;
-    skipped: number;
-  }> {
-    const accounts = await db
-      .select()
-      .from(t.accountPools)
-      .where(eq(t.accountPools.targetSite, targetSite));
-
-    const due = selectAccountsDueForTokenRefresh(accounts as unknown as TokenRefreshCandidate[]);
-    let refreshed = 0;
-    let failed = 0;
-
-    for (const account of due) {
-      try {
-        const updated = await this.refreshAccountToken(account.id, 'scheduled');
-        if (updated) refreshed += 1;
-        else failed += 1;
-      } catch (error) {
-        failed += 1;
-        await this.recordFailure(account.id, error, false);
-        logger.warn({ accountId: account.id, err: error }, '定时自动刷新 token 失败');
-        await writePoolEvent({
-          level: 'error',
-          message: '定时自动登录刷新 token 失败',
-          accountId: account.id,
-          event: 'token_refresh_failed',
-          uid: account.uid,
-          source: 'scheduled',
-        });
-      }
-    }
-
-    if (due.length > 0) {
-      await writePoolEvent({
-        level: failed > 0 && refreshed === 0 ? 'warn' : 'info',
-        message: `定时自动刷新 token：${refreshed} 成功 / ${failed} 失败 / ${due.length} 到期`,
-        event: 'token_scheduled_refresh',
-        extra: { targetSite, refreshed, failed, due: due.length },
-      });
-    }
-
-    return {
-      due: due.length,
-      refreshed,
-      failed,
-      skipped: accounts.length - due.length,
-    };
-  }
-  
   /**
    * 获取账号详情
    */

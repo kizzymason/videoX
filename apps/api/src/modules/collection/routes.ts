@@ -181,13 +181,26 @@ collectionRouter.get(
     const search = (req.query.search as string | undefined)?.trim() || undefined;
 
     const manager = AccountPoolManager.getInstance();
-    const result = await manager.getList(TARGET_SITE, page, pageSize, {
-      status: status as 'active' | 'inactive' | 'banned' | undefined,
-      isVip,
-      search,
-    });
+    const [result, pool] = await Promise.all([
+      manager.getList(TARGET_SITE, page, pageSize, {
+        status: status as 'active' | 'inactive' | 'banned' | undefined,
+        isVip,
+        search,
+      }),
+      getPoolConfig(TARGET_SITE),
+    ]);
 
-    ok(res, paginated(result.items.map(serializePoolAccount), result.total, page, pageSize));
+    ok(
+      res,
+      paginated(
+        result.items.map((item) =>
+          serializePoolAccount(item, { healthCheckIntervalMinutes: pool.healthCheckIntervalMinutes }),
+        ),
+        result.total,
+        page,
+        pageSize,
+      ),
+    );
   }),
 );
 

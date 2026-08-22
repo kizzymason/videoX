@@ -34,9 +34,6 @@ import {
   type TokenMonitorSnapshot,
 } from '@/lib/api';
 
-const FRESH_SECONDS = 4 * 60;
-const STALE_SECONDS = 10 * 60;
-
 function formatDelta(ms: number, suffix: string): string {
   const abs = Math.abs(ms);
   if (abs < 10_000) return suffix === '前' ? '刚刚' : '即将开始';
@@ -57,7 +54,7 @@ function upcomingTime(value: string | null | undefined, now: number): string {
   if (!value) return '尚未排期';
   const ms = new Date(value).getTime() - now;
   if (Number.isNaN(ms)) return '—';
-  if (ms <= 0) return '已到期，调度器将自动登录换 token';
+  if (ms <= 0) return '已到巡检时间';
   return formatDelta(ms, '后');
 }
 
@@ -71,29 +68,33 @@ function formatAge(seconds: number | null, nowTokenUpdatedAt: string | null, now
   return `${Math.floor(age / 3600)} 小时前`;
 }
 
-function freshnessOf(account: PoolAccountRow, now: number): PoolAccountRow['tokenFreshness'] {
+function freshnessOf(
+  account: PoolAccountRow,
+  now: number,
+  intervalSeconds: number,
+): PoolAccountRow['tokenFreshness'] {
   if (account.tokenFreshness) return account.tokenFreshness;
-  if (!account.tokenUpdatedAt) return 'unknown';
-  const age = Math.max(0, Math.floor((now - new Date(account.tokenUpdatedAt).getTime()) / 1000));
-  if (age < FRESH_SECONDS) return 'fresh';
-  if (age < STALE_SECONDS) return 'due';
+  if (!account.lastCheckAt) return 'unknown';
+  const age = Math.max(0, Math.floor((now - new Date(account.lastCheckAt).getTime()) / 1000));
+  if (age < intervalSeconds) return 'fresh';
+  if (age < intervalSeconds * 2) return 'due';
   return 'stale';
 }
 
 function freshnessLabel(value: PoolAccountRow['tokenFreshness']): string {
-  if (value === 'fresh') return '新鲜';
-  if (value === 'due') return '待自动续';
-  if (value === 'stale') return '已偏旧';
-  return '未知';
+  if (value === 'fresh') return '巡检有效';
+  if (value === 'due') return '待巡检';
+  if (value === 'stale') return '巡检过期';
+  return '未巡检';
 }
 
 function sourceLabel(source: string | null): string {
-  if (source === 'checkout') return '采集取号';
+  if (source === 'auth_retry') return '接口失效续期';
   if (source === 'health_check') return '健康巡检';
-  if (source === 'scheduled') return '定时自动';
   if (source === 'manual') return '手动刷新';
   if (source === 'credentials_update') return '更新凭据';
   if (source === 'login') return '账号登录';
+  if (source === 'checkout' || source === 'scheduled') return '历史自动续期';
   return '系统';
 }
 
@@ -379,13 +380,14 @@ export function CollectionPoolPage() {
     },
     {
       key: 'freshness',
-      header: 'Token 新鲜度',
+      header: 'Token 巡检',
       cell: (a) => {
-        const freshness = freshnessOf(a, now);
-        const age = a.tokenUpdatedAt
-          ? Math.max(0, Math.floor((now - new Date(a.tokenUpdatedAt).getTime()) / 1000))
-          : a.tokenAgeSeconds;
-        const used = Math.min(100, Math.round(((age ?? 0) / FRESH_SECONDS) * 100));
+        const intervalSeconds = (monitor?.healthCheckIntervalMinutes ?? 10) * 60;
+        const freshness = freshnessOf(a, now, intervalSeconds);
+        const age = a.lastCheckAt
+          ? Math.max(0, Math.floor((now - new Date(a.lastCheckAt).getTime()) / 1000))
+          : null;
+        const used = Math.min(100, Math.round(((age ?? 0) / intervalSeconds) * 100));
         const bar =
           freshness === 'fresh' ? 'bg-emerald-500' : freshness === 'due' ? 'bg-amber-500' : 'bg-red-500';
         return (
@@ -404,7 +406,7 @@ export function CollectionPoolPage() {
               >
                 {freshnessLabel(freshness)}
               </span>
-              <span className="text-muted-foreground">{formatAge(age, a.tokenUpdatedAt, now)}</span>
+              <span className="text-muted-foreground">{formatAge(age, a.lastCheckAt, now)}</span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-muted">
               <div className={`h-full ${bar}`} style={{ width: `${used}%` }} />
@@ -412,9 +414,9 @@ export function CollectionPoolPage() {
             <div className="text-[11px] text-muted-foreground">
               {a.hasCredentials
                 ? a.nextSilentRefreshAt
-                  ? `自动换 token ${upcomingTime(a.nextSilentRefreshAt, now)}`
-                  : '到期后会定时自动登录换 token'
-                : '需要补账号密码才会自动续'}
+                  ? `下次巡检 ${upcomingTime(a.nextSilentRefreshAt, now)}`
+                  : '等待首次巡检'
+                : '需要补账号密码才会在失效后续期'}
             </div>
           </div>
         );
@@ -482,7 +484,7 @@ export function CollectionPoolPage() {
     <div className="space-y-4">
       <PageHeader
         title="采集号池管理"
-        description="账号密码入库后，到期 token 会定时自动登录换新，效果与手动刷新相同；本页每 15 秒同步一次状态"
+        description="源站登录不返回过期时间，按 /me 巡检验证；只有失效才重新登录。本页每 15 秒同步一次状态"
         actions={
           <>
             <Button variant="outline" onClick={() => void handleHealthCheck()}>
@@ -526,12 +528,12 @@ export function CollectionPoolPage() {
             </div>
           </div>
           <div className="rounded-lg border p-3">
-            <div className="text-xs text-muted-foreground">Token 新鲜度</div>
+            <div className="text-xs text-muted-foreground">最近巡检有效</div>
             <div className="mt-1 text-2xl font-bold text-emerald-600">
               {monitor ? monitor.counts.fresh : '—'}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              待续 {monitor?.counts.due ?? 0} · 偏旧 {monitor?.counts.stale ?? 0} · 未知 {monitor?.counts.unknown ?? 0}
+              待巡检 {monitor?.counts.due ?? 0} · 过期 {monitor?.counts.stale ?? 0} · 未巡检 {monitor?.counts.unknown ?? 0}
             </div>
           </div>
           <div className="rounded-lg border p-3">
@@ -566,11 +568,11 @@ export function CollectionPoolPage() {
             </div>
           </div>
           <div className="rounded-lg border p-3">
-            <div className="text-xs text-muted-foreground">定时自动换 Token</div>
-            <div className="mt-1 text-2xl font-bold">{Math.round((monitor?.silentRefreshAfterSeconds ?? FRESH_SECONDS) / 60)} 分钟</div>
+            <div className="text-xs text-muted-foreground">Token 续期策略</div>
+            <div className="mt-1 text-2xl font-bold">失效才换</div>
             <div className="mt-1 text-xs text-muted-foreground">
-              到期后每分钟自动登录，效果与手动刷新相同
-              {monitor?.lastTokenRefreshAt ? ` · 最近 ${relativeTime(monitor.lastTokenRefreshAt, now)}` : ''}
+              源站无过期字段，/me 失败才重新登录
+              {monitor?.lastTokenRefreshAt ? ` · 最近换号 ${relativeTime(monitor.lastTokenRefreshAt, now)}` : ''}
             </div>
           </div>
         </CardContent>
@@ -680,7 +682,7 @@ export function CollectionPoolPage() {
         <CardContent>
           {!monitor || monitor.events.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              还没有自动取 token 记录。添加账号后，到期会定时自动登录；也可手动刷新或跑巡检。
+              还没有自动取 token 记录。添加账号后会按 /me 巡检，失效才重新登录；也可手动刷新。
             </p>
           ) : (
             <ul className="divide-y">

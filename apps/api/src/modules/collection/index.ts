@@ -28,6 +28,7 @@ export {
 
 // 号池管理
 export { AccountPoolManager } from './pool-manager.js';
+export { isSourceAuthCode, isSourceAuthFailure } from './pool-schedule.js';
 
 // Yitongkan API 客户端
 export { YitongKanApiClient, createClientFromAccount } from './yitongkan/api-client.js';

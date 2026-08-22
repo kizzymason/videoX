@@ -6,13 +6,14 @@ import { and, eq } from 'drizzle-orm';
 import { db, t } from '../../../core/db.js';
 import { logger } from '../../../core/logger.js';
 import { AccountPoolManager } from '../pool-manager.js';
+import { isSourceAuthCode } from '../pool-schedule.js';
 import { createClientFromAccount } from '../yitongkan/api-client.js';
 
 /**
  * 热链播放地址缓存（内存 + TTL）
  * 源站账号 token 用来向源站换 m3u8；播放器拿到的是 CDN 地址，与号池 token 脱钩。
  * 更新 account_pools.token 不会踢掉正在播的流，也故意不失效这里的缓存。
- * 源站 token 有效期约 5 分钟，缓存 4 分钟留安全余量。
+ * 这里的 4 分钟是 CDN m3u8 热链缓存，不是采集账号 session 寿命。
  */
 const CACHE_TTL_MS = 4 * 60 * 1000;
 
@@ -38,7 +39,7 @@ setInterval(() => {
  * 核心思路（参考 caiji/yitongkan_dev_reference.md 4.2 节）：
  * - 不代理视频流，只在播放请求时向源站换取 m3u8 地址
  * - 用户浏览器直接请求源站 CDN，零带宽成本
- * - 源站 Referer 检测为零，token 有效期 >= 5 分钟，支持多用户共享同一 m3u8
+ * - 源站 Referer 检测为零，CDN m3u8 大约能用 5 分钟，支持多用户共享同一地址
  * - 用号池轮换取地址，避免单账号高频触发风控
  */
 export class HotlinkProxyService {
@@ -137,17 +138,16 @@ export class HotlinkProxyService {
     url: string;
     qualities: Array<{ label: string; url: string }>;
   }> {
-    // 1. 号池取账号
-    const poolManager = AccountPoolManager.getInstance();
-    const account = await poolManager.getAvailableAccount(targetSite);
-
-    if (!account) {
-      throw new Error('号池中无可用账号，无法获取热链地址');
-    }
-
-    // 2. 调源站 play API
-    const client = createClientFromAccount(account);
-    const playResult = await client.getPlayUrl(Number(externalId), kind as 'gv' | 'mv' | 'tv');
+    const playResult = await AccountPoolManager.getInstance().runWithAccount(targetSite, async (account) => {
+      const result = await createClientFromAccount(account).getPlayUrl(
+        Number(externalId),
+        kind as 'gv' | 'mv' | 'tv',
+      );
+      if (isSourceAuthCode(result.code)) {
+        throw new Error(`源站返回异常: ${result.code} ${result.message ?? ''}`);
+      }
+      return result;
+    });
 
     if (playResult.code !== '200' || !playResult.data?.url) {
       throw new Error(`源站返回异常: ${playResult.code} ${playResult.message ?? ''}`);
