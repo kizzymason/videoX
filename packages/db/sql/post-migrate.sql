@@ -102,3 +102,18 @@ SET value = jsonb_set(
   true
 )
 WHERE key = 'site';
+
+-- --- 采集片「最新」按源站页序（第 1 页最新） --------------------------------
+CREATE INDEX IF NOT EXISTS collected_videos_source_order_idx
+  ON collected_videos (page ASC, created_at ASC)
+  WHERE video_id IS NOT NULL;
+
+-- --- 观看历史：每用户只留最近 20 条 ----------------------------------------
+DELETE FROM watch_history
+WHERE id IN (
+  SELECT id FROM (
+    SELECT id, row_number() OVER (PARTITION BY user_id ORDER BY watched_at DESC) AS rn
+    FROM watch_history
+  ) ranked
+  WHERE rn > 20
+);

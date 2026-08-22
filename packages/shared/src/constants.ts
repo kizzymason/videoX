@@ -110,6 +110,9 @@ export const SORT_OPTIONS = [
 ] as const;
 export type SortOption = (typeof SORT_OPTIONS)[number];
 
+/** 每个用户保留的观看历史条数。超出按 watchedAt 丢掉最旧的。 */
+export const WATCH_HISTORY_LIMIT = 20;
+
 /** ABR 阶梯定义。绝不上采样：仅当源高度 >= height 才产出该档。 */
 export interface RenditionSpec {
   name: string;

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { paginationSchema, progressSchema, type FavoriteItem, type WatchHistoryItem } from '@videox/shared';
+import { paginationSchema, progressSchema, WATCH_HISTORY_LIMIT, type FavoriteItem, type WatchHistoryItem } from '@videox/shared';
 import { db, t, sqlRows, uuidArray } from '../../core/db.js';
 import { AppError } from '../../core/errors.js';
 import { asyncHandler, ok, paginated } from '../../core/respond.js';
@@ -10,6 +10,7 @@ import { writeLimiter } from '../../middleware/request-context.js';
 import { body, query, validate } from '../../middleware/validate.js';
 import { listVideos, requireVideo, getSummariesByIds } from '../videos/service.js';
 import { recordBehavior } from '../recommend/service.js';
+import { trimWatchHistory } from './watch-history.js';
 
 export const interactionsRouter: Router = Router();
 
@@ -347,6 +348,8 @@ interactionsRouter.post(
     if (completed) void recordBehavior(userId, input.videoId, 'complete');
     else if (delta > 30) void recordBehavior(userId, input.videoId, 'view');
 
+    await trimWatchHistory(userId, WATCH_HISTORY_LIMIT);
+
     ok(res, { saved: true, completed });
   }),
 );
@@ -419,7 +422,7 @@ interactionsRouter.delete(
   }),
 );
 
-/** 继续观看：有进度但没看完的，首页做「继续观看」卡片。 */
+/** 继续观看：有进度但没看完的。首页已去掉入口，观看历史页仍可用。 */
 interactionsRouter.get(
   '/continue-watching',
   validate({ query: z.object({ limit: z.coerce.number().int().min(1).max(20).default(10) }) }),
