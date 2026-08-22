@@ -20,6 +20,7 @@ import {
   SelectValue,
   Switch,
 } from '@videox/ui';
+import { describeFullCrawlPlan, planFullCrawl } from '@videox/shared';
 import {
   collectionApi,
   type CollectionScheduleSettings,
@@ -92,9 +93,16 @@ export function CollectionSettingsPage() {
     autoRemoveFailedAfterAttempts: '3',
   });
   const [fullKinds, setFullKinds] = React.useState({ gv: true, mv: true, tv: true });
-  const [fullMaxPages, setFullMaxPages] = React.useState('200');
+  const [fullEndPage, setFullEndPage] = React.useState('2755');
+  const [fullPagesPerBatch, setFullPagesPerBatch] = React.useState('140');
+  const [fullBatchIntervalSeconds, setFullBatchIntervalSeconds] = React.useState('60');
   const [fullRunning, setFullRunning] = React.useState(false);
   const [fullResult, setFullResult] = React.useState<string | null>(null);
+  const fullPlan = planFullCrawl({
+    endPage: Number(fullEndPage) || 2755,
+    pagesPerBatch: Number(fullPagesPerBatch) || 140,
+    batchIntervalSeconds: Number(fullBatchIntervalSeconds) || 0,
+  });
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -177,7 +185,7 @@ export function CollectionSettingsPage() {
     }
     if (
       !window.confirm(
-        `确认启动手动全量抓取？将抓取 ${kinds.join('/').toUpperCase()} 各最多 ${Math.max(1, Number(fullMaxPages) || 200)} 页。每日/每周定时任务不受影响。`,
+        `确认启动手动全量抓取？将抓取 ${kinds.join('/').toUpperCase()} ${describeFullCrawlPlan(fullPlan)}。系统会从第 1 页自动跑到结束页。每日/每周定时任务不受影响。`,
       )
     ) {
       return;
@@ -187,10 +195,12 @@ export function CollectionSettingsPage() {
     try {
       const result = await collectionApi.fullCrawl({
         kinds,
-        maxPages: Math.max(1, Math.min(2000, Number(fullMaxPages) || 200)),
+        endPage: fullPlan.endPage,
+        pagesPerBatch: fullPlan.pagesPerBatch,
+        batchIntervalSeconds: fullPlan.batchIntervalSeconds,
       });
       setFullResult(
-        `已入队 ${result.enqueued} 条起始任务（${result.kinds.join('/')}，每类最多 ${result.maxPages} 页）。进度请到「采集任务」查看。`,
+        `已入队 ${result.enqueued} 条起始任务（${result.kinds.join('/')}，${describeFullCrawlPlan(result)}）。系统会自动翻页到结束，进度请到「采集任务」查看。`,
       );
     } catch (e) {
       setFullResult(e instanceof Error ? e.message : String(e));
@@ -366,7 +376,7 @@ export function CollectionSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            站点冷启动或需要整库铺量时使用。从第 1 页翻到源站末页或指定上限；已入库的会跳过但仍继续翻页。不改每日/每周定时任务。
+            填写源站结束页，系统从第 1 页自动分批抓到该页。已入库的会跳过但仍继续翻页。不改每日/每周定时任务。
           </p>
           <div className="flex flex-wrap gap-4">
             {(['gv', 'mv', 'tv'] as const).map((k) => (
@@ -383,17 +393,40 @@ export function CollectionSettingsPage() {
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label>每类最多抓取页数（1-2000）</Label>
+              <Label>结束页数</Label>
               <Input
                 type="number"
                 min={1}
-                max={2000}
-                value={fullMaxPages}
-                onChange={(e) => setFullMaxPages(e.target.value)}
+                max={20000}
+                value={fullEndPage}
+                onChange={(e) => setFullEndPage(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">每页约 20 条。200 页大约 4000 条/类型。</p>
+              <p className="text-xs text-muted-foreground">源站最后一页，例如 2755。每页约 20 条。</p>
+            </div>
+            <div className="space-y-2">
+              <Label>每批次页数</Label>
+              <Input
+                type="number"
+                min={1}
+                max={500}
+                value={fullPagesPerBatch}
+                onChange={(e) => setFullPagesPerBatch(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">例如 140 页一批，2755 页会自动分成 20 批。</p>
+            </div>
+            <div className="space-y-2">
+              <Label>批次间隔（秒）</Label>
+              <Input
+                type="number"
+                min={0}
+                max={3600}
+                value={fullBatchIntervalSeconds}
+                onChange={(e) => setFullBatchIntervalSeconds(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">批与批之间的等待。页与页之间固定 0.5 秒。</p>
             </div>
           </div>
+          <p className="text-sm text-muted-foreground">{describeFullCrawlPlan(fullPlan)}</p>
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={() => void handleFullCrawl()} disabled={fullRunning}>
               {fullRunning ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Play className="mr-2 size-4" />}

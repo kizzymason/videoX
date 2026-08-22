@@ -23,6 +23,7 @@ import {
   type PlayUrlRefreshJobData,
   type R2TransferJobData,
 } from '@videox/api/collection';
+import { fullCrawlBatchIndex, nextFullCrawlDelayMs, planFullCrawl } from '@videox/shared';
 import { logger } from '../logger.js';
 
 /** 采集任务并发入口（由 index.ts 注册到 Worker） */
@@ -155,32 +156,50 @@ async function crawlListJob(job: Job<ListCrawlJobData>): Promise<void> {
   }
 
   // 5. 翻页：每日/每周仍按原逻辑（只在显式带 totalPages 时链式翻页）。
-  // 管理员手动全量抓取带 incremental=false，从第 1 页一直翻到空页或页数上限。
+  // 管理员手动全量抓取带 incremental=false：翻到结束页，每批末尾按批次间隔再开下一批。
   if (job.data.incremental === false) {
     const sourcePages = Math.max(1, Math.ceil((result.data.total ?? 0) / 20) || page);
-    const maxPages = job.data.maxPages ?? job.data.totalPages ?? sourcePages;
-    if (result.data.list.length > 0 && page < maxPages) {
+    const plan = planFullCrawl({
+      endPage: job.data.endPage ?? job.data.maxPages ?? job.data.totalPages ?? sourcePages,
+      pagesPerBatch: job.data.pagesPerBatch,
+      batchIntervalSeconds: job.data.batchIntervalSeconds,
+    });
+    if (result.data.list.length > 0 && page < plan.endPage) {
       const runId = job.data.runId ?? `${targetSite}_${kind}_${Date.now()}`;
+      const delayMs = nextFullCrawlDelayMs(page, plan);
+      const nextPage = page + 1;
+      const nextBatch = fullCrawlBatchIndex(nextPage, plan.pagesPerBatch);
+      if (delayMs > 500) {
+        await logCollectionJob(
+          collectionJobId,
+          'info',
+          `全量抓取下一批：${kind.toUpperCase()} 第 ${nextPage}/${plan.endPage} 页（第 ${nextBatch}/${plan.batchCount} 批），等待 ${Math.round(delayMs / 1000)} 秒`,
+          { nextPage, delayMs, batch: nextBatch, ...plan },
+        );
+      }
       await enqueueCollectionJob({
-        taskId: `${runId}_${kind}_p${page + 1}`,
+        taskId: `${runId}_${kind}_p${nextPage}`,
         type: 'list_crawl',
         payload: {
           targetSite,
           kind,
-          page: page + 1,
+          page: nextPage,
           incremental: false,
-          maxPages,
+          maxPages: plan.endPage,
+          endPage: plan.endPage,
+          pagesPerBatch: plan.pagesPerBatch,
+          batchIntervalSeconds: plan.batchIntervalSeconds,
           runId,
         },
         priority: 20,
-        delayMs: 500,
+        delayMs,
       });
     } else {
       await logCollectionJob(
         collectionJobId,
         'info',
-        `全量抓取本类结束：${kind.toUpperCase()} 第 ${page}/${maxPages} 页，本页新增 ${newCount}`,
-        { page, maxPages, newCount },
+        `全量抓取本类结束：${kind.toUpperCase()} 第 ${page}/${plan.endPage} 页，本页新增 ${newCount}`,
+        { page, newCount, ...plan },
       );
     }
     return;
