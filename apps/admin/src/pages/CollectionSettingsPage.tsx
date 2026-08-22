@@ -89,7 +89,7 @@ export function CollectionSettingsPage() {
   const [pool, setPool] = React.useState<PoolSettingsForm>({
     minAccountCount: '3',
     vipWeightMultiplier: '3',
-    healthCheckIntervalMinutes: '60',
+    healthCheckIntervalMinutes: '10',
     autoRemoveFailedAfterAttempts: '3',
   });
   const [fullKinds, setFullKinds] = React.useState({ gv: true, mv: true, tv: true });
@@ -121,7 +121,7 @@ export function CollectionSettingsPage() {
       setPool({
         minAccountCount: String(s.pool?.minAccountCount ?? 3),
         vipWeightMultiplier: String(s.pool?.vipWeightMultiplier ?? 3),
-        healthCheckIntervalMinutes: String(s.pool?.healthCheckIntervalMinutes ?? 60),
+        healthCheckIntervalMinutes: String(s.pool?.healthCheckIntervalMinutes ?? 10),
         autoRemoveFailedAfterAttempts: String(s.pool?.autoRemoveFailedAfterAttempts ?? 3),
       });
     } catch (e) {
@@ -165,7 +165,7 @@ export function CollectionSettingsPage() {
         pool: {
           minAccountCount: Math.max(1, Number(pool.minAccountCount) || 3),
           vipWeightMultiplier: Math.max(1, Math.min(20, Number(pool.vipWeightMultiplier) || 3)),
-          healthCheckIntervalMinutes: Math.max(5, Number(pool.healthCheckIntervalMinutes) || 60),
+          healthCheckIntervalMinutes: Math.min(120, Math.max(1, Number(pool.healthCheckIntervalMinutes) || 10)),
           autoRemoveFailedAfterAttempts: Math.max(1, Number(pool.autoRemoveFailedAfterAttempts) || 3),
         },
       });
@@ -471,10 +471,14 @@ export function CollectionSettingsPage() {
             <Label>健康检查间隔（分钟）</Label>
             <Input
               type="number"
-              min={5}
+              min={1}
+              max={120}
               value={pool.healthCheckIntervalMinutes}
               onChange={(e) => setPool((s) => ({ ...s, healthCheckIntervalMinutes: e.target.value }))}
             />
+            <p className="text-xs text-muted-foreground">
+              完整 /me 巡检间隔，默认 10 分钟。到期 token 由调度器每分钟自动登录换新，不必等这次巡检。
+            </p>
           </div>
           <div className="space-y-2">
             <Label>连续失败自动禁用次数</Label>

@@ -57,7 +57,7 @@ function upcomingTime(value: string | null | undefined, now: number): string {
   if (!value) return '尚未排期';
   const ms = new Date(value).getTime() - now;
   if (Number.isNaN(ms)) return '—';
-  if (ms <= 0) return '已到期，下次取号或巡检时执行';
+  if (ms <= 0) return '已到期，调度器将自动登录换 token';
   return formatDelta(ms, '后');
 }
 
@@ -90,6 +90,7 @@ function freshnessLabel(value: PoolAccountRow['tokenFreshness']): string {
 function sourceLabel(source: string | null): string {
   if (source === 'checkout') return '采集取号';
   if (source === 'health_check') return '健康巡检';
+  if (source === 'scheduled') return '定时自动';
   if (source === 'manual') return '手动刷新';
   if (source === 'credentials_update') return '更新凭据';
   if (source === 'login') return '账号登录';
@@ -134,6 +135,9 @@ export function CollectionPoolPage() {
   const [searchInput, setSearchInput] = React.useState('');
   const [search, setSearch] = React.useState('');
   const [now, setNow] = React.useState(() => Date.now());
+  const [intervalInput, setIntervalInput] = React.useState('');
+  const [intervalDirty, setIntervalDirty] = React.useState(false);
+  const [savingInterval, setSavingInterval] = React.useState(false);
 
   // 导入弹窗
   const [importOpen, setImportOpen] = React.useState(false);
@@ -207,6 +211,12 @@ export function CollectionPoolPage() {
     return () => clearInterval(timer);
   }, []);
 
+  React.useEffect(() => {
+    if (!intervalDirty && monitor?.healthCheckIntervalMinutes != null) {
+      setIntervalInput(String(monitor.healthCheckIntervalMinutes));
+    }
+  }, [intervalDirty, monitor?.healthCheckIntervalMinutes]);
+
   async function handleImport() {
     const lines = importText.trim().split('\n').filter(Boolean);
     const drafts: ImportDraft[] = [];
@@ -271,6 +281,23 @@ export function CollectionPoolPage() {
     } catch (error) {
       console.error('健康检查失败:', error);
       window.alert(`健康检查失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function handleSaveInterval() {
+    const minutes = Math.min(120, Math.max(1, Number(intervalInput) || 10));
+    setSavingInterval(true);
+    try {
+      await collectionApi.updateSettings({
+        pool: { healthCheckIntervalMinutes: minutes },
+      });
+      setIntervalInput(String(minutes));
+      setIntervalDirty(false);
+      await fetchMonitor();
+    } catch (error) {
+      window.alert(`保存巡检间隔失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSavingInterval(false);
     }
   }
 
@@ -385,8 +412,8 @@ export function CollectionPoolPage() {
             <div className="text-[11px] text-muted-foreground">
               {a.hasCredentials
                 ? a.nextSilentRefreshAt
-                  ? `静默刷新 ${upcomingTime(a.nextSilentRefreshAt, now)}`
-                  : '下次取号时会自动登录续期'
+                  ? `自动换 token ${upcomingTime(a.nextSilentRefreshAt, now)}`
+                  : '到期后会定时自动登录换 token'
                 : '需要补账号密码才会自动续'}
             </div>
           </div>
@@ -455,7 +482,7 @@ export function CollectionPoolPage() {
     <div className="space-y-4">
       <PageHeader
         title="采集号池管理"
-        description="账号密码入库后会自动监控并续 token；本页每 15 秒刷新一次监控状态"
+        description="账号密码入库后，到期 token 会定时自动登录换新，效果与手动刷新相同；本页每 15 秒同步一次状态"
         actions={
           <>
             <Button variant="outline" onClick={() => void handleHealthCheck()}>
@@ -508,18 +535,42 @@ export function CollectionPoolPage() {
             </div>
           </div>
           <div className="rounded-lg border p-3">
-            <div className="text-xs text-muted-foreground">最近号池巡检</div>
-            <div className="mt-1 text-lg font-semibold">{relativeTime(monitor?.lastHealthCheckAt, now)}</div>
+            <div className="text-xs text-muted-foreground">号池巡检间隔</div>
+            <div className="mt-1 flex items-center gap-2">
+              <Input
+                type="number"
+                min={1}
+                max={120}
+                className="h-9 w-20"
+                value={intervalInput}
+                onChange={(e) => {
+                  setIntervalInput(e.target.value);
+                  setIntervalDirty(true);
+                }}
+                aria-label="巡检间隔分钟"
+              />
+              <span className="text-sm text-muted-foreground">分钟</span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={savingInterval || !intervalDirty}
+                onClick={() => void handleSaveInterval()}
+              >
+                {savingInterval ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : null}
+                保存
+              </Button>
+            </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              间隔 {monitor?.healthCheckIntervalMinutes ?? 60} 分钟
+              最近 {relativeTime(monitor?.lastHealthCheckAt, now)}
               {monitor?.nextHealthCheckAt ? ` · 下次 ${upcomingTime(monitor.nextHealthCheckAt, now)}` : ''}
             </div>
           </div>
           <div className="rounded-lg border p-3">
-            <div className="text-xs text-muted-foreground">静默刷新阈值</div>
+            <div className="text-xs text-muted-foreground">定时自动换 Token</div>
             <div className="mt-1 text-2xl font-bold">{Math.round((monitor?.silentRefreshAfterSeconds ?? FRESH_SECONDS) / 60)} 分钟</div>
             <div className="mt-1 text-xs text-muted-foreground">
-              采集取号时超过此时长会自动登录换新 token
+              到期后每分钟自动登录，效果与手动刷新相同
+              {monitor?.lastTokenRefreshAt ? ` · 最近 ${relativeTime(monitor.lastTokenRefreshAt, now)}` : ''}
             </div>
           </div>
         </CardContent>
@@ -629,7 +680,7 @@ export function CollectionPoolPage() {
         <CardContent>
           {!monitor || monitor.events.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              还没有自动取 token 记录。用账号密码添加账号、手动刷新或等待巡检后会出现在这里。
+              还没有自动取 token 记录。添加账号后，到期会定时自动登录；也可手动刷新或跑巡检。
             </p>
           ) : (
             <ul className="divide-y">
@@ -649,7 +700,9 @@ export function CollectionPoolPage() {
                       >
                         {event.event === 'pool_health_check'
                           ? '号池巡检'
-                          : event.event === 'token_login'
+                          : event.event === 'token_scheduled_refresh'
+                            ? '定时换 token'
+                            : event.event === 'token_login'
                             ? '登录入库'
                             : event.event === 'token_refresh_failed'
                               ? '续期失败'

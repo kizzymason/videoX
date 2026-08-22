@@ -10,7 +10,9 @@ import { createClientFromAccount } from '../yitongkan/api-client.js';
 
 /**
  * 热链播放地址缓存（内存 + TTL）
- * 源站 token 有效期约 5 分钟，缓存 4 分钟留安全余量
+ * 源站账号 token 用来向源站换 m3u8；播放器拿到的是 CDN 地址，与号池 token 脱钩。
+ * 更新 account_pools.token 不会踢掉正在播的流，也故意不失效这里的缓存。
+ * 源站 token 有效期约 5 分钟，缓存 4 分钟留安全余量。
  */
 const CACHE_TTL_MS = 4 * 60 * 1000;
 

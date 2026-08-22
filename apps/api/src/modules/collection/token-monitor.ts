@@ -4,16 +4,24 @@
 
 import { desc, eq, sql } from 'drizzle-orm';
 import { db, t } from '../../core/db.js';
+import {
+  TOKEN_FRESH_SECONDS,
+  TOKEN_SILENT_REFRESH_MS,
+  TOKEN_STALE_SECONDS,
+} from './pool-schedule.js';
 import { getPoolConfig } from './storage/config.js';
 import type { AccountPoolEntry } from './types.js';
 
-/** 取号前静默刷新阈值。超过此时长且托管了密码，会先重新登录再使用。 */
-export const TOKEN_SILENT_REFRESH_MS = 4 * 60 * 1000;
-export const TOKEN_FRESH_SECONDS = Math.floor(TOKEN_SILENT_REFRESH_MS / 1000);
-export const TOKEN_STALE_SECONDS = 10 * 60;
+export { TOKEN_FRESH_SECONDS, TOKEN_SILENT_REFRESH_MS, TOKEN_STALE_SECONDS };
 
 export type TokenFreshness = 'fresh' | 'due' | 'stale' | 'unknown';
-export type TokenRefreshSource = 'checkout' | 'manual' | 'health_check' | 'credentials_update' | 'login';
+export type TokenRefreshSource =
+  | 'checkout'
+  | 'manual'
+  | 'health_check'
+  | 'credentials_update'
+  | 'login'
+  | 'scheduled';
 
 export interface PublicPoolAccount {
   id: string;
@@ -132,7 +140,6 @@ export async function getTokenMonitorSnapshot(targetSite: string) {
     unknown: 0,
   };
 
-  let lastCheckMs = 0;
   for (const row of accounts) {
     const acc = row as unknown as AccountPoolEntry;
     const publicAcc = serializePoolAccount(acc);
@@ -140,8 +147,6 @@ export async function getTokenMonitorSnapshot(targetSite: string) {
     else counts.withoutCredentials += 1;
     if (publicAcc.autoRefreshEnabled) counts.autoRefreshReady += 1;
     counts[publicAcc.tokenFreshness] += 1;
-    const check = toIso(acc.lastCheckAt);
-    if (check) lastCheckMs = Math.max(lastCheckMs, new Date(check).getTime());
   }
 
   const [latestHealth] = await db
@@ -151,18 +156,29 @@ export async function getTokenMonitorSnapshot(targetSite: string) {
     .orderBy(desc(t.collectionLogs.createdAt))
     .limit(1);
 
+  const [latestRefresh] = await db
+    .select({ createdAt: t.collectionLogs.createdAt })
+    .from(t.collectionLogs)
+    .where(sql`${t.collectionLogs.context} ->> 'event' = 'token_refresh'`)
+    .orderBy(desc(t.collectionLogs.createdAt))
+    .limit(1);
+
+  // 巡检时间只看巡检日志，不要和 token 刷新写入的 lastCheckAt 混在一起。
   const healthLogMs = latestHealth?.createdAt ? new Date(latestHealth.createdAt).getTime() : 0;
-  const lastHealthCheckAt = lastCheckMs || healthLogMs ? new Date(Math.max(lastCheckMs, healthLogMs)).toISOString() : null;
-  const intervalMs = Math.max(5, pool.healthCheckIntervalMinutes || 60) * 60 * 1000;
+  const lastHealthCheckAt = healthLogMs ? new Date(healthLogMs).toISOString() : null;
+  const intervalMs = pool.healthCheckIntervalMinutes * 60 * 1000;
   const nextHealthCheckAt = lastHealthCheckAt
     ? new Date(new Date(lastHealthCheckAt).getTime() + intervalMs).toISOString()
+    : null;
+  const lastTokenRefreshAt = latestRefresh?.createdAt
+    ? new Date(latestRefresh.createdAt).toISOString()
     : null;
 
   const eventRows = await db
     .select()
     .from(t.collectionLogs)
     .where(
-      sql`${t.collectionLogs.context} ->> 'event' in ('token_login', 'token_refresh', 'token_refresh_failed', 'pool_health_check')`,
+      sql`${t.collectionLogs.context} ->> 'event' in ('token_login', 'token_refresh', 'token_refresh_failed', 'token_scheduled_refresh', 'pool_health_check')`,
     )
     .orderBy(desc(t.collectionLogs.createdAt))
     .limit(20);
@@ -187,6 +203,7 @@ export async function getTokenMonitorSnapshot(targetSite: string) {
     healthCheckIntervalMinutes: pool.healthCheckIntervalMinutes,
     lastHealthCheckAt,
     nextHealthCheckAt,
+    lastTokenRefreshAt,
     counts,
     events,
   };
