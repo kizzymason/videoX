@@ -1,10 +1,12 @@
 import { eq, sql } from 'drizzle-orm';
 import type { MembershipPlan, Order, RedeemCode, RedeemResult, Subscription } from '@videox/shared';
-import { compactRedeemCode, normalizeRedeemInput } from '@videox/shared';
+import { compactRedeemCode, normalizeRedeemInput, PARTNER_PLAN_CODE } from '@videox/shared';
 import { db, t, sqlRows } from '../../core/db.js';
 import { AppError, ErrorCode } from '../../core/errors.js';
 import { logger } from '../../core/logger.js';
 import { generateCode, randomSegment } from './codes.js';
+
+type DbExecutor = Pick<typeof db, 'insert' | 'update' | 'select' | 'execute'>;
 
 export { generateCode } from './codes.js';
 
@@ -31,7 +33,13 @@ export async function listPlans(activeOnly = true): Promise<MembershipPlan[]> {
     .from(t.plans)
     .where(activeOnly ? eq(t.plans.isActive, true) : sql`true`)
     .orderBy(t.plans.sortOrder, t.plans.priceCents);
-  return rows.map(toPlan);
+  return rows.filter((row) => row.code !== PARTNER_PLAN_CODE).map(toPlan);
+}
+
+export async function getPartnerPlan(executor: DbExecutor = db): Promise<typeof t.plans.$inferSelect> {
+  const [plan] = await executor.select().from(t.plans).where(eq(t.plans.code, PARTNER_PLAN_CODE)).limit(1);
+  if (!plan) throw AppError.internal('合伙人套餐未初始化，请先执行数据库迁移');
+  return plan;
 }
 
 function nextOrderNo(): string {
@@ -88,9 +96,10 @@ function runRedeem(params: { code: string; userId: string }, expired: { codeId?:
       plan_id: string;
       status: string;
       expires_at: string | Date | null;
+      grant_days: number | string | null;
     }>(
       sql`
-        SELECT id, plan_id, status, expires_at
+        SELECT id, plan_id, status, expires_at, grant_days
         FROM redeem_codes
         WHERE code = ${typed} OR replace(code, '-', '') = ${compact}
         FOR UPDATE
@@ -124,11 +133,18 @@ function runRedeem(params: { code: string; userId: string }, expired: { codeId?:
       .limit(1);
     if (!user) throw AppError.notFound('用户不存在');
 
+    const grantDays = code.grant_days != null ? Number(code.grant_days) : plan.durationDays;
+    if (!Number.isFinite(grantDays) || grantDays <= 0) {
+      throw AppError.badRequest('兑换码天数无效');
+    }
+    const partnerGrant = code.grant_days != null;
+    const planName = partnerGrant ? `合伙人订阅 ${grantDays} 天` : plan.name;
+
     // 已是会员则从现有到期时间往后顺延，不是从今天重新算。
     const now = new Date();
     const currentExpiry = user.vipExpiresAt && user.vipExpiresAt.getTime() > now.getTime() ? user.vipExpiresAt : now;
     const extended = currentExpiry.getTime() > now.getTime();
-    const newExpiry = new Date(currentExpiry.getTime() + plan.durationDays * 86_400_000);
+    const newExpiry = new Date(currentExpiry.getTime() + grantDays * 86_400_000);
 
     await tx
       .update(t.redeemCodes)
@@ -156,14 +172,14 @@ function runRedeem(params: { code: string; userId: string }, expired: { codeId?:
       source: 'redeem_code',
       status: 'paid',
       redeemCodeId: code.id,
-      note: `卡密兑换：${plan.name}`,
+      note: partnerGrant ? `合伙人订阅：${grantDays} 天` : `卡密兑换：${plan.name}`,
     });
 
-    logger.info({ userId: params.userId, planId: plan.id }, '兑换码使用成功');
+    logger.info({ userId: params.userId, planId: plan.id, grantDays }, '兑换码使用成功');
 
     return {
-      planName: plan.name,
-      durationDays: plan.durationDays,
+      planName,
+      durationDays: grantDays,
       vipExpiresAt: newExpiry.toISOString(),
       extended,
     };
@@ -177,40 +193,51 @@ export async function grantVip(params: {
   operatorId: string;
   note?: string;
 }): Promise<{ vipExpiresAt: string }> {
-  return db.transaction(async (tx) => {
-    const [user] = await tx
-      .select({ id: t.users.id, vipExpiresAt: t.users.vipExpiresAt })
-      .from(t.users)
-      .where(eq(t.users.id, params.userId))
-      .limit(1);
-    if (!user) throw AppError.notFound('用户不存在');
-
-    const now = new Date();
-    const base = user.vipExpiresAt && user.vipExpiresAt.getTime() > now.getTime() ? user.vipExpiresAt : now;
-    const newExpiry = new Date(base.getTime() + params.days * 86_400_000);
-
-    await tx.update(t.users).set({ vipExpiresAt: newExpiry, updatedAt: now }).where(eq(t.users.id, params.userId));
-
-    await tx.insert(t.subscriptions).values({
+  return db.transaction(async (tx) =>
+    applyVipDays(tx, {
       userId: params.userId,
-      planId: null,
-      status: 'active',
-      startsAt: now,
-      expiresAt: newExpiry,
-    });
-
-    await tx.insert(t.orders).values({
-      orderNo: nextOrderNo(),
-      userId: params.userId,
-      planId: null,
-      amountCents: 0,
-      source: 'manual_grant',
-      status: 'paid',
+      days: params.days,
       note: params.note ?? `管理员赠送 ${params.days} 天`,
-    });
+    }),
+  );
+}
 
-    return { vipExpiresAt: newExpiry.toISOString() };
+export async function applyVipDays(
+  tx: DbExecutor,
+  params: { userId: string; days: number; note: string },
+): Promise<{ vipExpiresAt: string }> {
+  const [user] = await tx
+    .select({ id: t.users.id, vipExpiresAt: t.users.vipExpiresAt })
+    .from(t.users)
+    .where(eq(t.users.id, params.userId))
+    .limit(1);
+  if (!user) throw AppError.notFound('用户不存在');
+
+  const now = new Date();
+  const base = user.vipExpiresAt && user.vipExpiresAt.getTime() > now.getTime() ? user.vipExpiresAt : now;
+  const newExpiry = new Date(base.getTime() + params.days * 86_400_000);
+
+  await tx.update(t.users).set({ vipExpiresAt: newExpiry, updatedAt: now }).where(eq(t.users.id, params.userId));
+
+  await tx.insert(t.subscriptions).values({
+    userId: params.userId,
+    planId: null,
+    status: 'active',
+    startsAt: now,
+    expiresAt: newExpiry,
   });
+
+  await tx.insert(t.orders).values({
+    orderNo: nextOrderNo(),
+    userId: params.userId,
+    planId: null,
+    amountCents: 0,
+    source: 'manual_grant',
+    status: 'paid',
+    note: params.note,
+  });
+
+  return { vipExpiresAt: newExpiry.toISOString() };
 }
 
 export async function revokeVip(userId: string): Promise<void> {
@@ -236,8 +263,12 @@ export async function generateCodes(params: {
   expiresAt?: Date | null;
   note?: string;
   createdBy: string;
+  grantDays?: number | null;
+  salePriceCents?: number | null;
+  executor?: DbExecutor;
 }): Promise<GenerateCodesResult> {
-  const [plan] = await db.select().from(t.plans).where(eq(t.plans.id, params.planId)).limit(1);
+  const exec = params.executor ?? db;
+  const [plan] = await exec.select().from(t.plans).where(eq(t.plans.id, params.planId)).limit(1);
   if (!plan) throw AppError.notFound('套餐不存在');
 
   const batchId = `B${Date.now().toString(36).toUpperCase()}${randomSegment(4)}`;
@@ -247,7 +278,7 @@ export async function generateCodes(params: {
     const remaining = params.count - created.length;
     const batch = Array.from({ length: remaining }, () => generateCode(params.prefix));
 
-    const inserted = await db
+    const inserted = await exec
       .insert(t.redeemCodes)
       .values(
         batch.map((code) => ({
@@ -258,6 +289,8 @@ export async function generateCodes(params: {
           expiresAt: params.expiresAt ?? null,
           note: params.note ?? null,
           createdBy: params.createdBy,
+          grantDays: params.grantDays ?? null,
+          salePriceCents: params.salePriceCents ?? null,
         })),
       )
       .onConflictDoNothing({ target: t.redeemCodes.code })
@@ -270,13 +303,18 @@ export async function generateCodes(params: {
 }
 
 export function toRedeemCode(
-  row: typeof t.redeemCodes.$inferSelect & { planName?: string | null; usedByUsername?: string | null },
+  row: typeof t.redeemCodes.$inferSelect & {
+    planName?: string | null;
+    usedByUsername?: string | null;
+    createdByUsername?: string | null;
+  },
 ): RedeemCode {
+  const grantDays = row.grantDays ?? null;
   return {
     id: row.id,
     code: row.code,
     planId: row.planId,
-    planName: row.planName ?? '',
+    planName: grantDays != null ? `合伙人订阅 ${grantDays} 天` : (row.planName ?? ''),
     batchId: row.batchId,
     status: row.status,
     usedByUserId: row.usedByUserId,
@@ -284,6 +322,10 @@ export function toRedeemCode(
     usedAt: row.usedAt?.toISOString() ?? null,
     expiresAt: row.expiresAt?.toISOString() ?? null,
     note: row.note,
+    grantDays,
+    salePriceCents: row.salePriceCents ?? null,
+    createdByUserId: row.createdBy ?? null,
+    createdByUsername: row.createdByUsername ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -348,7 +390,7 @@ export async function expireSubscriptions(): Promise<number> {
 
 /** 导出为 CSV，供后台下载。 */
 export function codesToCsv(codes: RedeemCode[]): string {
-  const header = '兑换码,套餐,状态,批次,使用者,使用时间,过期时间,备注,创建时间';
+  const header = '兑换码,套餐,天数,售价元,状态,批次,使用者,使用时间,过期时间,创建人,备注,创建时间';
   const escape = (v: string | null | undefined) => `"${(v ?? '').replace(/"/g, '""')}"`;
   const statusLabels: Record<string, string> = {
     unused: '未使用',
@@ -360,11 +402,14 @@ export function codesToCsv(codes: RedeemCode[]): string {
     [
       escape(c.code),
       escape(c.planName),
+      escape(c.grantDays != null ? String(c.grantDays) : ''),
+      escape(c.salePriceCents != null ? (c.salePriceCents / 100).toFixed(2) : ''),
       escape(statusLabels[c.status] ?? c.status),
       escape(c.batchId),
       escape(c.usedByUsername),
       escape(c.usedAt),
       escape(c.expiresAt),
+      escape(c.createdByUsername),
       escape(c.note),
       escape(c.createdAt),
     ].join(','),

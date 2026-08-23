@@ -28,6 +28,8 @@ import type {
   UserRole,
   UserStatus,
   CaptionFormat,
+  PartnerLevel,
+  PartnerStatus,
   VideoKind,
   VideoStatus,
   VideoVisibility,
@@ -379,6 +381,8 @@ export const redeemCodes = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }),
     note: varchar('note', { length: 200 }),
     createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    grantDays: integer('grant_days'),
+    salePriceCents: integer('sale_price_cents'),
     ...timestamps,
   },
   (t) => [
@@ -386,7 +390,29 @@ export const redeemCodes = pgTable(
     index('redeem_codes_status_idx').on(t.status),
     index('redeem_codes_batch_idx').on(t.batchId),
     index('redeem_codes_plan_idx').on(t.planId),
+    index('redeem_codes_created_by_idx').on(t.createdBy),
   ],
+);
+
+/** 合伙人档案：登录仍走 users.role，配额与占用单独成行以免锁用户主行。 */
+export const partners = pgTable(
+  'partners',
+  {
+    userId: uuid('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: varchar('status', { length: 16 }).$type<PartnerStatus>().notNull().default('active'),
+    level: varchar('level', { length: 16 }).$type<PartnerLevel>().notNull().default('standard'),
+    codeQuota: integer('code_quota').notNull().default(0),
+    daysQuota: integer('days_quota').notNull().default(0),
+    codesIssued: integer('codes_issued').notNull().default(0),
+    daysIssued: integer('days_issued').notNull().default(0),
+    note: varchar('note', { length: 200 }),
+    appointedAt: timestamp('appointed_at', { withTimezone: true }).notNull().default(now),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index('partners_status_idx').on(t.status)],
 );
 
 export const subscriptions = pgTable(

@@ -69,6 +69,7 @@ export function StatusBadge({
 
 export function RoleBadge({ role }: { role: string }) {
   if (role === 'admin') return <Badge>管理员</Badge>;
+  if (role === 'partner') return <Badge variant="secondary">合伙人</Badge>;
   if (role === 'vip') return <Badge variant="vip">会员</Badge>;
   return (
     <Badge variant="outline" className="font-normal text-muted-foreground">

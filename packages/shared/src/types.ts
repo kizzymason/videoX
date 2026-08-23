@@ -11,6 +11,8 @@ import type {
   UserRole,
   UserStatus,
   CaptionFormat,
+  PartnerLevel,
+  PartnerStatus,
   VideoKind,
   VideoStatus,
   VideoVisibility,
@@ -114,7 +116,61 @@ export interface RedeemCode {
   usedAt: string | null;
   expiresAt: string | null;
   note: string | null;
+  grantDays: number | null;
+  salePriceCents: number | null;
+  createdByUserId: string | null;
+  createdByUsername: string | null;
   createdAt: string;
+}
+
+export interface PartnerQuota {
+  codeQuota: number;
+  daysQuota: number;
+  codesIssued: number;
+  daysIssued: number;
+  codeRemaining: number;
+  daysRemaining: number;
+}
+
+export interface PartnerProfile extends PartnerQuota {
+  userId: string;
+  status: PartnerStatus;
+  level: PartnerLevel;
+  note: string | null;
+  appointedAt: string;
+  revokedAt: string | null;
+}
+
+export interface PartnerOverview extends PartnerQuota {
+  customerCount: number;
+  usedCodeCount: number;
+  unusedCodeCount: number;
+  revenueCents: number;
+  expiringSoonCount: number;
+}
+
+export interface PartnerCustomer {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  vipExpiresAt: string | null;
+  isExpired: boolean;
+  daysRemaining: number;
+  codeCount: number;
+  lastRedeemedAt: string | null;
+}
+
+export interface AdminPartnerRow extends PartnerProfile {
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  email: string;
+  role: UserRole;
+  customerCount: number;
+  usedCodeCount: number;
+  unusedCodeCount: number;
+  revenueCents: number;
 }
 
 export interface RedeemResult {

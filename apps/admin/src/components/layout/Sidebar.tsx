@@ -9,6 +9,7 @@ import {
   CreditCard,
   Film,
   Gauge,
+  Handshake,
   Image,
   KeyRound,
   LayoutDashboard,
@@ -66,6 +67,7 @@ export const NAV_GROUPS: Group[] = [
     items: [
       { to: '/plans', label: '套餐管理', icon: CreditCard },
       { to: '/redeem-codes', label: '卡密管理', icon: KeyRound },
+      { to: '/partners', label: '合伙人', icon: Handshake },
       { to: '/orders', label: '订单流水', icon: ReceiptText },
     ],
   },

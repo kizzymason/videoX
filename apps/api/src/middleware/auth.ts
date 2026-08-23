@@ -1,6 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { eq } from 'drizzle-orm';
-import { ROLE_LEVEL, type UserRole } from '@videox/shared';
+import { isComplimentaryVip, ROLE_LEVEL, type UserRole } from '@videox/shared';
 import { db, t } from '../core/db.js';
 import { AppError, ErrorCode } from '../core/errors.js';
 import { verifyAccessToken } from '../modules/auth/tokens.js';
@@ -36,7 +36,7 @@ function toContext(payload: { sub: string; role: UserRole; vipExp: number | null
     id: payload.sub,
     role: payload.role,
     vipExpiresAt,
-    isVip: payload.role === 'admin' || (vipExpiresAt !== null && vipExpiresAt.getTime() > Date.now()),
+    isVip: isComplimentaryVip(payload.role) || (vipExpiresAt !== null && vipExpiresAt.getTime() > Date.now()),
   };
 }
 
@@ -73,13 +73,19 @@ export const requireAdmin: RequestHandler = (req, _res, next) => {
   next();
 };
 
+export const requirePartner: RequestHandler = (req, _res, next) => {
+  if (!req.auth) return next(AppError.unauthorized('请先登录'));
+  if (req.auth.role !== 'partner') return next(AppError.forbidden('需要合伙人权限'));
+  next();
+};
+
 /**
  * 会员硬校验：不信任 access token 里的 vipExp 快照，回源数据库确认。
  * 只在真正涉及付费内容的入口调用（播放票据、加密密钥）。
  */
 export async function assertVipFresh(req: Request): Promise<boolean> {
   if (!req.auth) return false;
-  if (req.auth.role === 'admin') return true;
+  if (isComplimentaryVip(req.auth.role)) return true;
 
   const [user] = await db
     .select({ vipExpiresAt: t.users.vipExpiresAt, status: t.users.status })

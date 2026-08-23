@@ -1,0 +1,75 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@videox/ui/theme.css';
+
+@source '../../../packages/ui/src';
+
+:root,
+.dark {
+  --background: oklch(0.16 0.014 270);
+  --foreground: oklch(0.96 0.01 90);
+  --card: oklch(0.2 0.016 270);
+  --card-foreground: oklch(0.96 0.01 90);
+  --popover: oklch(0.2 0.016 270);
+  --popover-foreground: oklch(0.96 0.01 90);
+  --primary: oklch(0.82 0.13 85);
+  --primary-foreground: oklch(0.18 0.02 80);
+  --secondary: oklch(0.26 0.02 270);
+  --secondary-foreground: oklch(0.94 0.01 90);
+  --muted: oklch(0.24 0.016 270);
+  --muted-foreground: oklch(0.72 0.02 270);
+  --accent: oklch(0.28 0.03 80);
+  --accent-foreground: oklch(0.94 0.04 85);
+  --border: oklch(0.3 0.02 270);
+  --input: oklch(0.3 0.02 270);
+  --ring: oklch(0.82 0.13 85);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100dvh;
+    background: var(--background);
+  }
+}
+
+.partner-shell {
+  min-height: 100dvh;
+  margin: 0 auto;
+  width: min(100%, 430px);
+  background:
+    radial-gradient(1200px 400px at 50% -10%, oklch(0.32 0.06 85 / 0.35), transparent 60%),
+    var(--background);
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 0.04);
+}
+
+.partner-main {
+  padding: 16px 16px calc(88px + env(safe-area-inset-bottom));
+}
+
+.partner-nav {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  z-index: 30;
+  width: min(100%, 430px);
+  transform: translateX(-50%);
+  padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
+  background: oklch(0.14 0.016 270 / 0.92);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid oklch(1 0 0 / 0.06);
+}
+
+.stat-card {
+  border-radius: 1.1rem;
+  border: 1px solid oklch(1 0 0 / 0.06);
+  background: oklch(0.21 0.018 270);
+  padding: 14px 16px;
+}
+
+.code-mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  font-size: 0.92rem;
+}

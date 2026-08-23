@@ -11,8 +11,10 @@ import type {
   CurrentUser,
   DashboardOverview,
   MembershipPlan,
+  AdminPartnerRow,
   Order,
   Paginated,
+  PartnerCustomer,
   RedeemCode,
   SiteSettings,
   StorageProfile,
@@ -74,7 +76,7 @@ export interface AdminUserRow {
   username: string;
   displayName: string;
   avatarUrl: string | null;
-  role: 'user' | 'vip' | 'admin';
+  role: 'user' | 'vip' | 'partner' | 'admin';
   status: 'active' | 'banned' | 'pending';
   isVip: boolean;
   vipExpiresAt: string | null;
@@ -274,6 +276,23 @@ export const membershipApi = {
   bulkDeleteCodes: (ids: string[]) => api.post<{ deleted: number }>('/admin/redeem-codes/bulk-delete', { ids }),
 
   orders: (query: Query) => api.get<Paginated<Order>>('/admin/orders', query),
+};
+
+export const partnersApi = {
+  list: (query: Query) => api.get<Paginated<AdminPartnerRow>>('/admin/partners', query),
+  appoint: (body: { userId: string; level: 'standard' | 'plus'; codeQuota: number; daysQuota: number; note?: string }) =>
+    api.post<AdminPartnerRow>('/admin/partners', body),
+  update: (id: string, body: { level?: 'standard' | 'plus'; codeQuota?: number; daysQuota?: number; note?: string | null }) =>
+    api.patch<AdminPartnerRow>(`/admin/partners/${id}`, body),
+  revoke: (id: string) => api.post<null>(`/admin/partners/${id}/revoke`),
+  detail: (id: string) =>
+    api.get<{
+      partner: AdminPartnerRow;
+      customers: PartnerCustomer[];
+      customerTotal: number;
+      codes: RedeemCode[];
+      codeTotal: number;
+    }>(`/admin/partners/${id}`),
 };
 
 /** CSV 导出走 raw Response，再交给浏览器下载，避免被 unwrap 当 JSON 解析。 */

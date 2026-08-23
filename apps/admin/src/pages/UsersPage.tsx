@@ -172,6 +172,7 @@ export function UsersPage() {
             <SelectContent>
               <SelectItem value="user">普通</SelectItem>
               <SelectItem value="vip">会员</SelectItem>
+              <SelectItem value="partner">合伙人</SelectItem>
               <SelectItem value="admin">管理员</SelectItem>
             </SelectContent>
           </Select>
@@ -244,6 +245,7 @@ export function UsersPage() {
             { value: 'all', label: '全部角色' },
             { value: 'user', label: '普通用户' },
             { value: 'vip', label: '会员' },
+            { value: 'partner', label: '合伙人' },
             { value: 'admin', label: '管理员' },
           ]}
         />

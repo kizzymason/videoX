@@ -215,6 +215,27 @@ suite('卡密兑换行锁防双花', async () => {
     expect(orphans).toHaveLength(0);
   });
 
+  it('带 grant_days 的卡密按覆盖天数兑换，而不是套餐天数', async () => {
+    const userId = userIds[1]!;
+    await db.update(t.users).set({ vipExpiresAt: null }).where(eq(t.users.id, userId));
+    const { codes } = await generateCodes({
+      planId,
+      count: 1,
+      prefix: 'GD',
+      createdBy: userId,
+      grantDays: 5,
+    });
+    const result = await redeemCode({ code: codes[0]!, userId });
+    expect(result.durationDays).toBe(5);
+    const [user] = await db
+      .select({ vipExpiresAt: t.users.vipExpiresAt })
+      .from(t.users)
+      .where(eq(t.users.id, userId));
+    const days = (user!.vipExpiresAt!.getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(4);
+    expect(days).toBeLessThan(6);
+  });
+
   it('批量生成的卡密互不重复', async () => {
     const { batchId, codes } = await generateCodes({
       planId,

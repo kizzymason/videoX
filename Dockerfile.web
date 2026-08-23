@@ -10,7 +10,8 @@ RUN npm ci && npm rebuild lightningcss --foreground-scripts
 ENV VITE_API_BASE_URL=/api
 RUN npm run build -w @videox/web-pc \
   && npm run build -w @videox/web-mobile -- --base /m/ \
-  && npm run build -w @videox/admin -- --base /admin/
+  && npm run build -w @videox/admin -- --base /admin/ \
+  && npm run build -w @videox/partner -- --base /admins/
 
 FROM nginx:1.27-alpine
 COPY deploy/nginx-main.conf /etc/nginx/nginx.conf
@@ -23,4 +24,5 @@ RUN mkdir -p /var/cache/nginx/videox /data/storage /etc/nginx/certs
 COPY --from=build /app/apps/web-pc/dist /usr/share/nginx/html
 COPY --from=build /app/apps/web-mobile/dist /usr/share/nginx/html/m
 COPY --from=build /app/apps/admin/dist /usr/share/nginx/html/admin
+COPY --from=build /app/apps/partner/dist /usr/share/nginx/html/admins
 EXPOSE 80 443
