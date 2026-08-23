@@ -85,6 +85,19 @@ const PLANS = [
     isRecommended: false,
     sortOrder: 4,
   },
+  {
+    code: 'partner-custom',
+    name: '合伙人订阅',
+    description: '合伙人自定义天数卡密，不在前台展示。',
+    durationDays: 1,
+    priceCents: 0,
+    originalPriceCents: null,
+    perks: [],
+    badge: null,
+    isRecommended: false,
+    sortOrder: 99,
+    isActive: false,
+  },
 ];
 
 const DEFAULT_SITE_SETTINGS = {
@@ -290,6 +303,7 @@ async function main() {
         badge: sql`excluded.badge`,
         isRecommended: sql`excluded.is_recommended`,
         sortOrder: sql`excluded.sort_order`,
+        isActive: sql`excluded.is_active`,
       },
     })
     .returning();

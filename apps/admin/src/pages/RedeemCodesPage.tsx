@@ -113,6 +113,29 @@ export function RedeemCodesPage() {
       ),
     },
     { key: 'plan', header: '套餐', cell: (row) => <span className="text-muted-foreground">{row.planName}</span> },
+    {
+      key: 'grantDays',
+      header: '天数',
+      cell: (row) => (
+        <span className="tabular-nums text-muted-foreground">{row.grantDays != null ? `${row.grantDays} 天` : '—'}</span>
+      ),
+    },
+    {
+      key: 'sale',
+      header: '售价',
+      cell: (row) => (
+        <span className="tabular-nums text-muted-foreground">
+          {row.salePriceCents != null ? `¥${(row.salePriceCents / 100).toFixed(2)}` : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'creator',
+      header: '创建人',
+      cell: (row) => (
+        <span className="text-muted-foreground">{row.createdByUsername ? `@${row.createdByUsername}` : '—'}</span>
+      ),
+    },
     { key: 'status', header: '状态', cell: (row) => <StatusBadge status={row.status} /> },
     {
       key: 'usedBy',

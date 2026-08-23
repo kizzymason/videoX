@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { eq } from 'drizzle-orm';
-import { redeemSchema } from '@videox/shared';
+import { isComplimentaryVip, redeemSchema } from '@videox/shared';
 import { db, t } from '../../core/db.js';
 import { AppError } from '../../core/errors.js';
 import { asyncHandler, ok } from '../../core/respond.js';
@@ -43,7 +43,7 @@ membershipRouter.get(
       .limit(1);
     if (!user) throw AppError.notFound('用户不存在');
 
-    const isVip = user.role === 'admin' || (user.vipExpiresAt !== null && user.vipExpiresAt.getTime() > Date.now());
+    const isVip = isComplimentaryVip(user.role) || (user.vipExpiresAt !== null && user.vipExpiresAt.getTime() > Date.now());
     const subscriptions = await getMySubscriptions(req.auth!.id);
 
     ok(res, {

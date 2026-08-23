@@ -1,6 +1,7 @@
 import { hash, verify } from '@node-rs/argon2';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import type { CurrentUser } from '@videox/shared';
+import { isComplimentaryVip } from '@videox/shared';
 import { db, t, sqlRows } from '../../core/db.js';
 import { AppError, ErrorCode } from '../../core/errors.js';
 import { createRefreshToken, hashRefreshToken, signAccessToken } from './tokens.js';
@@ -13,7 +14,7 @@ const ARGON2_OPTIONS = { memoryCost: 19456, timeCost: 2, parallelism: 1 } as con
 export type UserRow = typeof t.users.$inferSelect;
 
 export function toCurrentUser(user: UserRow): CurrentUser {
-  const isVip = user.role === 'admin' || (user.vipExpiresAt !== null && user.vipExpiresAt.getTime() > Date.now());
+  const isVip = isComplimentaryVip(user.role) || (user.vipExpiresAt !== null && user.vipExpiresAt.getTime() > Date.now());
   return {
     id: user.id,
     email: user.email ?? '',

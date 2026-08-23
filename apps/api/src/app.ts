@@ -28,6 +28,7 @@ import { mediaRouter } from './modules/media/routes.js';
 import { seoRouter } from './modules/seo/routes.js';
 import { staticRouter } from './modules/static/routes.js';
 import { collectionRouter } from './modules/collection/routes.js';
+import { partnerRouter } from './modules/partner/routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -106,6 +107,7 @@ export function createApp(): Express {
   app.use('/api/uploads', uploadsRouter);
   app.use('/api/membership', membershipRouter);
   app.use('/api/recommend', recommendRouter);
+  app.use('/api/partner', partnerRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/admin', publishGateRouter);
   app.use('/api/admin', captionRouter);

@@ -14,6 +14,7 @@ import { BannersPage } from './pages/BannersPage';
 import { PlansPage } from './pages/PlansPage';
 import { RedeemCodesPage } from './pages/RedeemCodesPage';
 import { OrdersPage } from './pages/OrdersPage';
+import { PartnersPage } from './pages/PartnersPage';
 import { UsersPage } from './pages/UsersPage';
 import { StoragePage } from './pages/StoragePage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -84,6 +85,7 @@ export function App() {
           <Route path="recommend" element={<RecommendPage />} />
           <Route path="plans" element={<PlansPage />} />
           <Route path="redeem-codes" element={<RedeemCodesPage />} />
+          <Route path="partners" element={<PartnersPage />} />
           <Route path="orders" element={<OrdersPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="storage" element={<StoragePage />} />

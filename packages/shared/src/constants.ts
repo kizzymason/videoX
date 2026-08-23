@@ -1,13 +1,33 @@
 /** 全站共享的枚举与常量。前后端唯一事实来源。 */
 
-export const USER_ROLES = ['user', 'vip', 'admin'] as const;
+export const USER_ROLES = ['user', 'vip', 'partner', 'admin'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const ROLE_LEVEL: Record<UserRole, number> = {
   user: 0,
   vip: 1,
+  partner: 50,
   admin: 100,
 };
+
+/** 管理员与合伙人自带全站视频会员，不看 vipExpiresAt。 */
+export function isComplimentaryVip(role: UserRole): boolean {
+  return role === 'admin' || role === 'partner';
+}
+
+export const PARTNER_STATUSES = ['active', 'revoked'] as const;
+export type PartnerStatus = (typeof PARTNER_STATUSES)[number];
+
+export const PARTNER_LEVELS = ['standard', 'plus'] as const;
+export type PartnerLevel = (typeof PARTNER_LEVELS)[number];
+
+export const PARTNER_PLAN_CODE = 'partner-custom';
+export const PARTNER_CODE_PREFIX = 'P';
+export const PARTNER_GENERATE_MAX = 200;
+
+export function partnerLevelLabel(level: PartnerLevel): string {
+  return level === 'plus' ? '核心合伙人' : '普通合伙人';
+}
 
 export const USER_STATUSES = ['active', 'banned'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];

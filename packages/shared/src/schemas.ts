@@ -7,6 +7,9 @@ import {
   ORDER_STATUSES,
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
+  PARTNER_GENERATE_MAX,
+  PARTNER_LEVELS,
+  PARTNER_STATUSES,
   REDEEM_CODE_STATUSES,
   SORT_OPTIONS,
   STORAGE_DRIVERS,
@@ -228,6 +231,48 @@ export const grantVipSchema = z.object({
   userId: idSchema,
   days: z.coerce.number().int().min(1).max(36500),
   note: z.string().max(200).optional(),
+});
+
+export const generatePartnerCodesSchema = z.object({
+  days: z.coerce.number().int().min(1).max(36500),
+  count: z.coerce.number().int().min(1).max(PARTNER_GENERATE_MAX),
+  salePriceYuan: z.coerce.number().min(0).max(100_000),
+  expiresAt: z.string().datetime().nullable().optional(),
+  note: z.string().max(200).optional(),
+});
+
+export const partnerGrantSchema = z.object({
+  days: z.coerce.number().int().min(1).max(36500),
+});
+
+export const partnerCustomerQuerySchema = paginationSchema.extend({
+  q: z.string().max(64).optional(),
+  expiry: z.enum(['all', 'active', 'expiring', 'expired']).optional().default('all'),
+});
+
+export const partnerCodeQuerySchema = paginationSchema.extend({
+  status: z.enum(REDEEM_CODE_STATUSES).optional(),
+  q: z.string().max(64).optional(),
+});
+
+export const appointPartnerSchema = z.object({
+  userId: idSchema,
+  level: z.enum(PARTNER_LEVELS).default('standard'),
+  codeQuota: z.coerce.number().int().min(0).max(1_000_000),
+  daysQuota: z.coerce.number().int().min(0).max(36500 * 1000),
+  note: z.string().max(200).nullable().optional(),
+});
+
+export const updatePartnerSchema = z.object({
+  level: z.enum(PARTNER_LEVELS).optional(),
+  codeQuota: z.coerce.number().int().min(0).max(1_000_000).optional(),
+  daysQuota: z.coerce.number().int().min(0).max(36500 * 1000).optional(),
+  note: z.string().max(200).nullable().optional(),
+});
+
+export const adminPartnerQuerySchema = paginationSchema.extend({
+  q: z.string().max(120).optional(),
+  status: z.enum(PARTNER_STATUSES).optional(),
 });
 
 // --------------------------------------------------------------------------

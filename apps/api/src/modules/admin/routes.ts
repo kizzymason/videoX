@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { and, desc, eq, inArray, not, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import {
   aiProfileSchema,
@@ -71,10 +72,12 @@ import { getVideoRetention, getVisitorInsights } from '../analytics/service.js';
 import { aggregateDailyStats, getDashboardOverview, getTopVideos } from './dashboard.js';
 import { audit, listAuditLogs } from './audit.js';
 import { invalidateMediaCache } from '../media/routes.js';
+import { adminPartnerRouter } from './partner-routes.js';
 
 export const adminRouter: Router = Router();
 
 adminRouter.use(requireAuth, requireAdmin);
+adminRouter.use(adminPartnerRouter);
 
 const idParam = z.object({ id: z.string().min(1).max(64) });
 
@@ -443,7 +446,7 @@ adminRouter.get(
       page: number;
       pageSize: number;
       q?: string;
-      role?: 'user' | 'vip' | 'admin';
+      role?: 'user' | 'vip' | 'partner' | 'admin';
       status?: 'active' | 'banned';
       vipOnly?: boolean;
     }>(req);
@@ -489,7 +492,7 @@ adminRouter.get(
       paginated(
         rows.map((r) => ({
           ...r,
-          isVip: r.role === 'admin' || (r.vipExpiresAt !== null && r.vipExpiresAt.getTime() > Date.now()),
+          isVip: r.role === 'admin' || r.role === 'partner' || (r.vipExpiresAt !== null && r.vipExpiresAt.getTime() > Date.now()),
           vipExpiresAt: r.vipExpiresAt?.toISOString() ?? null,
           lastLoginAt: r.lastLoginAt?.toISOString() ?? null,
           createdAt: r.createdAt.toISOString(),
@@ -513,12 +516,25 @@ adminRouter.patch(
       throw AppError.badRequest('不能取消自己的管理员权限');
     }
 
+    const [current] = await db.select({ role: t.users.role }).from(t.users).where(eq(t.users.id, id)).limit(1);
+    if (!current) throw AppError.notFound('用户不存在');
+
+    if (input.role === 'partner' && current.role !== 'partner') {
+      const { appointPartner } = await import('../partner/service.js');
+      await appointPartner({ userId: id, level: 'standard', codeQuota: 0, daysQuota: 0 });
+    }
+
     const [updated] = await db
       .update(t.users)
       .set({ ...input, updatedAt: new Date() })
       .where(eq(t.users.id, id))
       .returning({ id: t.users.id, role: t.users.role, status: t.users.status });
     if (!updated) throw AppError.notFound('用户不存在');
+
+    if (current.role === 'partner' && typeof input.role === 'string' && input.role !== 'partner') {
+      const { revokePartner } = await import('../partner/service.js');
+      await revokePartner(id);
+    }
 
     // 封禁后立刻踢下线。
     if (input.status === 'banned') {
@@ -1069,6 +1085,8 @@ async function queryCodes(q: {
   batchId?: string;
   q?: string;
 }) {
+  const usedByUsers = alias(t.users, 'redeem_used_by');
+  const createdByUsers = alias(t.users, 'redeem_created_by');
   const filters = [];
   if (q.status) filters.push(eq(t.redeemCodes.status, q.status as 'unused'));
   if (q.planId) filters.push(eq(t.redeemCodes.planId, q.planId));
@@ -1089,14 +1107,18 @@ async function queryCodes(q: {
         expiresAt: t.redeemCodes.expiresAt,
         note: t.redeemCodes.note,
         createdBy: t.redeemCodes.createdBy,
+        grantDays: t.redeemCodes.grantDays,
+        salePriceCents: t.redeemCodes.salePriceCents,
         createdAt: t.redeemCodes.createdAt,
         updatedAt: t.redeemCodes.updatedAt,
         planName: t.plans.name,
-        usedByUsername: t.users.username,
+        usedByUsername: usedByUsers.username,
+        createdByUsername: createdByUsers.username,
       })
       .from(t.redeemCodes)
       .leftJoin(t.plans, eq(t.plans.id, t.redeemCodes.planId))
-      .leftJoin(t.users, eq(t.users.id, t.redeemCodes.usedByUserId))
+      .leftJoin(usedByUsers, eq(usedByUsers.id, t.redeemCodes.usedByUserId))
+      .leftJoin(createdByUsers, eq(createdByUsers.id, t.redeemCodes.createdBy))
       .where(where)
       .orderBy(desc(t.redeemCodes.createdAt))
       .limit(q.pageSize)
@@ -1179,8 +1201,20 @@ adminRouter.post(
   asyncHandler(async (req, res) => {
     const { ids } = body<{ ids: string[] }>(req);
     const unique = [...new Set(ids)];
+    const existing = await db
+      .select({
+        createdBy: t.redeemCodes.createdBy,
+        status: t.redeemCodes.status,
+        grantDays: t.redeemCodes.grantDays,
+      })
+      .from(t.redeemCodes)
+      .where(inArray(t.redeemCodes.id, unique));
     const result = await db.delete(t.redeemCodes).where(inArray(t.redeemCodes.id, unique));
     const deleted = result.rowCount ?? 0;
+    if (existing.length > 0) {
+      const { refundPartnerCodeQuota } = await import('../partner/service.js');
+      await refundPartnerCodeQuota(existing);
+    }
     await audit(req, 'redeem_code.bulk_delete', undefined, { requested: unique.length, deleted });
     ok(res, { deleted }, `已删除 ${deleted} 张卡密`);
   }),

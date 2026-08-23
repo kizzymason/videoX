@@ -64,6 +64,13 @@
       "when": 1787390000000,
       "tag": "0008_home_recommend",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787458000000,
+      "tag": "0009_partner_console",
+      "breakpoints": true
     }
   ]
 }

@@ -129,6 +129,7 @@ export function ProfilePage() {
                 <p className="font-medium">{user.displayName}</p>
                 {user.isVip ? <Badge>会员</Badge> : null}
                 {user.role === 'admin' ? <Badge variant="secondary">管理员</Badge> : null}
+                {user.role === 'partner' ? <Badge variant="secondary">合伙人</Badge> : null}
               </div>
               <p className="text-sm text-muted-foreground">
                 {user.email} · 注册于 {formatDate(user.createdAt)}
