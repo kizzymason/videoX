@@ -5,6 +5,8 @@
 
 import { z } from 'zod';
 
+const scheduleKindsSchema = z.array(z.enum(['gv', 'mv', 'tv'])).max(3);
+
 export const collectionSettingsPatchSchema = z.object({
   storage: z
     .object({
@@ -19,6 +21,7 @@ export const collectionSettingsPatchSchema = z.object({
   dailySchedule: z
     .object({
       enabled: z.boolean().optional(),
+      kinds: scheduleKindsSchema.optional(),
       pageCountPerRun: z.number().int().min(1).max(200).optional(),
       incremental: z.boolean().optional(),
       startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
@@ -27,6 +30,7 @@ export const collectionSettingsPatchSchema = z.object({
   weeklySchedule: z
     .object({
       enabled: z.boolean().optional(),
+      kinds: scheduleKindsSchema.optional(),
       pageCountPerRun: z.number().int().min(1).max(500).optional(),
       incremental: z.boolean().optional(),
       startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),

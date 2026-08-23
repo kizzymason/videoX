@@ -7,7 +7,7 @@ import * as cron from 'node-cron';
 import { lt } from 'drizzle-orm';
 import { db, t } from '../../core/db.js';
 import { logger } from '../../core/logger.js';
-import { planFullCrawl } from '@videox/shared';
+import { normalizeScheduleKinds, planFullCrawl } from '@videox/shared';
 import { enqueueCollectionJob, type CollectionJobType } from './queues/tasks.js';
 import { resolveHealthCheckIntervalMinutes } from './pool-schedule.js';
 import { getScheduleConfig, getPoolConfig } from './storage/config.js';
@@ -69,8 +69,7 @@ export function scheduleCollectionTasks(): void {
 }
 
 /**
- * 每日增量抓取：
- * 抓 gv/mv/tv 三类的前 N 页（N 可在后台配置），priority 50，页间延迟 1s
+ * 每日增量抓取：只抓后台勾选的类型，未勾选则跳过。
  */
 async function runDailyIncrementalCrawl(): Promise<void> {
   logger.info('开始每日增量抓取任务');
@@ -80,54 +79,64 @@ async function runDailyIncrementalCrawl(): Promise<void> {
       logger.warn('每日增量抓取已禁用，跳过本次执行');
       return;
     }
+    const kinds = normalizeScheduleKinds(config.kinds);
+    if (kinds.length === 0) {
+      logger.warn('每日增量抓取未勾选类型，跳过本次执行');
+      return;
+    }
 
     const pageCount = config.pageCountPerRun || 5;
-    for (const kind of KINDS) {
+    for (const kind of kinds) {
       for (let page = 1; page <= pageCount; page++) {
         await enqueueCollectionJob({
           taskId: `daily_${kind}_page_${page}_${dayStamp()}`,
           type: 'list_crawl',
-          payload: { targetSite: TARGET_SITE, kind, page },
+          payload: { targetSite: TARGET_SITE, kind, page, incremental: config.incremental },
           priority: page === 1 ? 100 : 50,
           delayMs: page * 1000,
         });
       }
     }
 
-    logger.info({ kinds: KINDS.length, pageCount }, '每日增量抓取任务已入队');
+    logger.info({ kinds, pageCount }, '每日增量抓取任务已入队');
   } catch (error) {
     logger.error({ err: error }, '每日增量抓取任务失败');
   }
 }
 
 /**
- * 每周全量抓取：gv/mv/tv 各 N 页（页间 0.5s 延迟）
+ * 每周补抓：只抓后台勾选的类型，页数用配置的 pageCountPerRun。
  */
 async function runWeeklyFullCrawl(): Promise<void> {
-  logger.info('开始每周全量抓取任务');
+  logger.info('开始每周补抓任务');
   try {
     const config = await getScheduleConfig('weekly');
     if (!config.enabled) {
-      logger.warn('每周全量抓取已禁用，跳过本次执行');
+      logger.warn('每周补抓已禁用，跳过本次执行');
+      return;
+    }
+    const kinds = normalizeScheduleKinds(config.kinds);
+    if (kinds.length === 0) {
+      logger.warn('每周补抓未勾选类型，跳过本次执行');
       return;
     }
 
-    const MAX_PAGES = 50;
-    for (const kind of KINDS) {
-      for (let page = 1; page <= MAX_PAGES; page++) {
+    const pageCount = Math.max(1, Math.min(500, config.pageCountPerRun || 50));
+    for (const kind of kinds) {
+      for (let page = 1; page <= pageCount; page++) {
         await enqueueCollectionJob({
           taskId: `weekly_${kind}_page_${page}_${dayStamp()}`,
           type: 'list_crawl',
-          payload: { targetSite: TARGET_SITE, kind, page },
+          payload: { targetSite: TARGET_SITE, kind, page, incremental: config.incremental },
           priority: 80,
           delayMs: page * 500,
         });
       }
     }
 
-    logger.info({ pages: MAX_PAGES * KINDS.length }, '每周全量抓取任务已入队');
+    logger.info({ kinds, pageCount }, '每周补抓任务已入队');
   } catch (error) {
-    logger.error({ err: error }, '每周全量抓取任务失败');
+    logger.error({ err: error }, '每周补抓任务失败');
   }
 }
 

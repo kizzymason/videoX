@@ -45,7 +45,8 @@ export interface StorageStrategyConfig {
 
 export interface CollectionScheduleConfig {
   enabled: boolean;
-  kind: 'gv' | 'mv' | 'tv';
+  /** 要抓的类型。空数组表示未勾选，调度直接跳过。 */
+  kinds: Array<'gv' | 'mv' | 'tv'>;
   pageCountPerRun: number;       // 每次抓取页数
   cronExpression?: string;       // 自定义 Cron
   startTime: string;             // 每日执行时间（HH:mm）

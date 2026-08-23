@@ -47,6 +47,7 @@ import {
   dedupeCollectedLibrary,
   retryFailedCollectionJobs,
 } from './task-maintenance.js';
+import { previewPurgeCollectedKinds, purgeCollectedKinds } from './purge-kinds.js';
 
 export const collectionRouter: Router = Router();
 
@@ -120,6 +121,10 @@ const fullCrawlSchema = z.object({
 });
 
 const updateSettingsSchema = collectionSettingsPatchSchema;
+
+const purgeKindsSchema = z.object({
+  kinds: z.array(z.enum(['mv', 'tv'])).min(1).max(2).default(['mv', 'tv']),
+});
 
 // ==========================================================================
 // 号池管理
@@ -559,6 +564,32 @@ collectionRouter.post(
       changed === 0
         ? `已检查 ${result.scanned} 条采集记录，没有重复视频`
         : `去重完成：删除 ${result.removedCollected} 条、归档 ${result.archivedCollected} 条、隐藏 ${result.hiddenVideos} 个已导入视频`,
+    );
+  }),
+);
+
+/** GET /videos/purge-kinds - 预览将删除的 MV/TV 数量 */
+collectionRouter.get(
+  '/videos/purge-kinds',
+  asyncHandler(async (_req, res) => {
+    ok(res, await previewPurgeCollectedKinds(['mv', 'tv']));
+  }),
+);
+
+/** POST /videos/purge-kinds - 删除误抓的 MV/TV（采集库 + 已进正式库的） */
+collectionRouter.post(
+  '/videos/purge-kinds',
+  validate({ body: purgeKindsSchema }),
+  asyncHandler(async (req, res) => {
+    const { kinds } = body<{ kinds: Array<'mv' | 'tv'> }>(req);
+    const result = await purgeCollectedKinds(kinds);
+    await audit(req, 'collection.videos.purgeKinds', undefined, { ...result });
+    ok(
+      res,
+      result,
+      result.collectedDeleted + result.videosDeleted === 0
+        ? '没有可删除的 MV/TV'
+        : `已删除采集 ${result.collectedDeleted} 条、正式库 ${result.videosDeleted} 部，取消任务 ${result.jobsCancelled} 条`,
     );
   }),
 );

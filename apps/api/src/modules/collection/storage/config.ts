@@ -3,6 +3,7 @@
 // ========================================================================
 
 import { eq } from 'drizzle-orm';
+import { normalizeScheduleKinds } from '@videox/shared';
 import { db, t } from '../../../core/db.js';
 import { logger } from '../../../core/logger.js';
 import {
@@ -62,7 +63,7 @@ const DEFAULT_STORAGE_STRATEGY: StorageStrategyConfig = {
 
 const DEFAULT_SCHEDULE_CONFIG: CollectionScheduleConfig = {
   enabled: true,
-  kind: 'gv',
+  kinds: [],
   pageCountPerRun: 5,
   startTime: '03:00',
   incremental: true,
@@ -87,12 +88,18 @@ export async function setStorageStrategyConfig(config: Partial<StorageStrategyCo
 
 export async function getScheduleConfig(kind: 'daily' | 'weekly'): Promise<CollectionScheduleConfig> {
   const raw = await getCollectionConfig(`schedule:${kind}`);
-  return { ...DEFAULT_SCHEDULE_CONFIG, ...(raw ?? {}) } as CollectionScheduleConfig;
+  const merged = { ...DEFAULT_SCHEDULE_CONFIG, ...(raw ?? {}) } as CollectionScheduleConfig;
+  // 旧配置里的单个 kind 从未被调度使用过，不能当成已勾选。
+  merged.kinds = normalizeScheduleKinds((raw as { kinds?: unknown } | null)?.kinds);
+  return merged;
 }
 
 export async function setScheduleConfig(kind: 'daily' | 'weekly', config: Partial<CollectionScheduleConfig>): Promise<void> {
   const current = await getScheduleConfig(kind);
-  await setCollectionConfig(`schedule:${kind}`, { ...current, ...config });
+  const next = { ...current, ...config };
+  if (config.kinds !== undefined) next.kinds = normalizeScheduleKinds(config.kinds);
+  const { kind: _legacyKind, ...stored } = next as CollectionScheduleConfig & { kind?: string };
+  await setCollectionConfig(`schedule:${kind}`, stored);
 }
 
 export async function getPoolConfig(targetSite: string): Promise<CollectionPoolConfig> {

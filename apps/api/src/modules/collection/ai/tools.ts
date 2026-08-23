@@ -733,7 +733,7 @@ const updateSettings = defineTool({
   name: 'update_settings',
   label: '修改采集配置',
   description:
-    '增量修改采集配置：存储策略 storage、每日调度 dailySchedule、每周调度 weeklySchedule、号池策略 pool。只传要改的字段。',
+    '增量修改采集配置：存储策略 storage、每日调度 dailySchedule、每周调度 weeklySchedule、号池策略 pool。只传要改的字段。调度的 kinds 需显式勾选 gv/mv/tv，空数组表示不抓任何类型，不会默认全开。',
   readOnly: false,
   schema: collectionSettingsPatchSchema,
   execute: async (args) => {
