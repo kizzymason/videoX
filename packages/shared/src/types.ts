@@ -161,6 +161,68 @@ export interface PartnerCustomer {
   lastRedeemedAt: string | null;
 }
 
+export interface PartnerTrendPoint {
+  /** YYYY-MM-DD */
+  date: string;
+  /** 当日被使用的订阅码数量 */
+  activations: number;
+  /** 当日首次使用本合伙人订阅码的新客户数 */
+  newCustomers: number;
+  /** 当日被使用订阅码的售价合计（分） */
+  revenueCents: number;
+  /** 当日生成的订阅码数量 */
+  codesCreated: number;
+}
+
+/**
+ * 收入 K 线：把区间内的每日收入按桶聚合成 OHLC。
+ * open/close 取桶内首末日收入，high/low 取桶内极值，单位都是分。
+ */
+export interface PartnerCandle {
+  date: string;
+  endDate: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  /** 桶内激活数，画成成交量柱 */
+  volume: number;
+}
+
+export interface PartnerTopCustomer {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  revenueCents: number;
+  codeCount: number;
+  daysRemaining: number;
+  isExpired: boolean;
+}
+
+export interface PartnerLabeledCount {
+  label: string;
+  value: number;
+}
+
+export interface PartnerInsights {
+  days: number;
+  trend: PartnerTrendPoint[];
+  candles: PartnerCandle[];
+  /** 客户按剩余天数分组 */
+  expiryBuckets: PartnerLabeledCount[];
+  /** 订阅码按状态分组 */
+  statusBreakdown: PartnerLabeledCount[];
+  /** 区间内按星期几统计的激活数 */
+  weekday: PartnerLabeledCount[];
+  topCustomers: PartnerTopCustomer[];
+  rangeRevenueCents: number;
+  rangeActivations: number;
+  /** 上一个等长区间，用于算环比 */
+  prevRevenueCents: number;
+  prevActivations: number;
+}
+
 export interface AdminPartnerRow extends PartnerProfile {
   username: string;
   displayName: string;

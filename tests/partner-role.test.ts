@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   generatePartnerCodesSchema,
   isComplimentaryVip,
+  partnerInsightsQuerySchema,
   partnerLevelLabel,
   USER_ROLES,
 } from '@videox/shared';
@@ -28,5 +29,12 @@ describe('合伙人角色与校验', () => {
     });
     expect(() => generatePartnerCodesSchema.parse({ days: 30, count: 201, salePriceYuan: 19 })).toThrow();
     expect(() => generatePartnerCodesSchema.parse({ days: 0, count: 1, salePriceYuan: 19 })).toThrow();
+  });
+
+  it('洞察区间只接受 7～180 天，默认 30', () => {
+    expect(partnerInsightsQuerySchema.parse({})).toEqual({ days: 30 });
+    expect(partnerInsightsQuerySchema.parse({ days: '90' })).toEqual({ days: 90 });
+    expect(() => partnerInsightsQuerySchema.parse({ days: 6 })).toThrow();
+    expect(() => partnerInsightsQuerySchema.parse({ days: 181 })).toThrow();
   });
 });

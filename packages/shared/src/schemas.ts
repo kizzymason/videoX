@@ -255,6 +255,10 @@ export const partnerCodeQuerySchema = paginationSchema.extend({
   q: z.string().max(64).optional(),
 });
 
+export const partnerInsightsQuerySchema = z.object({
+  days: z.coerce.number().int().min(7).max(180).default(30),
+});
+
 export const appointPartnerSchema = z.object({
   userId: idSchema,
   level: z.enum(PARTNER_LEVELS).default('standard'),

@@ -24,5 +24,15 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        // 手机上首屏字节数敏感：图表库单独成块，登录页就不必下载它。
+        manualChunks(id: string) {
+          if (/node_modules\/(recharts|d3-|victory-)/.test(id)) return 'charts';
+          if (/node_modules\/(react|react-dom|react-router)/.test(id)) return 'react';
+          return undefined;
+        },
+      },
+    },
   },
 });
