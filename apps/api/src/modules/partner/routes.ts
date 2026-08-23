@@ -6,6 +6,7 @@ import {
   partnerCodeQuerySchema,
   partnerCustomerQuerySchema,
   partnerGrantSchema,
+  partnerInsightsQuerySchema,
 } from '@videox/shared';
 import { asyncHandler, ok, paginated } from '../../core/respond.js';
 import { requireAuth, requirePartner } from '../../middleware/auth.js';
@@ -15,6 +16,7 @@ import {
   deletePartnerUnusedCodes,
   disablePartnerCode,
   generatePartnerCodes,
+  getPartnerInsights,
   getPartnerOverview,
   getPartnerProfile,
   listPartnerCodes,
@@ -39,6 +41,15 @@ partnerRouter.get(
   '/overview',
   asyncHandler(async (req, res) => {
     ok(res, await getPartnerOverview(req.auth!.id));
+  }),
+);
+
+partnerRouter.get(
+  '/insights',
+  validate({ query: partnerInsightsQuerySchema }),
+  asyncHandler(async (req, res) => {
+    const { days } = query<{ days: number }>(req);
+    ok(res, await getPartnerInsights(req.auth!.id, days));
   }),
 );
 

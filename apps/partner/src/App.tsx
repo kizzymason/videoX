@@ -4,10 +4,12 @@ import { Spinner } from '@videox/ui';
 import { useAuthStore } from './stores/auth';
 import { AppShell } from './components/AppShell';
 import { LoginPage } from './pages/LoginPage';
-import { OverviewPage } from './pages/OverviewPage';
-import { CustomersPage } from './pages/CustomersPage';
-import { CodesPage } from './pages/CodesPage';
-import { MinePage } from './pages/MinePage';
+
+// 四个页面都要用图表库，登录态未确认前不该为它买单，统一按路由懒加载。
+const OverviewPage = React.lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })));
+const CustomersPage = React.lazy(() => import('./pages/CustomersPage').then((m) => ({ default: m.CustomersPage })));
+const CodesPage = React.lazy(() => import('./pages/CodesPage').then((m) => ({ default: m.CodesPage })));
+const MinePage = React.lazy(() => import('./pages/MinePage').then((m) => ({ default: m.MinePage })));
 
 export function App() {
   const bootstrap = useAuthStore((s) => s.bootstrap);
@@ -18,14 +20,7 @@ export function App() {
     void bootstrap();
   }, [bootstrap]);
 
-  if (initializing) {
-    return (
-      <div className="grid min-h-dvh place-items-center">
-        <Spinner className="size-5 text-muted-foreground" />
-      </div>
-    );
-  }
-
+  if (initializing) return <FullscreenSpinner />;
   if (!user || user.role !== 'partner') return <LoginPage />;
 
   return (
@@ -38,5 +33,13 @@ export function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+  );
+}
+
+function FullscreenSpinner() {
+  return (
+    <div className="pt-shell grid min-h-dvh place-items-center">
+      <Spinner className="size-5 text-muted-foreground" />
+    </div>
   );
 }

@@ -1,11 +1,14 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type {
   AdminPartnerRow,
+  PartnerCandle,
   PartnerCustomer,
+  PartnerInsights,
   PartnerLevel,
   PartnerOverview,
   PartnerProfile,
   PartnerStatus,
+  PartnerTrendPoint,
   RedeemCode,
 } from '@videox/shared';
 import { PARTNER_CODE_PREFIX } from '@videox/shared';
@@ -408,6 +411,196 @@ export async function getPartnerOverview(userId: string): Promise<PartnerOvervie
     unusedCodeCount: Number(stats?.unusedCodeCount ?? 0),
     revenueCents: Number(stats?.revenueCents ?? 0),
     expiringSoonCount: Number(expiring?.expiringSoonCount ?? 0),
+  };
+}
+
+const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+/** K 线的桶宽：区间越长桶越宽，稳定输出 10~14 根蜡烛，手机上才看得清。 */
+function candleBucketDays(days: number): number {
+  return Math.max(2, Math.ceil(days / 12));
+}
+
+function buildCandles(trend: PartnerTrendPoint[], bucketDays: number): PartnerCandle[] {
+  const candles: PartnerCandle[] = [];
+  for (let i = 0; i < trend.length; i += bucketDays) {
+    const slice = trend.slice(i, i + bucketDays);
+    if (slice.length === 0) continue;
+    const values = slice.map((point) => point.revenueCents);
+    candles.push({
+      date: slice[0]!.date,
+      endDate: slice[slice.length - 1]!.date,
+      open: values[0]!,
+      close: values[values.length - 1]!,
+      high: Math.max(...values),
+      low: Math.min(...values),
+      volume: slice.reduce((sum, point) => sum + point.activations, 0),
+    });
+  }
+  return candles;
+}
+
+export async function getPartnerInsights(userId: string, days: number): Promise<PartnerInsights> {
+  await requireActivePartner(userId);
+  const span = sql.raw(String(days - 1));
+  const prevStart = sql.raw(String(days * 2 - 1));
+
+  const [trendRows, prevRows, expiryRows, statusRows, topRows] = await Promise.all([
+    sqlRows<{
+      date: string;
+      activations: number;
+      revenueCents: number;
+      codesCreated: number;
+      newCustomers: number;
+    }>(sql`
+      WITH days AS (
+        SELECT to_char(d, 'YYYY-MM-DD') AS date
+        FROM generate_series(current_date - (${span} || ' days')::interval, current_date, '1 day') d
+      ),
+      used AS (
+        SELECT to_char(used_at, 'YYYY-MM-DD') AS date,
+               count(*)::int AS activations,
+               coalesce(sum(sale_price_cents), 0)::int AS revenue_cents
+        FROM redeem_codes
+        WHERE created_by = ${userId} AND status = 'used' AND used_at IS NOT NULL
+          AND used_at >= current_date - (${span} || ' days')::interval
+        GROUP BY 1
+      ),
+      created AS (
+        SELECT to_char(created_at, 'YYYY-MM-DD') AS date, count(*)::int AS codes_created
+        FROM redeem_codes
+        WHERE created_by = ${userId}
+          AND created_at >= current_date - (${span} || ' days')::interval
+        GROUP BY 1
+      ),
+      firsts AS (
+        SELECT to_char(first_at, 'YYYY-MM-DD') AS date, count(*)::int AS new_customers
+        FROM (
+          SELECT used_by_user_id, min(used_at) AS first_at
+          FROM redeem_codes
+          WHERE created_by = ${userId} AND status = 'used' AND used_by_user_id IS NOT NULL
+          GROUP BY 1
+        ) f
+        WHERE first_at >= current_date - (${span} || ' days')::interval
+        GROUP BY 1
+      )
+      SELECT days.date,
+             coalesce(used.activations, 0) AS activations,
+             coalesce(used.revenue_cents, 0) AS "revenueCents",
+             coalesce(created.codes_created, 0) AS "codesCreated",
+             coalesce(firsts.new_customers, 0) AS "newCustomers"
+      FROM days
+      LEFT JOIN used ON used.date = days.date
+      LEFT JOIN created ON created.date = days.date
+      LEFT JOIN firsts ON firsts.date = days.date
+      ORDER BY days.date
+    `),
+    sqlRows<{ activations: number; revenueCents: number }>(sql`
+      SELECT count(*)::int AS activations,
+             coalesce(sum(sale_price_cents), 0)::int AS "revenueCents"
+      FROM redeem_codes
+      WHERE created_by = ${userId} AND status = 'used' AND used_at IS NOT NULL
+        AND used_at >= current_date - (${prevStart} || ' days')::interval
+        AND used_at < current_date - (${span} || ' days')::interval
+    `),
+    sqlRows<{ expired: number; d7: number; d30: number; d90: number; d90p: number }>(sql`
+      SELECT
+        count(*) FILTER (WHERE vip_expires_at IS NULL OR vip_expires_at <= now())::int AS expired,
+        count(*) FILTER (WHERE vip_expires_at > now() AND vip_expires_at <= now() + interval '7 days')::int AS d7,
+        count(*) FILTER (WHERE vip_expires_at > now() + interval '7 days' AND vip_expires_at <= now() + interval '30 days')::int AS d30,
+        count(*) FILTER (WHERE vip_expires_at > now() + interval '30 days' AND vip_expires_at <= now() + interval '90 days')::int AS d90,
+        count(*) FILTER (WHERE vip_expires_at > now() + interval '90 days')::int AS d90p
+      FROM (
+        SELECT DISTINCT u.id, u.vip_expires_at
+        FROM redeem_codes rc
+        INNER JOIN users u ON u.id = rc.used_by_user_id
+        WHERE rc.created_by = ${userId} AND rc.status = 'used'
+      ) c
+    `),
+    sqlRows<{ status: string; value: number }>(sql`
+      SELECT status, count(*)::int AS value
+      FROM redeem_codes
+      WHERE created_by = ${userId}
+      GROUP BY 1
+    `),
+    sqlRows<{
+      userId: string;
+      username: string;
+      displayName: string;
+      avatarUrl: string | null;
+      revenueCents: number;
+      codeCount: number;
+      vipExpiresAt: Date | string | null;
+    }>(sql`
+      SELECT u.id AS "userId",
+             u.username,
+             u.display_name AS "displayName",
+             u.avatar_url AS "avatarUrl",
+             coalesce(sum(rc.sale_price_cents), 0)::int AS "revenueCents",
+             count(*)::int AS "codeCount",
+             u.vip_expires_at AS "vipExpiresAt"
+      FROM redeem_codes rc
+      INNER JOIN users u ON u.id = rc.used_by_user_id
+      WHERE rc.created_by = ${userId} AND rc.status = 'used'
+      GROUP BY u.id
+      ORDER BY "revenueCents" DESC, "codeCount" DESC
+      LIMIT 5
+    `),
+  ]);
+
+  const trend: PartnerTrendPoint[] = trendRows.map((row) => ({
+    date: row.date,
+    activations: Number(row.activations),
+    newCustomers: Number(row.newCustomers),
+    revenueCents: Number(row.revenueCents),
+    codesCreated: Number(row.codesCreated),
+  }));
+
+  const weekdayTotals = new Array(7).fill(0) as number[];
+  for (const point of trend) {
+    const index = new Date(`${point.date}T00:00:00Z`).getUTCDay();
+    weekdayTotals[index] += point.activations;
+  }
+
+  const expiry = expiryRows[0];
+  const statusMap = new Map(statusRows.map((row) => [row.status, Number(row.value)]));
+  const now = Date.now();
+
+  return {
+    days,
+    trend,
+    candles: buildCandles(trend, candleBucketDays(days)),
+    expiryBuckets: [
+      { label: '已到期', value: Number(expiry?.expired ?? 0) },
+      { label: '7 天内', value: Number(expiry?.d7 ?? 0) },
+      { label: '30 天内', value: Number(expiry?.d30 ?? 0) },
+      { label: '90 天内', value: Number(expiry?.d90 ?? 0) },
+      { label: '90 天以上', value: Number(expiry?.d90p ?? 0) },
+    ],
+    statusBreakdown: [
+      { label: '未使用', value: statusMap.get('unused') ?? 0 },
+      { label: '已使用', value: statusMap.get('used') ?? 0 },
+      { label: '已停用', value: statusMap.get('disabled') ?? 0 },
+      { label: '已过期', value: statusMap.get('expired') ?? 0 },
+    ],
+    weekday: weekdayTotals.map((value, index) => ({ label: WEEKDAY_LABELS[index]!, value })),
+    topCustomers: topRows.map((row) => {
+      const expiresAt = row.vipExpiresAt ? new Date(row.vipExpiresAt) : null;
+      return {
+        userId: row.userId,
+        username: row.username,
+        displayName: row.displayName,
+        avatarUrl: row.avatarUrl,
+        revenueCents: Number(row.revenueCents),
+        codeCount: Number(row.codeCount),
+        daysRemaining: expiresAt ? Math.max(0, Math.ceil((expiresAt.getTime() - now) / 86_400_000)) : 0,
+        isExpired: !expiresAt || expiresAt.getTime() <= now,
+      };
+    }),
+    rangeRevenueCents: trend.reduce((sum, point) => sum + point.revenueCents, 0),
+    rangeActivations: trend.reduce((sum, point) => sum + point.activations, 0),
+    prevRevenueCents: Number(prevRows[0]?.revenueCents ?? 0),
+    prevActivations: Number(prevRows[0]?.activations ?? 0),
   };
 }
 

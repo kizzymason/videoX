@@ -4,6 +4,7 @@ import type {
   CurrentUser,
   Paginated,
   PartnerCustomer,
+  PartnerInsights,
   PartnerOverview,
   PartnerProfile,
   RedeemCode,
@@ -55,6 +56,7 @@ export const authApi = {
 export const partnerApi = {
   me: () => api.get<PartnerProfile>('/partner/me'),
   overview: () => api.get<PartnerOverview>('/partner/overview'),
+  insights: (days: number) => api.get<PartnerInsights>('/partner/insights', { days }),
   customers: (query: Query) => api.get<Paginated<PartnerCustomer>>('/partner/customers', query),
   grant: (id: string, days: number) => api.post<{ vipExpiresAt: string }>(`/partner/customers/${id}/grant`, { days }),
   codes: (query: Query) => api.get<Paginated<RedeemCode>>('/partner/codes', query),

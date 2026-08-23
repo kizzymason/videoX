@@ -29,6 +29,7 @@ suite('合伙人卡密与配额', async () => {
     appointPartner,
     deletePartnerUnusedCodes,
     generatePartnerCodes,
+    getPartnerInsights,
     partnerGrantVip,
     revokePartner,
   } = await import('../apps/api/src/modules/partner/service.js');
@@ -202,5 +203,20 @@ suite('合伙人卡密与配额', async () => {
     const [after] = await db.select().from(t.partners).where(eq(t.partners.userId, partnerId));
     expect(after!.codesIssued).toBe(before!.codesIssued);
     expect(after!.daysIssued).toBe(before!.daysIssued);
+  });
+
+  it('洞察补齐空日期、K 线与核销客户', async () => {
+    const insights = await getPartnerInsights(partnerId, 30);
+    expect(insights.days).toBe(30);
+    expect(insights.trend).toHaveLength(30);
+    expect(insights.candles.length).toBeGreaterThan(0);
+    expect(insights.candles.length).toBeLessThanOrEqual(15);
+    expect(insights.weekday).toHaveLength(7);
+    expect(insights.rangeActivations).toBeGreaterThanOrEqual(1);
+    expect(insights.rangeRevenueCents).toBeGreaterThanOrEqual(500);
+    expect(insights.topCustomers.some((row) => row.userId === customerId)).toBe(true);
+    expect(insights.statusBreakdown.find((row) => row.label === '已使用')?.value).toBeGreaterThanOrEqual(1);
+    expect(insights.expiryBuckets.reduce((sum, row) => sum + row.value, 0)).toBeGreaterThanOrEqual(1);
+    expect(insights.trend.reduce((sum, point) => sum + point.revenueCents, 0)).toBe(insights.rangeRevenueCents);
   });
 });
