@@ -11,6 +11,7 @@ import {
 import { db, t, sqlRows, uuidArray } from '../../core/db.js';
 import { AppError, ErrorCode } from '../../core/errors.js';
 import { captionPublicUrl } from '../storage/keys.js';
+import { homeRecommendedOrderBy } from '../recommend/home-ops.js';
 
 export type VideoRow = typeof t.videos.$inferSelect;
 
@@ -228,6 +229,8 @@ export async function listVideos(options: ListVideosOptions): Promise<{ items: V
   const filters = buildVideoFilters(options);
   const where = filters.length > 0 ? and(...filters) : undefined;
 
+  const homeRecommended = !options.adminView && !options.q && options.sort === 'recommended';
+
   const orderBy = options.q
     ? [
         // 有关键词时优先按相关度排序：标题命中 > 全文匹配度 > 热度。
@@ -235,7 +238,9 @@ export async function listVideos(options: ListVideosOptions): Promise<{ items: V
         sql`ts_rank(search_vector, plainto_tsquery('simple', ${options.q.trim()})) DESC`,
         desc(t.videos.viewCount),
       ]
-    : buildOrderBy(options.sort);
+    : homeRecommended
+      ? homeRecommendedOrderBy()
+      : buildOrderBy(options.sort);
 
   const sourceLatest = !options.q && options.sort === 'latest';
 
@@ -247,11 +252,18 @@ export async function listVideos(options: ListVideosOptions): Promise<{ items: V
           .leftJoin(t.categories, eq(t.categories.id, t.videos.categoryId))
           .leftJoin(t.users, eq(t.users.id, t.videos.authorId))
           .leftJoin(t.collectedVideos, eq(t.collectedVideos.videoId, t.videos.id))
-      : db
-          .select(summaryColumns)
-          .from(t.videos)
-          .leftJoin(t.categories, eq(t.categories.id, t.videos.categoryId))
-          .leftJoin(t.users, eq(t.users.id, t.videos.authorId))
+      : homeRecommended
+        ? db
+            .select(summaryColumns)
+            .from(t.videos)
+            .leftJoin(t.categories, eq(t.categories.id, t.videos.categoryId))
+            .leftJoin(t.users, eq(t.users.id, t.videos.authorId))
+            .leftJoin(t.homeRecommendPins, eq(t.homeRecommendPins.videoId, t.videos.id))
+        : db
+            .select(summaryColumns)
+            .from(t.videos)
+            .leftJoin(t.categories, eq(t.categories.id, t.videos.categoryId))
+            .leftJoin(t.users, eq(t.users.id, t.videos.authorId))
     )
       .where(where)
       .orderBy(...orderBy)

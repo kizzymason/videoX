@@ -30,27 +30,31 @@ export function WatchPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const initializing = useAuthStore((s) => s.initializing);
   const openAuth = useAuthModalStore((s) => s.openAuth);
   const autoplayNext = useUiStore((s) => s.autoplayNext);
   const setAutoplayNext = useUiStore((s) => s.setAutoplayNext);
+  const viewerKey = user?.id ?? 'guest';
+  const videoQueryKey = ['video', idOrSlug, viewerKey] as const;
 
   const videoQuery = useQuery({
-    queryKey: ['video', idOrSlug],
+    queryKey: videoQueryKey,
     queryFn: () => contentApi.video(idOrSlug),
+    enabled: !initializing,
   });
   const video = videoQuery.data;
 
   const relatedQuery = useQuery({
-    queryKey: ['related', video?.id],
+    queryKey: ['related', video?.id, viewerKey],
     queryFn: () => contentApi.related(video!.id, 16),
-    enabled: Boolean(video?.id),
+    enabled: !initializing && Boolean(video?.id),
   });
 
   // 票据单独查：视频详情可以缓存，播放凭证不能。
   const ticketQuery = useQuery({
-    queryKey: ['play-ticket', video?.id],
+    queryKey: ['play-ticket', video?.id, viewerKey],
     queryFn: () => contentApi.playTicket(video!.id),
-    enabled: Boolean(video?.id) && Boolean(video?.viewer.canPlay),
+    enabled: !initializing && Boolean(video?.id) && Boolean(video?.viewer.canPlay),
     staleTime: 0,
     gcTime: 0,
     retry: false,
@@ -90,9 +94,9 @@ export function WatchPage() {
     mutationFn: () => socialApi.like(video!.id),
     // 乐观更新：点赞是高频轻量操作，等一个 round trip 会显得很迟钝。
     onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: ['video', idOrSlug] });
-      const previous = queryClient.getQueryData<VideoDetail>(['video', idOrSlug]);
-      queryClient.setQueryData<VideoDetail>(['video', idOrSlug], (old) =>
+      await queryClient.cancelQueries({ queryKey: videoQueryKey });
+      const previous = queryClient.getQueryData<VideoDetail>(videoQueryKey);
+      queryClient.setQueryData<VideoDetail>(videoQueryKey, (old) =>
         old
           ? {
               ...old,
@@ -104,7 +108,7 @@ export function WatchPage() {
       return { previous };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(['video', idOrSlug], context.previous);
+      if (context?.previous) queryClient.setQueryData(videoQueryKey, context.previous);
       toast.error('操作失败，请稍后再试');
     },
   });
@@ -112,8 +116,8 @@ export function WatchPage() {
   const favoriteMutation = useMutation({
     mutationFn: () => socialApi.favorite(video!.id),
     onMutate: async () => {
-      const previous = queryClient.getQueryData<VideoDetail>(['video', idOrSlug]);
-      queryClient.setQueryData<VideoDetail>(['video', idOrSlug], (old) =>
+      const previous = queryClient.getQueryData<VideoDetail>(videoQueryKey);
+      queryClient.setQueryData<VideoDetail>(videoQueryKey, (old) =>
         old
           ? {
               ...old,
@@ -129,21 +133,21 @@ export function WatchPage() {
       void queryClient.invalidateQueries({ queryKey: ['favorites'] });
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(['video', idOrSlug], context.previous);
+      if (context?.previous) queryClient.setQueryData(videoQueryKey, context.previous);
     },
   });
 
   const followMutation = useMutation({
     mutationFn: () => socialApi.follow(video!.author!.id),
     onMutate: async () => {
-      const previous = queryClient.getQueryData<VideoDetail>(['video', idOrSlug]);
-      queryClient.setQueryData<VideoDetail>(['video', idOrSlug], (old) =>
+      const previous = queryClient.getQueryData<VideoDetail>(videoQueryKey);
+      queryClient.setQueryData<VideoDetail>(videoQueryKey, (old) =>
         old ? { ...old, viewer: { ...old.viewer, following: !old.viewer.following } } : old,
       );
       return { previous };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(['video', idOrSlug], context.previous);
+      if (context?.previous) queryClient.setQueryData(videoQueryKey, context.previous);
     },
   });
 
@@ -163,7 +167,7 @@ export function WatchPage() {
     if (next) navigate(`/watch/${next.slug || next.id}`);
   }, [autoplayNext, related, navigate]);
 
-  if (videoQuery.isLoading) return <WatchSkeleton />;
+  if (initializing || videoQuery.isLoading) return <WatchSkeleton />;
   if (videoQuery.isError || !video) {
     return (
       <div className="grid min-h-[60vh] place-items-center px-6 text-center">

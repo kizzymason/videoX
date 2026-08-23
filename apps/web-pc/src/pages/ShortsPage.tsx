@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Bookmark, Heart, Maximize, Volume2, VolumeX } from 'lucide-react';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { usePlayer, type PlayerEngine, type PlayerSource } from '@videox/player';
+import { PlayPauseHint, usePlayPauseFlash, usePlayer, type PlayerEngine, type PlayerSource } from '@videox/player';
 import { formatCount, parseShortsTrialDetails, type ShortsTrialQuota, type VideoSummary } from '@videox/shared';
 import { cn } from '@videox/ui';
 import { ApiError, contentApi, socialApi } from '../lib/api';
@@ -221,6 +221,7 @@ function InPlacePlayer({ video, poster }: { video: VideoSummary; poster: string 
     onFirstFrame: () => track('video_play', { videoId: video.id }),
   });
   engineRef.current = engine;
+  const { flash, trigger } = usePlayPauseFlash();
 
   const overlayMessage =
     gate?.message ?? (snapshot.gate.blocked ? '订阅后即可继续观看' : null) ?? (snapshot.error ? snapshot.error.message : null);
@@ -231,10 +232,13 @@ function InPlacePlayer({ video, poster }: { video: VideoSummary; poster: string 
       ref={containerRef}
       className="absolute inset-0"
       onClick={() => {
-        if (source && !overlayMessage) engine.togglePlay();
+        if (!source || overlayMessage) return;
+        trigger(engine.getSnapshot().paused ? 'play' : 'pause');
+        engine.togglePlay();
       }}
     >
       <video ref={videoRef} className="absolute inset-0 size-full object-contain" playsInline poster={poster ?? undefined} />
+      {source && !overlayMessage ? <PlayPauseHint paused={snapshot.paused} flash={flash} /> : null}
       {overlayMessage ? (
         <div className="absolute inset-0 grid place-items-center bg-black/70 px-8 text-center backdrop-blur-[2px]">
           <div className="pointer-events-auto flex max-w-xs flex-col items-center gap-3">

@@ -11,6 +11,9 @@ import {
   commentListQuerySchema,
   generateCodesSchema,
   grantVipSchema,
+  homeRecommendKeywordSchema,
+  homeRecommendPinReorderSchema,
+  homeRecommendPinSchema,
   orderQuerySchema,
   paginationSchema,
   planSchema,
@@ -56,11 +59,13 @@ import {
 } from '../membership/service.js';
 import {
   generateUniqueSlug,
+  getSummariesByIds,
   listVideos,
   refreshCategoryCounts,
   requireVideo,
   syncVideoTags,
 } from '../videos/service.js';
+import { normalizeHomeKeyword } from '../recommend/home-ops.js';
 import { enqueueTranscode } from '../uploads/service.js';
 import { getVideoRetention, getVisitorInsights } from '../analytics/service.js';
 import { aggregateDailyStats, getDashboardOverview, getTopVideos } from './dashboard.js';
@@ -794,6 +799,211 @@ adminRouter.delete(
     await db.delete(t.banners).where(eq(t.banners.id, id));
     await audit(req, 'banner.delete', { type: 'banner', id });
     ok(res, null, '轮播图已删除');
+  }),
+);
+
+// ==========================================================================
+// 首页推荐（运营置顶 + 升降权关键词）
+// ==========================================================================
+
+adminRouter.get(
+  '/home-recommend/pins',
+  asyncHandler(async (_req, res) => {
+    const rows = await db
+      .select()
+      .from(t.homeRecommendPins)
+      .orderBy(t.homeRecommendPins.sortOrder, t.homeRecommendPins.createdAt);
+    const videos = await getSummariesByIds(rows.map((row) => row.videoId));
+    const byId = new Map(videos.map((video) => [video.id, video]));
+    ok(
+      res,
+      rows
+        .filter((row) => byId.has(row.videoId))
+        .map((row) => ({
+          id: row.id,
+          videoId: row.videoId,
+          sortOrder: row.sortOrder,
+          createdAt: row.createdAt.toISOString(),
+          video: byId.get(row.videoId)!,
+        })),
+    );
+  }),
+);
+
+adminRouter.post(
+  '/home-recommend/pins',
+  validate({ body: homeRecommendPinSchema }),
+  asyncHandler(async (req, res) => {
+    const { videoId } = body<{ videoId: string }>(req);
+    const video = await requireVideo(videoId);
+    if (video.kind !== 'vod') throw AppError.badRequest('只能把点播视频加入首页推荐');
+
+    const existing = await db
+      .select({ id: t.homeRecommendPins.id })
+      .from(t.homeRecommendPins)
+      .where(eq(t.homeRecommendPins.videoId, videoId))
+      .limit(1);
+    if (existing[0]) throw AppError.conflict('该视频已在推荐视图中');
+
+    const [{ maxOrder } = { maxOrder: -1 }] = await db
+      .select({ maxOrder: sql<number>`coalesce(max(${t.homeRecommendPins.sortOrder}), -1)` })
+      .from(t.homeRecommendPins);
+
+    const [row] = await db
+      .insert(t.homeRecommendPins)
+      .values({
+        videoId,
+        sortOrder: Number(maxOrder) + 1,
+        createdBy: req.auth!.id,
+      })
+      .returning();
+
+    const [summary] = await getSummariesByIds([videoId]);
+    await audit(req, 'home_recommend.pin.create', { type: 'video', id: videoId });
+    ok(
+      res,
+      {
+        id: row!.id,
+        videoId,
+        sortOrder: row!.sortOrder,
+        createdAt: row!.createdAt.toISOString(),
+        video: summary,
+      },
+      '已加入首页推荐',
+    );
+  }),
+);
+
+adminRouter.post(
+  '/home-recommend/pins/reorder',
+  validate({ body: homeRecommendPinReorderSchema }),
+  asyncHandler(async (req, res) => {
+    const { ids } = body<{ ids: string[] }>(req);
+    await db.transaction(async (tx) => {
+      for (const [index, id] of ids.entries()) {
+        await tx
+          .update(t.homeRecommendPins)
+          .set({ sortOrder: index, updatedAt: new Date() })
+          .where(eq(t.homeRecommendPins.id, id));
+      }
+    });
+    await audit(req, 'home_recommend.pin.reorder', { type: 'home_recommend_pin', id: ids[0]! }, { count: ids.length });
+    ok(res, null, '排序已更新');
+  }),
+);
+
+adminRouter.delete(
+  '/home-recommend/pins/:id',
+  validate({ params: idParam }),
+  asyncHandler(async (req, res) => {
+    const { id } = params<{ id: string }>(req);
+    const [row] = await db.delete(t.homeRecommendPins).where(eq(t.homeRecommendPins.id, id)).returning();
+    if (!row) throw AppError.notFound('推荐条目不存在');
+    await audit(req, 'home_recommend.pin.delete', { type: 'video', id: row.videoId });
+    ok(res, null, '已移出推荐视图');
+  }),
+);
+
+adminRouter.get(
+  '/home-recommend/keywords',
+  asyncHandler(async (_req, res) => {
+    const rows = await db
+      .select()
+      .from(t.homeRecommendKeywords)
+      .orderBy(desc(t.homeRecommendKeywords.updatedAt));
+    ok(
+      res,
+      rows.map((row) => ({
+        id: row.id,
+        keyword: row.keyword,
+        direction: row.direction,
+        weight: Number(row.weight),
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      })),
+    );
+  }),
+);
+
+adminRouter.post(
+  '/home-recommend/keywords',
+  validate({ body: homeRecommendKeywordSchema }),
+  asyncHandler(async (req, res) => {
+    const input = body<{ keyword: string; direction: 'boost' | 'penalty'; weight: number }>(req);
+    const keyword = normalizeHomeKeyword(input.keyword);
+    if (!keyword) throw AppError.badRequest('关键词不能为空');
+
+    try {
+      const [row] = await db
+        .insert(t.homeRecommendKeywords)
+        .values({ keyword, direction: input.direction, weight: input.weight })
+        .returning();
+      await audit(req, 'home_recommend.keyword.create', { type: 'home_recommend_keyword', id: row!.id });
+      ok(
+        res,
+        {
+          id: row!.id,
+          keyword: row!.keyword,
+          direction: row!.direction,
+          weight: Number(row!.weight),
+          createdAt: row!.createdAt.toISOString(),
+          updatedAt: row!.updatedAt.toISOString(),
+        },
+        '关键词已添加',
+      );
+    } catch {
+      throw AppError.conflict('该关键词已存在');
+    }
+  }),
+);
+
+adminRouter.patch(
+  '/home-recommend/keywords/:id',
+  validate({ params: idParam, body: homeRecommendKeywordSchema.partial() }),
+  asyncHandler(async (req, res) => {
+    const { id } = params<{ id: string }>(req);
+    const input = body<{ keyword?: string; direction?: 'boost' | 'penalty'; weight?: number }>(req);
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (input.keyword !== undefined) {
+      const keyword = normalizeHomeKeyword(input.keyword);
+      if (!keyword) throw AppError.badRequest('关键词不能为空');
+      patch.keyword = keyword;
+    }
+    if (input.direction !== undefined) patch.direction = input.direction;
+    if (input.weight !== undefined) patch.weight = input.weight;
+
+    try {
+      const [row] = await db
+        .update(t.homeRecommendKeywords)
+        .set(patch as never)
+        .where(eq(t.homeRecommendKeywords.id, id))
+        .returning();
+      if (!row) throw AppError.notFound('关键词不存在');
+      await audit(req, 'home_recommend.keyword.update', { type: 'home_recommend_keyword', id });
+      ok(res, {
+        id: row.id,
+        keyword: row.keyword,
+        direction: row.direction,
+        weight: Number(row.weight),
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      });
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw AppError.conflict('该关键词已存在');
+    }
+  }),
+);
+
+adminRouter.delete(
+  '/home-recommend/keywords/:id',
+  validate({ params: idParam }),
+  asyncHandler(async (req, res) => {
+    const { id } = params<{ id: string }>(req);
+    const [row] = await db.delete(t.homeRecommendKeywords).where(eq(t.homeRecommendKeywords.id, id)).returning();
+    if (!row) throw AppError.notFound('关键词不存在');
+    await audit(req, 'home_recommend.keyword.delete', { type: 'home_recommend_keyword', id });
+    ok(res, null, '关键词已删除');
   }),
 );
 

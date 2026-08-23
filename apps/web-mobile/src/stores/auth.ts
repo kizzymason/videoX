@@ -27,14 +27,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const payload = (await res.json()) as { data?: { accessToken: string; user: CurrentUser } };
         if (payload.data) {
           setAccessToken(payload.data.accessToken);
-          set({ user: payload.data.user });
+          set({ user: payload.data.user, initializing: false });
+          return;
         }
       }
     } catch {
       /* 未登录，走游客态 */
-    } finally {
-      set({ initializing: false });
     }
+    set({ initializing: false });
   },
 
   login: async (identifier, password, remember = true) => {

@@ -12,6 +12,7 @@ export { prefs, bandwidth, localProgress } from './core/storage.js';
 export { usePlayer, type UsePlayerOptions, type UsePlayerResult } from './react/use-player.js';
 export { ProgressBar, type ProgressBarProps } from './skins/shared/progress-bar.js';
 export { LoadingVeil, ErrorVeil, GateVeil, type GateVeilProps } from './skins/shared/overlays.js';
+export { PlayPauseHint, usePlayPauseFlash } from './skins/shared/play-pause-hint.js';
 
 export type {
   GateState,

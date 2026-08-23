@@ -1,10 +1,11 @@
-import { sql } from 'drizzle-orm';
-import type { AlgoWeights, VideoSummary } from '@videox/shared';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { PLAYABLE_VIDEO_STATUSES, type AlgoWeights, type VideoSummary } from '@videox/shared';
 import { db, t, sqlRows, uuidArray } from '../../core/db.js';
 import { logger } from '../../core/logger.js';
 import { getAlgoWeights } from '../settings/service.js';
-import { getSummariesByIds } from '../videos/service.js';
+import { getSummariesByIds, loadTagsFor } from '../videos/service.js';
 import { SOURCE_LABELS, applyExploration, buildCandidates, mmrRerank, type RecallRow } from './scoring.js';
+import { keywordScore, listHomeKeywords, prependPins } from './home-ops.js';
 
 /** 各类行为对兴趣画像的贡献权重。完播和收藏是最强信号。 */
 const BEHAVIOR_WEIGHTS = {
@@ -196,20 +197,41 @@ export interface RecommendOptions {
   excludeIds?: string[];
   /** 竖屏沉浸流会要求更强的多样性 */
   boostDiversity?: boolean;
+  /** 首页 / 发现页默认带上运营置顶；沉浸流关掉以免横插点播。 */
+  includeHomePins?: boolean;
 }
 
 export async function recommendVideos(options: RecommendOptions): Promise<VideoSummary[]> {
-  const weights = await getAlgoWeights();
+  const includePins = options.includeHomePins !== false && !options.boostDiversity;
+  const [weights, keywords, pinSummaries] = await Promise.all([
+    getAlgoWeights(),
+    listHomeKeywords(),
+    includePins ? listPlayableHomePinSummaries() : Promise.resolve([] as VideoSummary[]),
+  ]);
   const effectiveWeights: AlgoWeights = options.boostDiversity
     ? { ...weights, diversityLambda: Math.min(0.6, weights.diversityLambda * 2) }
     : weights;
 
-  const rows = await recall(options.userId, options.excludeIds ?? [], options.limit);
-  if (rows.length === 0) return [];
+  const pinIds = pinSummaries.map((item) => item.id);
+  const excludeIds = [...(options.excludeIds ?? []), ...pinIds];
+  const algoLimit = Math.max(0, options.limit - pinSummaries.length);
+  const pinned = pinSummaries.map((item) => ({ ...item, recommendReason: SOURCE_LABELS.pin ?? '运营精选' }));
+
+  if (algoLimit === 0) return pinned.slice(0, options.limit);
+
+  const rows = await recall(options.userId, excludeIds, algoLimit);
+  if (rows.length === 0) return pinned.slice(0, options.limit);
 
   const candidates = buildCandidates(rows, effectiveWeights);
+  if (keywords.length > 0) {
+    const haystacks = await loadKeywordHaystacks(candidates.map((item) => item.id));
+    for (const candidate of candidates) {
+      candidate.score += keywordScore(haystacks.get(candidate.id) ?? '', keywords);
+    }
+  }
+
   const reranked = applyExploration(
-    mmrRerank(candidates, effectiveWeights, options.limit),
+    mmrRerank(candidates, effectiveWeights, algoLimit),
     candidates,
     effectiveWeights.explorationRatio,
   );
@@ -217,8 +239,9 @@ export async function recommendVideos(options: RecommendOptions): Promise<VideoS
   const ids = reranked.map((c) => c.id);
   const summaries = await getSummariesByIds(ids);
   const reasonById = new Map(reranked.map((c) => [c.id, SOURCE_LABELS[c.source] ?? null]));
+  const algo = summaries.map((s) => ({ ...s, recommendReason: reasonById.get(s.id) ?? null }));
 
-  return summaries.map((s) => ({ ...s, recommendReason: reasonById.get(s.id) ?? null }));
+  return prependPins(pinned, algo).slice(0, options.limit);
 }
 
 /**
@@ -239,4 +262,45 @@ export async function refreshVideoQuality(): Promise<void> {
       )
     WHERE v.status IN ('ready','partially_ready')
   `);
+}
+
+async function listPlayableHomePinSummaries(): Promise<VideoSummary[]> {
+  const rows = await db
+    .select({ videoId: t.homeRecommendPins.videoId })
+    .from(t.homeRecommendPins)
+    .innerJoin(t.videos, eq(t.videos.id, t.homeRecommendPins.videoId))
+    .where(
+      and(
+        inArray(t.videos.status, [...PLAYABLE_VIDEO_STATUSES]),
+        eq(t.videos.visibility, 'public'),
+        eq(t.videos.kind, 'vod'),
+        sql`(${t.videos.publishedAt} is null or ${t.videos.publishedAt} <= now())`,
+      ),
+    )
+    .orderBy(asc(t.homeRecommendPins.sortOrder), asc(t.homeRecommendPins.createdAt));
+
+  return getSummariesByIds(rows.map((row) => row.videoId));
+}
+
+async function loadKeywordHaystacks(ids: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (ids.length === 0) return map;
+
+  const [rows, tagMap] = await Promise.all([
+    db
+      .select({
+        id: t.videos.id,
+        title: t.videos.title,
+        description: t.videos.description,
+      })
+      .from(t.videos)
+      .where(inArray(t.videos.id, ids)),
+    loadTagsFor(ids),
+  ]);
+
+  for (const row of rows) {
+    const tags = (tagMap.get(row.id) ?? []).map((tag) => `${tag.name} ${tag.slug}`).join(' ');
+    map.set(row.id, `${row.title} ${row.description ?? ''} ${tags}`);
+  }
+  return map;
 }
