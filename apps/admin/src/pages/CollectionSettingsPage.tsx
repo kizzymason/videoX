@@ -23,10 +23,29 @@ import {
 import { describeFullCrawlPlan, planFullCrawl } from '@videox/shared';
 import {
   collectionApi,
+  type CollectionKindPurgePreview,
   type CollectionScheduleSettings,
   type CollectionSettings,
   type CollectionStorageStrategy,
 } from '@/lib/api';
+
+const CONTENT_KINDS = ['gv', 'mv', 'tv'] as const;
+type ContentKind = (typeof CONTENT_KINDS)[number];
+type KindFlags = Record<ContentKind, boolean>;
+
+const EMPTY_KINDS: KindFlags = { gv: false, mv: false, tv: false };
+
+function flagsFromKinds(kinds: string[] | undefined): KindFlags {
+  return {
+    gv: kinds?.includes('gv') ?? false,
+    mv: kinds?.includes('mv') ?? false,
+    tv: kinds?.includes('tv') ?? false,
+  };
+}
+
+function kindsFromFlags(flags: KindFlags): ContentKind[] {
+  return CONTENT_KINDS.filter((kind) => flags[kind]);
+}
 
 type PoolSettingsForm = {
   minAccountCount: string;
@@ -37,6 +56,7 @@ type PoolSettingsForm = {
 
 type ScheduleForm = {
   enabled: boolean;
+  kinds: KindFlags;
   pageCountPerRun: string;
   incremental: boolean;
   startTime: string;
@@ -54,6 +74,7 @@ type StorageForm = {
 function toScheduleForm(s: CollectionScheduleSettings): ScheduleForm {
   return {
     enabled: s.enabled,
+    kinds: flagsFromKinds(s.kinds),
     pageCountPerRun: String(s.pageCountPerRun ?? 10),
     incremental: s.incremental,
     startTime: s.startTime ?? '03:00',
@@ -76,16 +97,21 @@ export function CollectionSettingsPage() {
   });
   const [daily, setDaily] = React.useState<ScheduleForm>({
     enabled: true,
+    kinds: { ...EMPTY_KINDS },
     pageCountPerRun: '10',
     incremental: true,
     startTime: '03:00',
   });
   const [weekly, setWeekly] = React.useState<ScheduleForm>({
     enabled: false,
+    kinds: { ...EMPTY_KINDS },
     pageCountPerRun: '50',
     incremental: true,
     startTime: '04:00',
   });
+  const [purgePreview, setPurgePreview] = React.useState<CollectionKindPurgePreview | null>(null);
+  const [purging, setPurging] = React.useState(false);
+  const [purgeResult, setPurgeResult] = React.useState<string | null>(null);
   const [pool, setPool] = React.useState<PoolSettingsForm>({
     minAccountCount: '3',
     vipWeightMultiplier: '3',
@@ -118,6 +144,11 @@ export function CollectionSettingsPage() {
       });
       setDaily(toScheduleForm(s.dailySchedule));
       setWeekly(toScheduleForm(s.weeklySchedule));
+      try {
+        setPurgePreview(await collectionApi.purgeKindPreview());
+      } catch {
+        setPurgePreview(null);
+      }
       setPool({
         minAccountCount: String(s.pool?.minAccountCount ?? 3),
         vipWeightMultiplier: String(s.pool?.vipWeightMultiplier ?? 3),
@@ -136,6 +167,14 @@ export function CollectionSettingsPage() {
   }, [load]);
 
   async function handleSave() {
+    if (daily.enabled && kindsFromFlags(daily.kinds).length === 0) {
+      setError('每日抓取已启用，请至少勾选一种类型（不会默认抓全部）');
+      return;
+    }
+    if (weekly.enabled && kindsFromFlags(weekly.kinds).length === 0) {
+      setError('每周补抓已启用，请至少勾选一种类型（不会默认抓全部）');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -152,12 +191,14 @@ export function CollectionSettingsPage() {
         },
         dailySchedule: {
           enabled: daily.enabled,
+          kinds: kindsFromFlags(daily.kinds),
           pageCountPerRun: Math.max(1, Math.min(200, Number(daily.pageCountPerRun) || 10)),
           incremental: daily.incremental,
           startTime: daily.startTime,
         },
         weeklySchedule: {
           enabled: weekly.enabled,
+          kinds: kindsFromFlags(weekly.kinds),
           pageCountPerRun: Math.max(1, Math.min(500, Number(weekly.pageCountPerRun) || 50)),
           incremental: weekly.incremental,
           startTime: weekly.startTime,
@@ -206,6 +247,35 @@ export function CollectionSettingsPage() {
       setFullResult(e instanceof Error ? e.message : String(e));
     } finally {
       setFullRunning(false);
+    }
+  }
+
+  async function handlePurgeMvTv() {
+    const preview = purgePreview ?? (await collectionApi.purgeKindPreview());
+    setPurgePreview(preview);
+    if (preview.collected + preview.officialVideos === 0) {
+      setPurgeResult('没有可删除的 MV/TV');
+      return;
+    }
+    if (
+      !window.confirm(
+        `将删除采集库 ${preview.collected} 条 MV/TV（其中已导入 ${preview.imported} 条），并删除正式库对应的 ${preview.officialVideos} 部视频，同时取消 ${preview.queuedJobs} 条进行中的相关任务。此操作不可恢复。`,
+      )
+    ) {
+      return;
+    }
+    setPurging(true);
+    setPurgeResult(null);
+    try {
+      const result = await collectionApi.purgeKinds(['mv', 'tv']);
+      setPurgePreview(await collectionApi.purgeKindPreview());
+      setPurgeResult(
+        `已删除采集 ${result.collectedDeleted} 条、正式库 ${result.videosDeleted} 部，取消任务 ${result.jobsCancelled} 条`,
+      );
+    } catch (e) {
+      setPurgeResult(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPurging(false);
     }
   }
 
@@ -351,7 +421,7 @@ export function CollectionSettingsPage() {
         <CardContent className="space-y-4">
           <ScheduleEditor
             title="每日抓取"
-            hint="每天在指定时间自动抓取最新页（凌晨低峰期执行）"
+            hint="每天在指定时间自动抓取最新页（凌晨低峰期执行）。必须勾选类型，不会默认抓全部。"
             value={daily}
             maxPages={200}
             onChange={setDaily}
@@ -359,11 +429,34 @@ export function CollectionSettingsPage() {
           <div className="border-t" />
           <ScheduleEditor
             title="每周补抓"
-            hint="每周一次更深的增量补抓（覆盖每日抓取遗漏的历史页）"
+            hint="每周一次更深的增量补抓（覆盖每日抓取遗漏的历史页）。必须勾选类型，不会默认抓全部。"
             value={weekly}
             maxPages={500}
             onChange={setWeekly}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium">清除误抓的 MV / TV</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            删除采集库里全部 MV、剧集，以及已经导入正式库的对应视频。GV 不会动。
+          </p>
+          {purgePreview ? (
+            <p className="text-sm">
+              采集 {purgePreview.collected} 条（已导入 {purgePreview.imported}），正式库 {purgePreview.officialVideos} 部，队列中 {purgePreview.queuedJobs} 条任务
+            </p>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="destructive" onClick={() => void handlePurgeMvTv()} disabled={purging}>
+              {purging ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              删除全部 MV/TV
+            </Button>
+            {purgeResult ? <p className="text-sm text-muted-foreground">{purgeResult}</p> : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -524,6 +617,19 @@ function ScheduleEditor({
           checked={value.enabled}
           onCheckedChange={(v) => onChange({ ...value, enabled: v })}
         />
+      </div>
+      <div className="flex flex-wrap gap-4">
+        {CONTENT_KINDS.map((kind) => (
+          <label key={kind} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-3.5 accent-foreground"
+              checked={value.kinds[kind]}
+              onChange={(e) => onChange({ ...value, kinds: { ...value.kinds, [kind]: e.target.checked } })}
+            />
+            {kind.toUpperCase()}
+          </label>
+        ))}
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-2">

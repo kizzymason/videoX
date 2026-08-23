@@ -479,11 +479,25 @@ export interface CollectionStorageStrategy {
 
 export interface CollectionScheduleSettings {
   enabled: boolean;
-  kind: 'gv' | 'mv' | 'tv';
+  kinds: Array<'gv' | 'mv' | 'tv'>;
   pageCountPerRun: number;
   cronExpression?: string;
   startTime: string;
   incremental: boolean;
+}
+
+export interface CollectionKindPurgePreview {
+  kinds: Array<'mv' | 'tv'>;
+  collected: number;
+  imported: number;
+  officialVideos: number;
+  queuedJobs: number;
+}
+
+export interface CollectionKindPurgeResult extends CollectionKindPurgePreview {
+  collectedDeleted: number;
+  videosDeleted: number;
+  jobsCancelled: number;
 }
 
 export interface CollectionPoolSettings {
@@ -557,6 +571,9 @@ export const collectionApi = {
       hiddenVideos: number;
       samples: Array<{ key: string; keptTitle: string; dropped: number }>;
     }>('/collection/videos/dedupe'),
+  purgeKindPreview: () => api.get<CollectionKindPurgePreview>('/collection/videos/purge-kinds'),
+  purgeKinds: (kinds: Array<'mv' | 'tv'> = ['mv', 'tv']) =>
+    api.post<CollectionKindPurgeResult>('/collection/videos/purge-kinds', { kinds }),
   fullCrawl: (body: {
     kinds: Array<'gv' | 'mv' | 'tv'>;
     endPage: number;
