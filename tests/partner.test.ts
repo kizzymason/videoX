@@ -26,12 +26,14 @@ suite('合伙人卡密与配额', async () => {
   const { redeemCode, generateCodes } = await import('../apps/api/src/modules/membership/service.js');
   const { toCurrentUser } = await import('../apps/api/src/modules/auth/service.js');
   const {
+    adminIssueCodes,
     appointPartner,
     deletePartnerUnusedCodes,
     generatePartnerCodes,
     getPartnerInsights,
     partnerGrantVip,
     revokePartner,
+    transferRedeemCodes,
   } = await import('../apps/api/src/modules/partner/service.js');
 
   const tag = `partner-${Date.now()}`;
@@ -39,6 +41,7 @@ suite('合伙人卡密与配额', async () => {
   let partnerId = '';
   let customerId = '';
   let strangerId = '';
+  let otherPartnerId = '';
   let adminPlanId = '';
 
   beforeAll(async () => {
@@ -67,7 +70,7 @@ suite('合伙人卡密与配额', async () => {
       .returning({ id: t.plans.id });
     adminPlanId = adminPlan!.id;
 
-    for (const name of ['p', 'c', 's']) {
+    for (const name of ['p', 'c', 's', 'q']) {
       const [user] = await db
         .insert(t.users)
         .values({
@@ -86,21 +89,24 @@ suite('合伙人卡密与配额', async () => {
     partnerId = userIds[0]!;
     customerId = userIds[1]!;
     strangerId = userIds[2]!;
+    otherPartnerId = userIds[3]!;
 
     await appointPartner({ userId: partnerId, level: 'standard', codeQuota: 3, daysQuota: 40 });
+    await appointPartner({ userId: otherPartnerId, level: 'standard', codeQuota: 10, daysQuota: 200 });
   });
 
   afterAll(async () => {
     await db.delete(t.orders).where(inArray(t.orders.userId, userIds));
     await db.delete(t.subscriptions).where(inArray(t.subscriptions.userId, userIds));
-    await db.delete(t.redeemCodes).where(eq(t.redeemCodes.createdBy, partnerId));
+    await db.delete(t.redeemCodes).where(inArray(t.redeemCodes.createdBy, [partnerId, otherPartnerId, strangerId]));
     if (adminPlanId) {
       await db.delete(t.redeemCodes).where(eq(t.redeemCodes.planId, adminPlanId));
       await db.delete(t.orders).where(eq(t.orders.planId, adminPlanId));
       await db.delete(t.subscriptions).where(eq(t.subscriptions.planId, adminPlanId));
       await db.delete(t.plans).where(eq(t.plans.id, adminPlanId));
     }
-    await db.delete(t.partners).where(eq(t.partners.userId, partnerId));
+    await db.delete(t.redeemCodes).where(eq(t.redeemCodes.createdBy, otherPartnerId));
+    await db.delete(t.partners).where(inArray(t.partners.userId, [partnerId, otherPartnerId]));
     for (const id of userIds) await db.delete(t.users).where(eq(t.users.id, id));
     await closeDb();
   });
@@ -218,5 +224,80 @@ suite('合伙人卡密与配额', async () => {
     expect(insights.statusBreakdown.find((row) => row.label === '已使用')?.value).toBeGreaterThanOrEqual(1);
     expect(insights.expiryBuckets.reduce((sum, row) => sum + row.value, 0)).toBeGreaterThanOrEqual(1);
     expect(insights.trend.reduce((sum, point) => sum + point.revenueCents, 0)).toBe(insights.rangeRevenueCents);
+  });
+
+  it('总站可把卡密发给合伙人并占用其配额', async () => {
+    const [before] = await db.select().from(t.partners).where(eq(t.partners.userId, otherPartnerId));
+    const issued = await adminIssueCodes({
+      adminUserId: strangerId,
+      ownerUserId: otherPartnerId,
+      planId: adminPlanId,
+      count: 2,
+      prefix: 'AD',
+    });
+    expect(issued.codes).toHaveLength(2);
+    const [after] = await db.select().from(t.partners).where(eq(t.partners.userId, otherPartnerId));
+    expect(after!.codesIssued).toBe(before!.codesIssued + 2);
+    expect(after!.daysIssued).toBe(before!.daysIssued + 60);
+
+    const rows = await db.select().from(t.redeemCodes).where(eq(t.redeemCodes.batchId, issued.batchId));
+    expect(rows.every((row) => row.createdBy === otherPartnerId)).toBe(true);
+    expect(rows.every((row) => row.grantDays === 30)).toBe(true);
+  });
+
+  it('未使用卡密可按批次划转，配额从甲方退回乙方', async () => {
+    const { batchId, codes } = await adminIssueCodes({
+      adminUserId: strangerId,
+      ownerUserId: 'self',
+      planId: adminPlanId,
+      count: 2,
+      prefix: 'TF',
+    });
+    expect(codes).toHaveLength(2);
+
+    const [before] = await db.select().from(t.partners).where(eq(t.partners.userId, otherPartnerId));
+    const moved = await transferRedeemCodes({
+      adminUserId: strangerId,
+      ownerUserId: otherPartnerId,
+      batchId,
+    });
+    expect(moved.transferred).toBe(2);
+    expect(moved.unused).toBe(2);
+
+    const [after] = await db.select().from(t.partners).where(eq(t.partners.userId, otherPartnerId));
+    expect(after!.codesIssued).toBe(before!.codesIssued + 2);
+    expect(after!.daysIssued).toBe(before!.daysIssued + 60);
+
+    const rows = await db.select().from(t.redeemCodes).where(eq(t.redeemCodes.batchId, batchId));
+    expect(rows.every((row) => row.createdBy === otherPartnerId)).toBe(true);
+  });
+
+  it('已核销卡密划转只改归属，不占目标未使用配额', async () => {
+    const { codes } = await adminIssueCodes({
+      adminUserId: strangerId,
+      ownerUserId: otherPartnerId,
+      planId: adminPlanId,
+      count: 1,
+      prefix: 'US',
+    });
+    await redeemCode({ code: codes[0]!, userId: strangerId });
+    const [codeRow] = await db.select().from(t.redeemCodes).where(eq(t.redeemCodes.code, codes[0]!));
+    const [beforeDest] = await db.select().from(t.partners).where(eq(t.partners.userId, partnerId));
+
+    const moved = await transferRedeemCodes({
+      adminUserId: strangerId,
+      ownerUserId: partnerId,
+      ids: [codeRow!.id],
+    });
+    expect(moved.transferred).toBe(1);
+    expect(moved.used).toBe(1);
+    expect(moved.unused).toBe(0);
+
+    const [afterDest] = await db.select().from(t.partners).where(eq(t.partners.userId, partnerId));
+    expect(afterDest!.codesIssued).toBe(beforeDest!.codesIssued);
+    expect(afterDest!.daysIssued).toBe(beforeDest!.daysIssued);
+
+    const [updated] = await db.select().from(t.redeemCodes).where(eq(t.redeemCodes.id, codeRow!.id));
+    expect(updated!.createdBy).toBe(partnerId);
   });
 });

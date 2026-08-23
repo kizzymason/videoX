@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  generateCodesSchema,
   generatePartnerCodesSchema,
   isComplimentaryVip,
   partnerInsightsQuerySchema,
   partnerLevelLabel,
+  transferRedeemCodesSchema,
   USER_ROLES,
 } from '@videox/shared';
 
@@ -36,5 +38,17 @@ describe('合伙人角色与校验', () => {
     expect(partnerInsightsQuerySchema.parse({ days: '90' })).toEqual({ days: 90 });
     expect(() => partnerInsightsQuerySchema.parse({ days: 6 })).toThrow();
     expect(() => partnerInsightsQuerySchema.parse({ days: 181 })).toThrow();
+  });
+
+  it('总站生成卡密可以指定给自己或合伙人', () => {
+    expect(generateCodesSchema.parse({ planId: 'p1', count: 2 }).ownerUserId).toBeUndefined();
+    expect(generateCodesSchema.parse({ planId: 'p1', count: 2, ownerUserId: 'self' }).ownerUserId).toBe('self');
+    expect(() => generateCodesSchema.parse({ planId: 'p1', count: 2, ownerUserId: '' })).toThrow();
+  });
+
+  it('划转必须带卡密或批次，目标可以是 self', () => {
+    expect(transferRedeemCodesSchema.parse({ ownerUserId: 'self', ids: ['abc'] })).toMatchObject({ ownerUserId: 'self' });
+    expect(transferRedeemCodesSchema.parse({ ownerUserId: 'self', batchId: 'B123' }).batchId).toBe('B123');
+    expect(() => transferRedeemCodesSchema.parse({ ownerUserId: 'self' })).toThrow();
   });
 });

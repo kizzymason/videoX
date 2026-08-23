@@ -12,6 +12,7 @@ import {
   commentListQuerySchema,
   generateCodesSchema,
   grantVipSchema,
+  transferRedeemCodesSchema,
   homeRecommendKeywordSchema,
   homeRecommendPinReorderSchema,
   homeRecommendPinSchema,
@@ -49,7 +50,6 @@ import {
 } from '../storage/service.js';
 import { getStorage } from '../storage/service.js';
 import {
-  generateCodes,
   codesToCsv,
   grantVip,
   listPlans,
@@ -58,6 +58,7 @@ import {
   toPlan,
   toRedeemCode,
 } from '../membership/service.js';
+import { adminIssueCodes, refundPartnerCodeQuota, transferRedeemCodes } from '../partner/service.js';
 import {
   generateUniqueSlug,
   getSummariesByIds,
@@ -1083,6 +1084,7 @@ async function queryCodes(q: {
   status?: string;
   planId?: string;
   batchId?: string;
+  createdBy?: string;
   q?: string;
 }) {
   const usedByUsers = alias(t.users, 'redeem_used_by');
@@ -1091,6 +1093,7 @@ async function queryCodes(q: {
   if (q.status) filters.push(eq(t.redeemCodes.status, q.status as 'unused'));
   if (q.planId) filters.push(eq(t.redeemCodes.planId, q.planId));
   if (q.batchId) filters.push(eq(t.redeemCodes.batchId, q.batchId));
+  if (q.createdBy) filters.push(eq(t.redeemCodes.createdBy, q.createdBy));
   if (q.q) filters.push(sql`${t.redeemCodes.code} ILIKE ${'%' + q.q.toUpperCase() + '%'}`);
   const where = filters.length > 0 ? and(...filters) : undefined;
 
@@ -1149,19 +1152,45 @@ adminRouter.post(
       prefix?: string;
       expiresAt?: string | null;
       note?: string;
+      ownerUserId?: string | 'self';
     }>(req);
-
-    const result = await generateCodes({
+    const result = await adminIssueCodes({
+      adminUserId: req.auth!.id,
+      ownerUserId: input.ownerUserId ?? 'self',
       planId: input.planId,
       count: input.count,
       prefix: input.prefix,
       expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
       note: input.note,
-      createdBy: req.auth!.id,
     });
 
-    await audit(req, 'redeem_code.generate', { type: 'batch', id: result.batchId }, { count: result.codes.length });
+    await audit(
+      req,
+      'redeem_code.generate',
+      { type: 'batch', id: result.batchId },
+      { count: result.codes.length, ownerUserId: input.ownerUserId ?? 'self' },
+    );
     ok(res, result, `已生成 ${result.codes.length} 个兑换码`);
+  }),
+);
+
+adminRouter.post(
+  '/redeem-codes/transfer',
+  validate({ body: transferRedeemCodesSchema }),
+  asyncHandler(async (req, res) => {
+    const input = body<{ ownerUserId: string | 'self'; ids?: string[]; batchId?: string; batchIds?: string[] }>(req);
+    const result = await transferRedeemCodes({
+      adminUserId: req.auth!.id,
+      ownerUserId: input.ownerUserId,
+      ids: input.ids,
+      batchId: input.batchId,
+      batchIds: input.batchIds,
+    });
+    await audit(req, 'redeem_code.transfer', input.batchId ? { type: 'batch', id: input.batchId } : undefined, {
+      ...input,
+      ...result,
+    });
+    ok(res, result, `已划转 ${result.transferred} 张卡密`);
   }),
 );
 
@@ -1211,10 +1240,7 @@ adminRouter.post(
       .where(inArray(t.redeemCodes.id, unique));
     const result = await db.delete(t.redeemCodes).where(inArray(t.redeemCodes.id, unique));
     const deleted = result.rowCount ?? 0;
-    if (existing.length > 0) {
-      const { refundPartnerCodeQuota } = await import('../partner/service.js');
-      await refundPartnerCodeQuota(existing);
-    }
+    if (existing.length > 0) await refundPartnerCodeQuota(existing);
     await audit(req, 'redeem_code.bulk_delete', undefined, { requested: unique.length, deleted });
     ok(res, { deleted }, `已删除 ${deleted} 张卡密`);
   }),
