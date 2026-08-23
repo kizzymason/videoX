@@ -226,7 +226,36 @@ export const catalogApi = {
   createBanner: (body: Query) => api.post<Banner>('/admin/banners', body),
   updateBanner: (id: string, body: Query) => api.patch<Banner>(`/admin/banners/${id}`, body),
   deleteBanner: (id: string) => api.delete<null>(`/admin/banners/${id}`),
+
+  homePins: () => api.get<HomeRecommendPin[]>('/admin/home-recommend/pins'),
+  addHomePin: (videoId: string) => api.post<HomeRecommendPin>('/admin/home-recommend/pins', { videoId }),
+  reorderHomePins: (ids: string[]) => api.post<null>('/admin/home-recommend/pins/reorder', { ids }),
+  removeHomePin: (id: string) => api.delete<null>(`/admin/home-recommend/pins/${id}`),
+
+  homeKeywords: () => api.get<HomeRecommendKeyword[]>('/admin/home-recommend/keywords'),
+  addHomeKeyword: (body: { keyword: string; direction: 'boost' | 'penalty'; weight: number }) =>
+    api.post<HomeRecommendKeyword>('/admin/home-recommend/keywords', body),
+  updateHomeKeyword: (id: string, body: { keyword?: string; direction?: 'boost' | 'penalty'; weight?: number }) =>
+    api.patch<HomeRecommendKeyword>(`/admin/home-recommend/keywords/${id}`, body),
+  deleteHomeKeyword: (id: string) => api.delete<null>(`/admin/home-recommend/keywords/${id}`),
 };
+
+export interface HomeRecommendPin {
+  id: string;
+  videoId: string;
+  sortOrder: number;
+  createdAt: string;
+  video: VideoSummary;
+}
+
+export interface HomeRecommendKeyword {
+  id: string;
+  keyword: string;
+  direction: 'boost' | 'penalty';
+  weight: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
 // ---------------------------------------------------------------------------
 // 会员

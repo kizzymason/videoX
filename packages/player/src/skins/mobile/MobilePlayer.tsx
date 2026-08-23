@@ -172,6 +172,7 @@ export function MobilePlayer({
 
       {/* 顶栏 */}
       <div
+        data-player-control
         className={cn(
           'pt-safe absolute inset-x-0 top-0 z-10 flex items-center gap-2 bg-gradient-to-b from-black/75 to-transparent px-2 pb-8 transition-opacity',
           showControls ? 'opacity-100' : 'pointer-events-none opacity-0',
@@ -193,17 +194,37 @@ export function MobilePlayer({
         </button>
       </div>
 
-      {/* 中央播放按钮 */}
-      {snapshot.paused && !buffering && !snapshot.error && !snapshot.gate.blocked ? (
-        <div className="pointer-events-none absolute inset-0 grid place-items-center">
+      {/* 中央播放/暂停：真实按钮。暂停时常显播放键；播放中仅控件可见时显示暂停。 */}
+      {!buffering &&
+      !snapshot.error &&
+      !snapshot.gate.blocked &&
+      (snapshot.paused || showControls) ? (
+        <button
+          type="button"
+          data-player-control
+          aria-label={snapshot.paused ? '播放' : '暂停'}
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            engine.togglePlay();
+            if (snapshot.paused) scheduleHide();
+          }}
+          className="absolute top-1/2 left-1/2 z-20 grid size-16 -translate-x-1/2 -translate-y-1/2 place-items-center"
+        >
           <span className="grid size-14 place-items-center rounded-full bg-black/45 backdrop-blur-sm">
-            <Play className="size-6 translate-x-0.5 fill-white text-white" />
+            {snapshot.paused ? (
+              <Play className="size-6 translate-x-0.5 fill-white text-white" />
+            ) : (
+              <Pause className="size-6 fill-white text-white" />
+            )}
           </span>
-        </div>
+        </button>
       ) : null}
 
       {/* 底栏 */}
       <div
+        data-player-control
         className={cn(
           'pb-safe absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/80 to-transparent px-3 pt-10 transition-opacity',
           showControls ? 'opacity-100' : 'pointer-events-none opacity-0',
@@ -223,6 +244,7 @@ export function MobilePlayer({
         <div className="flex items-center gap-1 pb-1.5 text-white">
           <button
             type="button"
+            data-player-control
             aria-label={snapshot.paused ? '播放' : '暂停'}
             onClick={() => engine.togglePlay()}
             className="grid size-9 place-items-center"

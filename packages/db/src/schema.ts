@@ -422,6 +422,37 @@ export const orders = pgTable(
   (t) => [uniqueIndex('orders_no_uq').on(t.orderNo), index('orders_user_idx').on(t.userId, t.createdAt), index('orders_created_idx').on(t.createdAt)],
 );
 
+/** 首页推荐置顶：排在默认推荐 / 算法结果之前。 */
+export const homeRecommendPins = pgTable(
+  'home_recommend_pins',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    videoId: uuid('video_id')
+      .notNull()
+      .references(() => videos.id, { onDelete: 'cascade' }),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('home_recommend_pins_video_uq').on(t.videoId),
+    index('home_recommend_pins_sort_idx').on(t.sortOrder),
+  ],
+);
+
+/** 首页推荐关键词：升权 / 降权，命中标题、简介或标签时影响排序。 */
+export const homeRecommendKeywords = pgTable(
+  'home_recommend_keywords',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    keyword: varchar('keyword', { length: 80 }).notNull(),
+    direction: varchar('direction', { length: 16 }).$type<'boost' | 'penalty'>().notNull(),
+    weight: doublePrecision('weight').notNull().default(1),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('home_recommend_keywords_keyword_uq').on(t.keyword)],
+);
+
 export const banners = pgTable(
   'banners',
   {

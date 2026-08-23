@@ -32,6 +32,7 @@ const lazyPage = <K extends string>(loader: () => Promise<Record<K, React.Compon
 const DashboardPage = lazyPage(() => import('./pages/DashboardPage'), 'DashboardPage');
 const InsightsPage = lazyPage(() => import('./pages/InsightsPage'), 'InsightsPage');
 const RecommendPage = lazyPage(() => import('./pages/RecommendPage'), 'RecommendPage');
+const HomeRecommendPage = lazyPage(() => import('./pages/HomeRecommendPage'), 'HomeRecommendPage');
 const UploadPage = lazyPage(() => import('./pages/UploadPage'), 'UploadPage');
 
 export function App() {
@@ -79,6 +80,7 @@ export function App() {
           <Route path="categories" element={<CategoriesPage />} />
           <Route path="tags" element={<TagsPage />} />
           <Route path="banners" element={<BannersPage />} />
+          <Route path="home-recommend" element={<HomeRecommendPage />} />
           <Route path="recommend" element={<RecommendPage />} />
           <Route path="plans" element={<PlansPage />} />
           <Route path="redeem-codes" element={<RedeemCodesPage />} />

@@ -2,7 +2,7 @@ import * as React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Bookmark, Heart, Maximize, Volume2, VolumeX } from 'lucide-react';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { usePlayer, type PlayerEngine, type PlayerSource } from '@videox/player';
+import { PlayPauseHint, usePlayPauseFlash, usePlayer, type PlayerEngine, type PlayerSource } from '@videox/player';
 import { formatCount, parseShortsTrialDetails, type ShortsTrialQuota, type VideoSummary } from '@videox/shared';
 import { Spinner } from '@videox/ui';
 import { ApiError, contentApi, socialApi } from '../lib/api';
@@ -23,7 +23,7 @@ function enterFullscreen(container: HTMLElement | null) {
 /**
  * Shorts：全屏竖滑，点击不进 /watch。数据走 GET /api/videos/shorts。
  * 进入视口（~80%）才取 play-ticket + usePlayer 起播；离开即卸载引擎，全 feed 只活一个。
- * 顶/底安全区都铺黑，离开由 App.applyChrome 卸回亮色。封面满屏，播放中不挂中间播放按钮。
+ * 顶/底安全区都铺黑，离开由 App.applyChrome 卸回亮色。封面满屏；点按切换播放并闪 TikTok 式提示。
  */
 export function ShortsTab({ active = true }: { active?: boolean }) {
   const [activeId, setActiveId] = React.useState<string | null>(null);
@@ -226,6 +226,7 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
     onFirstFrame: () => track('video_play', { videoId: video.id }),
   });
   engineRef.current = engine;
+  const { flash, trigger } = usePlayPauseFlash();
 
   const overlayMessage =
     gate?.message ?? (snapshot.gate.blocked ? '订阅后即可继续观看' : null) ?? (snapshot.error ? snapshot.error.message : null);
@@ -236,7 +237,9 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
       ref={containerRef}
       className="absolute inset-0"
       onClick={() => {
-        if (source && !overlayMessage) engine.togglePlay();
+        if (!source || overlayMessage) return;
+        trigger(engine.getSnapshot().paused ? 'play' : 'pause');
+        engine.togglePlay();
       }}
     >
       <video
@@ -245,6 +248,7 @@ function ShortsInPlacePlayer({ video, poster }: { video: VideoSummary; poster: s
         playsInline
         poster={poster ?? undefined}
       />
+      {source && !overlayMessage ? <PlayPauseHint paused={snapshot.paused} flash={flash} /> : null}
       {overlayMessage ? (
         <div className="absolute inset-0 grid place-items-center bg-black/70 px-8 text-center backdrop-blur-[2px]">
           <div className="pointer-events-auto flex max-w-xs flex-col items-center gap-3">

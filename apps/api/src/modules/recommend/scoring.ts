@@ -185,4 +185,5 @@ export const SOURCE_LABELS: Record<string, string> = {
   collab: '相似用户也在看',
   anonymous: '热门推荐',
   explore: '为你发现',
+  pin: '运营精选',
 };

@@ -19,21 +19,28 @@ export function WatchPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const initializing = useAuthStore((s) => s.initializing);
   const [commentsOpen, setCommentsOpen] = React.useState(false);
+  const viewerKey = user?.id ?? 'guest';
+  const videoQueryKey = ['video', idOrSlug, viewerKey] as const;
 
-  const videoQuery = useQuery({ queryKey: ['video', idOrSlug], queryFn: () => contentApi.video(idOrSlug) });
+  const videoQuery = useQuery({
+    queryKey: videoQueryKey,
+    queryFn: () => contentApi.video(idOrSlug),
+    enabled: !initializing,
+  });
   const video = videoQuery.data;
 
   const relatedQuery = useQuery({
-    queryKey: ['related', video?.id],
+    queryKey: ['related', video?.id, viewerKey],
     queryFn: () => contentApi.related(video!.id, 12),
-    enabled: Boolean(video?.id),
+    enabled: !initializing && Boolean(video?.id),
   });
 
   const ticketQuery = useQuery({
-    queryKey: ['play-ticket', video?.id],
+    queryKey: ['play-ticket', video?.id, viewerKey],
     queryFn: () => contentApi.playTicket(video!.id),
-    enabled: Boolean(video?.id) && Boolean(video?.viewer.canPlay),
+    enabled: !initializing && Boolean(video?.id) && Boolean(video?.viewer.canPlay),
     staleTime: 0,
     gcTime: 0,
     retry: false,
@@ -61,7 +68,7 @@ export function WatchPage() {
   }, [video, ticketQuery.data]);
 
   const patchViewer = (patch: Partial<VideoDetail['viewer']>, counts?: Partial<VideoDetail>) => {
-    queryClient.setQueryData<VideoDetail>(['video', idOrSlug], (old) =>
+    queryClient.setQueryData<VideoDetail>(videoQueryKey, (old) =>
       old ? { ...old, ...counts, viewer: { ...old.viewer, ...patch } } : old,
     );
   };
@@ -101,7 +108,7 @@ export function WatchPage() {
     action();
   };
 
-  if (videoQuery.isLoading) {
+  if (initializing || videoQuery.isLoading) {
     return (
       <div className="flex-1">
         <Skeleton className="aspect-video w-full rounded-none" />

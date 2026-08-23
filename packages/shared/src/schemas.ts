@@ -326,6 +326,20 @@ export const algoWeightsSchema = z.object({
   explorationRatio: z.coerce.number().min(0).max(0.9).default(0.15),
 });
 
+export const homeRecommendPinSchema = z.object({
+  videoId: idSchema,
+});
+
+export const homeRecommendPinReorderSchema = z.object({
+  ids: z.array(idSchema).min(1).max(200),
+});
+
+export const homeRecommendKeywordSchema = z.object({
+  keyword: z.string().min(1).max(80),
+  direction: z.enum(['boost', 'penalty']),
+  weight: z.coerce.number().min(0.05).max(20).default(1),
+});
+
 export const bannerSchema = z.object({
   title: z.string().min(1).max(120),
   subtitle: z.string().max(200).nullable().optional(),
@@ -409,3 +423,4 @@ export type GenerateCodesInput = z.infer<typeof generateCodesSchema>;
 export type SiteSettingsInput = z.infer<typeof siteSettingsSchema>;
 export type AlgoWeightsInput = z.infer<typeof algoWeightsSchema>;
 export type AiProfileInput = z.infer<typeof aiProfileSchema>;
+export type HomeRecommendKeywordInput = z.infer<typeof homeRecommendKeywordSchema>;

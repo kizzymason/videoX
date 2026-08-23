@@ -22,6 +22,12 @@ const DOUBLE_TAP_MS = 280;
 const LONG_PRESS_MS = 420;
 const DRAG_THRESHOLD = 12;
 
+function isPlayerControlTarget(event: React.PointerEvent): boolean {
+  const el = event.target;
+  if (!(el instanceof Element)) return false;
+  return Boolean(el.closest('button, input, textarea, [data-player-control]'));
+}
+
 /**
  * 移动端手势。刻意只实现四种大家肌肉记忆里已有的：
  * 双击左右快退快进、左半屏竖滑调亮度、右半屏竖滑调音量、长按 2 倍速。
@@ -54,7 +60,7 @@ export function useGestures({ engine, onTap, brightness, setBrightness, disabled
   }, [clearHint]);
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (disabled || event.pointerType === 'mouse') return;
+    if (disabled || event.pointerType === 'mouse' || isPlayerControlTarget(event)) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const s = state.current;
     const snap = engine.getSnapshot();
@@ -123,6 +129,8 @@ export function useGestures({ engine, onTap, brightness, setBrightness, disabled
     if (disabled || event.pointerType === 'mouse') return;
     const s = state.current;
     if (s.longPressTimer) clearTimeout(s.longPressTimer);
+    // 控件上起的手势（或根本没开始）不要当成画面点击。
+    if (s.mode === 'idle') return;
 
     if (s.mode === 'longpress') {
       engine.setRate(s.savedRate);
