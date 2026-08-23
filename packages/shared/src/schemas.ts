@@ -218,14 +218,28 @@ export const generateCodesSchema = z.object({
     .optional(),
   expiresAt: z.string().datetime().nullable().optional(),
   note: z.string().max(200).optional(),
+  /** 不传或 self = 记在当前管理员名下；传合伙人 userId 则记到该合伙人并扣其配额。 */
+  ownerUserId: z.union([z.literal('self'), idSchema]).optional(),
 });
 
 export const redeemCodeQuerySchema = paginationSchema.extend({
   status: z.enum(REDEEM_CODE_STATUSES).optional(),
   planId: idSchema.optional(),
   batchId: z.string().max(64).optional(),
+  createdBy: idSchema.optional(),
   q: z.string().max(64).optional(),
 });
+
+export const transferRedeemCodesSchema = z
+  .object({
+    ownerUserId: z.union([z.literal('self'), idSchema]),
+    ids: z.array(idSchema).min(1).max(500).optional(),
+    batchId: z.string().max(64).optional(),
+    batchIds: z.array(z.string().max(64)).min(1).max(50).optional(),
+  })
+  .refine((value) => Boolean(value.ids?.length || value.batchId || value.batchIds?.length), {
+    message: '请选择卡密或批次',
+  });
 
 export const grantVipSchema = z.object({
   userId: idSchema,

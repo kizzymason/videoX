@@ -270,10 +270,18 @@ export const membershipApi = {
   deletePlan: (id: string) => api.delete<null>(`/admin/plans/${id}`),
 
   codes: (query: Query) => api.get<Paginated<RedeemCode>>('/admin/redeem-codes', query),
-  generateCodes: (body: { planId: string; count: number; prefix?: string; expiresAt?: string; note?: string }) =>
-    api.post<{ batchId: string; codes: string[] }>('/admin/redeem-codes/generate', body),
+  generateCodes: (body: {
+    planId: string;
+    count: number;
+    prefix?: string;
+    expiresAt?: string;
+    note?: string;
+    ownerUserId?: string | 'self';
+  }) => api.post<{ batchId: string; codes: string[] }>('/admin/redeem-codes/generate', body),
   disableCode: (id: string) => api.post<null>(`/admin/redeem-codes/${id}/disable`),
   bulkDeleteCodes: (ids: string[]) => api.post<{ deleted: number }>('/admin/redeem-codes/bulk-delete', { ids }),
+  transferCodes: (body: { ownerUserId: string | 'self'; ids?: string[]; batchId?: string; batchIds?: string[] }) =>
+    api.post<{ transferred: number; unused: number; used: number }>('/admin/redeem-codes/transfer', body),
 
   orders: (query: Query) => api.get<Paginated<Order>>('/admin/orders', query),
 };

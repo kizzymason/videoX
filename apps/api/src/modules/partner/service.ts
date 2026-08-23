@@ -54,7 +54,15 @@ export function toPartnerProfile(row: PartnerRow): PartnerProfile {
   };
 }
 
-async function lockPartner(tx: Tx, userId: string): Promise<PartnerRow> {
+function hydratePartner(row: PartnerRow): PartnerRow {
+  return {
+    ...row,
+    appointedAt: new Date(row.appointedAt),
+    revokedAt: row.revokedAt ? new Date(row.revokedAt) : null,
+  };
+}
+
+async function lockPartnerRow(tx: Tx, userId: string): Promise<PartnerRow | null> {
   const rows = await sqlRows<PartnerRow>(
     sql`
       SELECT
@@ -74,14 +82,36 @@ async function lockPartner(tx: Tx, userId: string): Promise<PartnerRow> {
     `,
     tx,
   );
-  const row = rows[0];
+  return rows[0] ? hydratePartner(rows[0]) : null;
+}
+
+async function lockPartner(tx: Tx, userId: string): Promise<PartnerRow> {
+  const row = await lockPartnerRow(tx, userId);
   if (!row) throw AppError.forbidden('合伙人档案不存在');
   if (row.status !== 'active') throw AppError.forbidden('合伙人权限已取消');
-  return {
-    ...row,
-    appointedAt: new Date(row.appointedAt),
-    revokedAt: row.revokedAt ? new Date(row.revokedAt) : null,
-  };
+  return row;
+}
+
+async function applyIssuedDelta(
+  tx: Tx,
+  userId: string,
+  delta: { codes: number; days: number },
+): Promise<void> {
+  if (delta.codes === 0 && delta.days === 0) return;
+  await tx
+    .update(t.partners)
+    .set({
+      codesIssued: sql`greatest(0, ${t.partners.codesIssued} + ${delta.codes})`,
+      daysIssued: sql`greatest(0, ${t.partners.daysIssued} + ${delta.days})`,
+      updatedAt: new Date(),
+    })
+    .where(eq(t.partners.userId, userId));
+}
+
+/** 未使用卡密占用的天数：合伙人码看 grantDays，总站码回落到套餐天数。 */
+function unusedDaysOf(code: { status: string; grantDays: number | null; durationDays?: number | null }): number {
+  if (code.status !== 'unused') return 0;
+  return code.grantDays ?? code.durationDays ?? 0;
 }
 
 export async function requireActivePartner(userId: string): Promise<PartnerRow> {
@@ -265,6 +295,184 @@ export async function generatePartnerCodes(params: {
       .where(eq(t.partners.userId, params.partnerUserId));
 
     return result;
+  });
+}
+
+export async function resolveCodeOwner(
+  ownerUserId: string | 'self',
+  adminUserId: string,
+): Promise<{ userId: string; asPartner: boolean }> {
+  if (ownerUserId === 'self' || ownerUserId === adminUserId) {
+    return { userId: adminUserId, asPartner: false };
+  }
+  const [user] = await db.select({ id: t.users.id, role: t.users.role }).from(t.users).where(eq(t.users.id, ownerUserId)).limit(1);
+  if (!user) throw AppError.notFound('目标用户不存在');
+  const [profile] = await db.select().from(t.partners).where(eq(t.partners.userId, ownerUserId)).limit(1);
+  if (!profile || profile.status !== 'active' || user.role !== 'partner') {
+    throw AppError.badRequest('只能指定生效中的合伙人，或选择自己');
+  }
+  return { userId: ownerUserId, asPartner: true };
+}
+
+/**
+ * 总站代发：记到管理员或指定合伙人名下。
+ * 发给合伙人时按套餐天数扣配额，并写 grantDays，方便以后退回/划转。
+ */
+export async function adminIssueCodes(params: {
+  adminUserId: string;
+  ownerUserId: string | 'self';
+  planId: string;
+  count: number;
+  prefix?: string;
+  expiresAt?: Date | null;
+  note?: string;
+}): Promise<{ batchId: string; codes: string[] }> {
+  const owner = await resolveCodeOwner(params.ownerUserId, params.adminUserId);
+  if (!owner.asPartner) {
+    return generateCodes({
+      planId: params.planId,
+      count: params.count,
+      prefix: params.prefix,
+      expiresAt: params.expiresAt ?? null,
+      note: params.note,
+      createdBy: owner.userId,
+    });
+  }
+
+  return db.transaction(async (tx) => {
+    const partner = await lockPartner(tx, owner.userId);
+    const [plan] = await tx.select().from(t.plans).where(eq(t.plans.id, params.planId)).limit(1);
+    if (!plan) throw AppError.notFound('套餐不存在');
+
+    const remaining = remainingOf(partner);
+    if (params.count > remaining.codeRemaining) {
+      throw AppError.badRequest(`该合伙人剩余可生成张数不足，还可生成 ${remaining.codeRemaining} 张`);
+    }
+    const daysNeeded = params.count * plan.durationDays;
+    if (daysNeeded > remaining.daysRemaining) {
+      throw AppError.badRequest(`该合伙人剩余可发放天数不足，还可发放 ${remaining.daysRemaining} 天`);
+    }
+
+    const result = await generateCodes({
+      planId: params.planId,
+      count: params.count,
+      prefix: params.prefix,
+      expiresAt: params.expiresAt ?? null,
+      note: params.note,
+      createdBy: owner.userId,
+      grantDays: plan.durationDays,
+      salePriceCents: plan.priceCents,
+      executor: tx,
+    });
+    if (result.codes.length === 0) throw AppError.internal('生成卡密失败，请重试');
+
+    await applyIssuedDelta(tx, owner.userId, { codes: result.codes.length, days: result.codes.length * plan.durationDays });
+    return result;
+  });
+}
+
+export async function transferRedeemCodes(params: {
+  adminUserId: string;
+  ownerUserId: string | 'self';
+  ids?: string[];
+  batchId?: string;
+  batchIds?: string[];
+}): Promise<{ transferred: number; unused: number; used: number }> {
+  const dest = await resolveCodeOwner(params.ownerUserId, params.adminUserId);
+  const batchIds = [...new Set([...(params.batchIds ?? []), ...(params.batchId ? [params.batchId] : [])])];
+  if (!params.ids?.length && batchIds.length === 0) throw AppError.badRequest('请选择卡密或批次');
+
+  return db.transaction(async (tx) => {
+    const filters = [];
+    if (params.ids?.length) filters.push(inArray(t.redeemCodes.id, [...new Set(params.ids)]));
+    if (batchIds.length === 1) filters.push(eq(t.redeemCodes.batchId, batchIds[0]!));
+    else if (batchIds.length > 1) filters.push(inArray(t.redeemCodes.batchId, batchIds));
+
+    const rows = await tx
+      .select({
+        id: t.redeemCodes.id,
+        createdBy: t.redeemCodes.createdBy,
+        status: t.redeemCodes.status,
+        grantDays: t.redeemCodes.grantDays,
+        durationDays: t.plans.durationDays,
+      })
+      .from(t.redeemCodes)
+      .leftJoin(t.plans, eq(t.plans.id, t.redeemCodes.planId))
+      .where(and(...filters));
+
+    const moving = rows.filter((row) => row.createdBy !== dest.userId);
+    if (moving.length === 0) {
+      return { transferred: 0, unused: 0, used: 0 };
+    }
+
+    const sourceIds = [...new Set(moving.map((row) => row.createdBy).filter((id): id is string => Boolean(id)))];
+    const lockIds = dest.asPartner ? [...new Set([...sourceIds, dest.userId])] : sourceIds;
+    lockIds.sort();
+    const locked = new Map<string, PartnerRow>();
+    for (const userId of lockIds) {
+      const row = await lockPartnerRow(tx, userId);
+      if (row) locked.set(userId, row);
+    }
+
+    const destPartner = dest.asPartner ? locked.get(dest.userId) : undefined;
+    if (dest.asPartner && (!destPartner || destPartner.status !== 'active')) {
+      throw AppError.forbidden('合伙人权限已取消');
+    }
+
+    // 未使用 = 还在库存里，跟删除一样要退回/占用配额。
+    // 已使用只改 createdBy，客户归属跟着走，配额已经在核销时花掉了。
+    let unused = 0;
+    let destDays = 0;
+    const sourceDelta = new Map<string, { codes: number; days: number }>();
+    for (const row of moving) {
+      const days = unusedDaysOf(row);
+      if (row.status !== 'unused') continue;
+      unused += 1;
+      destDays += days;
+      if (row.createdBy && locked.has(row.createdBy)) {
+        const current = sourceDelta.get(row.createdBy) ?? { codes: 0, days: 0 };
+        current.codes += 1;
+        current.days += days;
+        sourceDelta.set(row.createdBy, current);
+      }
+    }
+
+    if (destPartner) {
+      const remaining = remainingOf(destPartner);
+      if (unused > remaining.codeRemaining) {
+        throw AppError.badRequest(`目标合伙人剩余可生成张数不足，还可接收 ${remaining.codeRemaining} 张未使用卡密`);
+      }
+      if (destDays > remaining.daysRemaining) {
+        throw AppError.badRequest(`目标合伙人剩余可发放天数不足，还可接收 ${remaining.daysRemaining} 天`);
+      }
+    }
+
+    await tx
+      .update(t.redeemCodes)
+      .set({ createdBy: dest.userId, updatedAt: new Date() })
+      .where(
+        inArray(
+          t.redeemCodes.id,
+          moving.map((row) => row.id),
+        ),
+      );
+    // 总站码没有 grantDays，划给合伙人后补上套餐天数，删除时才能把配额退干净。
+    const needGrantDays = moving.filter((row) => row.status === 'unused' && row.grantDays == null && (row.durationDays ?? 0) > 0);
+    for (const row of needGrantDays) {
+      await tx
+        .update(t.redeemCodes)
+        .set({ grantDays: row.durationDays!, updatedAt: new Date() })
+        .where(eq(t.redeemCodes.id, row.id));
+    }
+
+    for (const [userId, delta] of sourceDelta) {
+      await applyIssuedDelta(tx, userId, { codes: -delta.codes, days: -delta.days });
+    }
+    if (dest.asPartner) {
+      await applyIssuedDelta(tx, dest.userId, { codes: unused, days: destDays });
+    }
+
+    return { transferred: moving.length, unused, used: moving.length - unused };
   });
 }
 
