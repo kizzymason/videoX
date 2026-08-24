@@ -93,6 +93,16 @@ export const contentApi = {
   tags: (limit = 40) => api.get<Tag[]>('/tags', { limit }),
   banners: () => api.get<Banner[]>('/banners'),
   site: () => api.get<SiteSettings>('/site'),
+  /** 播放页 SEO 元数据：优先使用后台 AI 生成的标题/描述/关键词，canonical 指向 PC 页。 */
+  videoSeoMeta: (slug: string) =>
+    api.get<{
+      title: string;
+      description: string;
+      keywords: string;
+      image: string | null;
+      canonical: string;
+      jsonLd: Record<string, unknown>;
+    }>(`/seo/video/${encodeURIComponent(slug)}`),
 
   search: (query: VideoListQuery & { q: string }) => api.get<Paginated<VideoSummary>>('/search', { ...query }),
   suggest: (q: string) =>

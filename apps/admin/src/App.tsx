@@ -18,6 +18,7 @@ import { PartnersPage } from './pages/PartnersPage';
 import { UsersPage } from './pages/UsersPage';
 import { StoragePage } from './pages/StoragePage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SeoPage } from './pages/SeoPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { CollectionPoolPage } from './pages/CollectionPoolPage';
 import { CollectionDashboardPage } from './pages/CollectionDashboardPage';
@@ -83,6 +84,7 @@ export function App() {
           <Route path="banners" element={<BannersPage />} />
           <Route path="home-recommend" element={<HomeRecommendPage />} />
           <Route path="recommend" element={<RecommendPage />} />
+          <Route path="seo" element={<SeoPage />} />
           <Route path="plans" element={<PlansPage />} />
           <Route path="redeem-codes" element={<RedeemCodesPage />} />
           <Route path="partners" element={<PartnersPage />} />

@@ -16,6 +16,7 @@ import {
   ListTodo,
   ListTree,
   MessageSquare,
+  Radar,
   ReceiptText,
   RectangleVertical,
   ScrollText,
@@ -60,6 +61,7 @@ export const NAV_GROUPS: Group[] = [
       { to: '/banners', label: '轮播管理', icon: Image },
       { to: '/home-recommend', label: '首页推荐', icon: Star },
       { to: '/recommend', label: '推荐引擎', icon: Sparkles },
+      { to: '/seo', label: 'SEO 管理', icon: Radar },
     ],
   },
   {

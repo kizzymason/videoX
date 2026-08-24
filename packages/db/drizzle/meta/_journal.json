@@ -71,6 +71,13 @@
       "when": 1787458000000,
       "tag": "0009_partner_console",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787915000000,
+      "tag": "0010_seo_system",
+      "breakpoints": true
     }
   ]
 }

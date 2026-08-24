@@ -362,6 +362,76 @@ export const siteSettingsSchema = z.object({
     .prefault({}),
 });
 
+// --------------------------------------------------------------------------
+// SEO 系统：主动推送 + AI 关键词优化
+// --------------------------------------------------------------------------
+
+export const seoSettingsSchema = z.object({
+  /** 自动把新发布视频推送给搜索引擎 */
+  autoPushEnabled: z.boolean().default(false),
+  /** 每轮自动推送最多提交多少条 URL */
+  pushBatchSize: z.coerce.number().int().min(1).max(2000).default(200),
+  indexNow: z
+    .object({
+      enabled: z.boolean().default(false),
+      /** 8-128 位小写十六进制 key，同时作为域名根目录 {key}.txt 文件名 */
+      key: z.string().max(128).default(''),
+    })
+    .prefault({}),
+  baidu: z
+    .object({
+      enabled: z.boolean().default(false),
+      /** 百度站长平台绑定的站点，如 https://example.com；留空用 SITE_PUBLIC_URL */
+      site: z.string().max(200).default(''),
+      token: z.string().max(64).default(''),
+    })
+    .prefault({}),
+  ai: z
+    .object({
+      enabled: z.boolean().default(false),
+      endpoint: z.string().max(300).default(''),
+      apiKey: z.string().max(300).default(''),
+      model: z.string().max(80).default(''),
+      temperature: z.coerce.number().min(0).max(2).default(0.4),
+      /** 每天最多为多少条视频生成关键词（控制 token 成本） */
+      dailyLimit: z.coerce.number().int().min(1).max(5000).default(300),
+      /** 站点定位补充说明，会拼进提示词帮助 AI 选词 */
+      siteContext: z.string().max(500).default(''),
+    })
+    .prefault({}),
+  /** 首页 / 固定页的关键词与描述（逗号分隔关键词） */
+  pages: z
+    .object({
+      homeKeywords: z.string().max(500).default(''),
+      homeDescription: z.string().max(300).default(''),
+    })
+    .prefault({}),
+});
+
+export const videoSeoPatchSchema = z.object({
+  seoTitle: z.string().max(200).nullable().optional(),
+  seoDescription: z.string().max(500).nullable().optional(),
+  keywords: z.array(z.string().min(1).max(60)).max(20).optional(),
+});
+
+export const seoManualPushSchema = z.object({
+  /** 手动指定 URL（站内路径或完整 URL），与 scope 二选一 */
+  urls: z.array(z.string().min(1).max(600)).max(2000).optional(),
+  /** new=只推未推过的；all=全量重推所有已发布视频与核心页面 */
+  scope: z.enum(['new', 'all']).optional(),
+});
+
+export const seoSubmissionQuerySchema = paginationSchema.extend({
+  engine: z.enum(['indexnow', 'baidu']).optional(),
+  status: z.enum(['pending', 'success', 'failed']).optional(),
+});
+
+export const seoKeywordListQuerySchema = paginationSchema.extend({
+  q: z.string().max(120).optional(),
+  /** missing=只看还没生成关键词的视频 */
+  filter: z.enum(['all', 'missing', 'generated']).default('all'),
+});
+
 export const aiProfileSchema = z.object({
   name: z.string().min(1).max(60),
   endpoint: z.string().min(1).max(300),

@@ -46,7 +46,27 @@ export function WatchPage() {
     retry: false,
   });
 
-  useSeo(video ? { title: video.title, description: video.description ?? undefined } : undefined);
+  // 后台 AI 生成的 SEO 元数据；canonical 指向 PC 播放页，避免移动页被判重复内容。
+  const seoQuery = useQuery({
+    queryKey: ['video-seo-meta', video?.slug],
+    queryFn: () => contentApi.videoSeoMeta(video!.slug),
+    enabled: Boolean(video?.slug),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const seoMeta = seoQuery.data;
+
+  useSeo(
+    video
+      ? {
+          title: video.title,
+          description: seoMeta?.description ?? video.description ?? undefined,
+          keywords: seoMeta?.keywords || undefined,
+          canonical: seoMeta?.canonical,
+          jsonLd: seoMeta?.jsonLd,
+        }
+      : undefined,
+  );
 
   const source: PlayerSource | null = React.useMemo(() => {
     if (!video || !ticketQuery.data) return null;

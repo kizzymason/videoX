@@ -22,6 +22,8 @@ import type {
   OrderSource,
   OrderStatus,
   RedeemCodeStatus,
+  SeoEngine,
+  SeoSubmissionStatus,
   StorageDriver,
   SubscriptionStatus,
   TranscodeJobStatus,
@@ -504,6 +506,49 @@ export const settings = pgTable('settings', {
   value: jsonb('value').$type<Record<string, unknown>>().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(now),
 });
+
+/** 每个视频的 SEO 元数据：AI 生成或人工维护的标题 / 描述 / 关键词。 */
+export const videoSeo = pgTable(
+  'video_seo',
+  {
+    videoId: uuid('video_id')
+      .primaryKey()
+      .references(() => videos.id, { onDelete: 'cascade' }),
+    seoTitle: varchar('seo_title', { length: 200 }),
+    seoDescription: varchar('seo_description', { length: 500 }),
+    keywords: jsonb('keywords').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    source: varchar('source', { length: 16 }).$type<'ai' | 'manual'>().notNull().default('ai'),
+    aiModel: varchar('ai_model', { length: 80 }),
+    generatedAt: timestamp('generated_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index('video_seo_generated_idx').on(t.generatedAt)],
+);
+
+/**
+ * 搜索引擎主动推送记录。每个 (engine, url) 一行，重复推送时原地更新，
+ * 既是推送日志也是去重依据。
+ */
+export const seoSubmissions = pgTable(
+  'seo_submissions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    engine: varchar('engine', { length: 20 }).$type<SeoEngine>().notNull(),
+    url: varchar('url', { length: 600 }).notNull(),
+    status: varchar('status', { length: 12 }).$type<SeoSubmissionStatus>().notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    httpStatus: integer('http_status'),
+    response: text('response'),
+    trigger: varchar('trigger', { length: 16 }).$type<'auto' | 'manual'>().notNull().default('auto'),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('seo_submissions_engine_url_uq').on(t.engine, t.url),
+    index('seo_submissions_status_idx').on(t.status),
+    index('seo_submissions_created_idx').on(t.createdAt),
+  ],
+);
 
 export const storageProfiles = pgTable(
   'storage_profiles',

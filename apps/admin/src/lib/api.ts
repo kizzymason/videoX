@@ -16,8 +16,13 @@ import type {
   Paginated,
   PartnerCustomer,
   RedeemCode,
+  SeoOverview,
+  SeoPushResult,
+  SeoSettings,
+  SeoSubmissionItem,
   SiteSettings,
   StorageProfile,
+  VideoSeoItem,
   Tag,
   TranscodeJob,
   UploadSession,
@@ -343,6 +348,35 @@ export const systemApi = {
   aiScores: (page = 1, pageSize = 20) => api.get<Paginated<AiScoreRow>>('/admin/ai/scores', { page, pageSize }),
 
   auditLogs: (page = 1, pageSize = 30) => api.get<Paginated<AuditLogEntry>>('/admin/audit-logs', { page, pageSize }),
+};
+
+// ---------------------------------------------------------------------------
+// SEO 系统
+// ---------------------------------------------------------------------------
+
+export const seoApi = {
+  overview: () => api.get<SeoOverview>('/admin/seo/overview'),
+  settings: () => api.get<SeoSettings>('/admin/seo/settings'),
+  saveSettings: (body: SeoSettings) => api.put<SeoSettings>('/admin/seo/settings', body),
+  generateIndexNowKey: () => api.post<{ key: string }>('/admin/seo/settings/indexnow-key'),
+
+  push: (body: { urls?: string[]; scope?: 'new' | 'all' }) => api.post<SeoPushResult[]>('/admin/seo/push', body),
+  retryPush: () => api.post<SeoPushResult[]>('/admin/seo/push/retry'),
+  submissions: (query: { page?: number; pageSize?: number; engine?: string; status?: string }) =>
+    api.get<Paginated<SeoSubmissionItem>>('/admin/seo/submissions', query as Record<string, unknown>),
+
+  keywords: (query: { page?: number; pageSize?: number; q?: string; filter?: 'all' | 'missing' | 'generated' }) =>
+    api.get<Paginated<VideoSeoItem>>('/admin/seo/keywords', query as Record<string, unknown>),
+  runKeywordBatch: (limit: number) =>
+    api.post<{ processed: number; succeeded: number; failed: number }>('/admin/seo/keywords/run', { limit }),
+  generateVideoSeo: (videoId: string) =>
+    api.post<{ seoTitle: string; seoDescription: string; keywords: string[] }>(
+      `/admin/seo/keywords/${videoId}/generate`,
+    ),
+  saveVideoSeo: (videoId: string, body: { seoTitle?: string | null; seoDescription?: string | null; keywords?: string[] }) =>
+    api.put<null>(`/admin/seo/keywords/${videoId}`, body),
+
+  renderPreview: (path: string) => api.get<{ status: number; html: string }>('/admin/seo/render-preview', { path }),
 };
 
 // ---------------------------------------------------------------------------
