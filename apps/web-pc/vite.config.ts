@@ -19,8 +19,11 @@ export default defineConfig({
       '/api': { target: API_TARGET, changeOrigin: true },
       '/media': { target: API_TARGET, changeOrigin: true },
       '/static': { target: API_TARGET, changeOrigin: true },
-      '/sitemap.xml': { target: API_TARGET, changeOrigin: true },
+      // sitemap 索引 + 子 sitemap（/sitemap-videos-1.xml 等）
+      '^/sitemap[a-z0-9-]*\\.xml$': { target: API_TARGET, changeOrigin: true },
       '/robots.txt': { target: API_TARGET, changeOrigin: true },
+      // 爬虫动态渲染入口，本地可直接访问 /__seo/render/watch/xxx 排查
+      '/__seo': { target: API_TARGET, changeOrigin: true },
     },
   },
   build: {

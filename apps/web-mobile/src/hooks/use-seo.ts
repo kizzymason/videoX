@@ -5,6 +5,10 @@ export interface SeoInput {
   title?: string;
   description?: string;
   image?: string;
+  /** 逗号分隔的页面关键词 */
+  keywords?: string;
+  /** 规范链接，去重复收录；移动页应指向对应的 PC 页 */
+  canonical?: string;
   jsonLd?: Record<string, unknown>;
 }
 
@@ -23,6 +27,22 @@ function setMeta(selector: string, attr: 'name' | 'property', key: string, conte
   return () => {
     if (created) el?.remove();
     else if (el) el.content = previous;
+  };
+}
+
+function setCanonical(href: string): () => void {
+  let el = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  const created = !el;
+  if (!el) {
+    el = document.createElement('link');
+    el.setAttribute('rel', 'canonical');
+    document.head.appendChild(el);
+  }
+  const previous = el.href;
+  el.href = href;
+  return () => {
+    if (created) el?.remove();
+    else if (el) el.href = previous;
   };
 }
 
@@ -52,6 +72,13 @@ export function useSeo(input: SeoInput | undefined): void {
     }
     if (seo.image) {
       cleanups.push(setMeta('meta[property="og:image"]', 'property', 'og:image', seo.image));
+    }
+    if (seo.keywords) {
+      cleanups.push(setMeta('meta[name="keywords"]', 'name', 'keywords', seo.keywords));
+    }
+    if (seo.canonical) {
+      cleanups.push(setCanonical(seo.canonical));
+      cleanups.push(setMeta('meta[property="og:url"]', 'property', 'og:url', seo.canonical));
     }
 
     if (seo.jsonLd) {

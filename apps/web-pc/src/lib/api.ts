@@ -120,6 +120,16 @@ export const contentApi = {
   banners: () => api.get<Banner[]>('/banners'),
   bannerClick: (id: string) => api.post<null>(`/banners/${id}/click`),
   site: () => api.get<SiteSettings>('/site'),
+  /** 播放页 SEO 元数据：优先使用后台 AI 生成的标题/描述/关键词。 */
+  videoSeoMeta: (slug: string) =>
+    api.get<{
+      title: string;
+      description: string;
+      keywords: string;
+      image: string | null;
+      canonical: string;
+      jsonLd: Record<string, unknown>;
+    }>(`/seo/video/${encodeURIComponent(slug)}`),
 
   search: (query: VideoListQuery & { q: string }) =>
     api.get<Paginated<VideoSummary>>('/search', { ...query }),

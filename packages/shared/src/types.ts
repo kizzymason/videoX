@@ -495,6 +495,77 @@ export interface SiteSettings {
   };
 }
 
+// --------------------------------------------------------------------------
+// SEO 系统
+// --------------------------------------------------------------------------
+
+export type SeoEngine = 'indexnow' | 'baidu';
+export type SeoSubmissionStatus = 'pending' | 'success' | 'failed';
+
+export interface SeoSettings {
+  autoPushEnabled: boolean;
+  pushBatchSize: number;
+  indexNow: { enabled: boolean; key: string };
+  baidu: { enabled: boolean; site: string; token: string };
+  ai: {
+    enabled: boolean;
+    endpoint: string;
+    apiKey: string;
+    model: string;
+    temperature: number;
+    dailyLimit: number;
+    siteContext: string;
+  };
+  pages: { homeKeywords: string; homeDescription: string };
+}
+
+export interface SeoSubmissionItem {
+  id: string;
+  engine: SeoEngine;
+  url: string;
+  status: SeoSubmissionStatus;
+  attempts: number;
+  httpStatus: number | null;
+  response: string | null;
+  trigger: 'auto' | 'manual';
+  submittedAt: string | null;
+  createdAt: string;
+}
+
+export interface SeoPushResult {
+  engine: SeoEngine;
+  submitted: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  message?: string;
+}
+
+export interface VideoSeoItem {
+  videoId: string;
+  slug: string;
+  title: string;
+  publishedAt: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  keywords: string[];
+  source: 'ai' | 'manual' | null;
+  aiModel: string | null;
+  generatedAt: string | null;
+}
+
+export interface SeoOverview {
+  publishedVideos: number;
+  seoGenerated: number;
+  seoMissing: number;
+  submissions: Record<SeoEngine, { success: number; failed: number; pending: number }>;
+  lastAutoPushAt: string | null;
+  lastAiRunAt: string | null;
+  indexNowReady: boolean;
+  baiduReady: boolean;
+  aiReady: boolean;
+}
+
 export interface AiProfile {
   id: string;
   name: string;

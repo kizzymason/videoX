@@ -7,6 +7,7 @@ import { closeDb } from './core/db.js';
 import { closeRedis } from './core/redis.js';
 import { closeQueues, scheduleMaintenance } from './core/queue.js';
 import { scheduleCollectionTasks, stopScheduledTasks } from './modules/collection/scheduler.js';
+import { scheduleSeoTasks, stopSeoTasks } from './modules/seo/scheduler.js';
 
 /**
  * 定时任务只能有一份。
@@ -72,6 +73,9 @@ async function bootstrap() {
 
     // 采集系统定时任务（每日增量/每周全量/号池健康检查/日志清理）
     scheduleCollectionTasks();
+
+    // SEO 定时任务（自动推送新视频/失败重试/AI 关键词生成）
+    scheduleSeoTasks();
   }
 
   let shuttingDown = false;
@@ -82,6 +86,7 @@ async function bootstrap() {
 
     server.close(() => logger.info('HTTP 服务已关闭'));
     stopScheduledTasks();
+    stopSeoTasks();
     // 给在途请求 10 秒收尾，超时强制退出。
     const force = setTimeout(() => {
       logger.warn('优雅关闭超时，强制退出');

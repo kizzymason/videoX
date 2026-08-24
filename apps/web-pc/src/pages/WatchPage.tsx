@@ -60,13 +60,25 @@ export function WatchPage() {
     retry: false,
   });
 
+  // 后台 AI 生成的 SEO 元数据（关键词/优化描述/规范链接），失败时退回视频自身信息。
+  const seoQuery = useQuery({
+    queryKey: ['video-seo-meta', video?.slug],
+    queryFn: () => contentApi.videoSeoMeta(video!.slug),
+    enabled: Boolean(video?.slug),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const seoMeta = seoQuery.data;
+
   useSeo(
     video
       ? {
           title: video.title,
-          description: video.description ?? undefined,
+          description: seoMeta?.description ?? video.description ?? undefined,
           image: video.posterUrl ?? undefined,
-          jsonLd: buildVideoJsonLd(video),
+          keywords: seoMeta?.keywords || undefined,
+          canonical: seoMeta?.canonical,
+          jsonLd: seoMeta?.jsonLd ?? buildVideoJsonLd(video),
         }
       : undefined,
   );
