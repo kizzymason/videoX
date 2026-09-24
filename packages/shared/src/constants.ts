@@ -84,8 +84,14 @@ export type RedeemCodeStatus = (typeof REDEEM_CODE_STATUSES)[number];
 export const ORDER_STATUSES = ['pending', 'paid', 'canceled', 'refunded'] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
-export const ORDER_SOURCES = ['redeem_code', 'manual_grant', 'payment'] as const;
+export const ORDER_SOURCES = ['redeem_code', 'manual_grant', 'signup_gift', 'payment'] as const;
 export type OrderSource = (typeof ORDER_SOURCES)[number];
+
+/**
+ * 「新用户注册赠送会员」的可配置天数上限。
+ * 取 10 年是刻意的：后台手滑多打一个 0 也不至于把到期时间算到几十年后。
+ */
+export const SIGNUP_GIFT_MAX_DAYS = 3650;
 
 /** 上游渠道单次最多买多少张，实际还要再受商品自身 perOrderLimit 约束。 */
 export const CARD_SHOP_MAX_QUANTITY = 10;

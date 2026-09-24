@@ -11,6 +11,7 @@ export * from './publish-gate.js';
 export * from './video-orientation.js';
 export * from './shorts-trial.js';
 export * from './membership-gate.js';
+export * from './vip-term.js';
 export * from './full-crawl.js';
 export * from './collection-kinds.js';
 export * from './collection-import.js';

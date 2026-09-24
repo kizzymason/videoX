@@ -1,6 +1,11 @@
 import { eq, sql } from 'drizzle-orm';
-import type { MembershipPlan, Order, RedeemCode, RedeemResult, Subscription } from '@videox/shared';
-import { compactRedeemCode, normalizeRedeemInput, PARTNER_PLAN_CODE } from '@videox/shared';
+import type { MembershipPlan, Order, OrderSource, RedeemCode, RedeemResult, Subscription } from '@videox/shared';
+import {
+  compactRedeemCode,
+  extendVipExpiry,
+  normalizeRedeemInput,
+  PARTNER_PLAN_CODE,
+} from '@videox/shared';
 import { db, t, sqlRows } from '../../core/db.js';
 import { AppError, ErrorCode } from '../../core/errors.js';
 import { logger } from '../../core/logger.js';
@@ -202,10 +207,20 @@ export async function grantVip(params: {
   );
 }
 
+/**
+ * 给用户加会员天数：顺延到期时间 → 写订阅记录 → 留一条零元订单流水。
+ *
+ * 抽成独立函数是因为三个入口共用同一套动作：管理员手动赠送、合伙人开卡、
+ * 以及后台「新用户注册赠送会员」。三者只在订单 source 与备注上不同。
+ */
 export async function applyVipDays(
   tx: DbExecutor,
-  params: { userId: string; days: number; note: string },
+  params: { userId: string; days: number; note: string; source?: OrderSource },
 ): Promise<{ vipExpiresAt: string }> {
+  if (!Number.isFinite(params.days) || params.days <= 0) {
+    throw AppError.badRequest('赠送天数必须是正整数');
+  }
+
   const [user] = await tx
     .select({ id: t.users.id, vipExpiresAt: t.users.vipExpiresAt })
     .from(t.users)
@@ -214,8 +229,7 @@ export async function applyVipDays(
   if (!user) throw AppError.notFound('用户不存在');
 
   const now = new Date();
-  const base = user.vipExpiresAt && user.vipExpiresAt.getTime() > now.getTime() ? user.vipExpiresAt : now;
-  const newExpiry = new Date(base.getTime() + params.days * 86_400_000);
+  const newExpiry = extendVipExpiry(user.vipExpiresAt, params.days, now);
 
   await tx.update(t.users).set({ vipExpiresAt: newExpiry, updatedAt: now }).where(eq(t.users.id, params.userId));
 
@@ -232,7 +246,7 @@ export async function applyVipDays(
     userId: params.userId,
     planId: null,
     amountCents: 0,
-    source: 'manual_grant',
+    source: params.source ?? 'manual_grant',
     status: 'paid',
     note: params.note,
   });

@@ -18,6 +18,7 @@ import {
   REDEEM_CODE_STATUSES,
   SORT_OPTIONS,
   BROWSE_MODES,
+  SIGNUP_GIFT_MAX_DAYS,
   STORAGE_DRIVERS,
   USER_ROLES,
   USER_STATUSES,
@@ -370,6 +371,14 @@ export const siteSettingsSchema = z.object({
   footerText: z.string().max(300).nullable().default(null),
   contactEmail: z.string().max(160).nullable().default(null),
   allowRegistration: z.boolean().default(true),
+  /**
+   * 新用户注册即赠送的会员天数，0 = 不赠送。
+   *
+   * 赠送走的是和付费会员完全相同的一套数据：写 vip_expires_at、写一条 subscriptions、
+   * 再留一条 source='signup_gift' 的零元订单。因此「到期后失效」不需要额外逻辑 ——
+   * 播放门禁本来就看 vipExpiresAt 是否过期，到期自然拦截。
+   */
+  signupGiftDays: z.coerce.number().int().min(0).max(SIGNUP_GIFT_MAX_DAYS).default(0),
   commentsRequireApproval: z.boolean().default(false),
   /** 点播不再按秒试看，保留字段以免旧后台配置校验失败。 */
   previewSeconds: z.coerce.number().int().min(0).max(3600).default(0),

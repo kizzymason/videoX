@@ -491,6 +491,8 @@ export interface SiteSettings {
   footerText: string | null;
   contactEmail: string | null;
   allowRegistration: boolean;
+  /** 新用户注册即赠送的会员天数，0 = 不赠送。 */
+  signupGiftDays: number;
   commentsRequireApproval: boolean;
   previewSeconds: number;
   shortsFreeCount: number;

@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Gift } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Button,
@@ -16,7 +16,7 @@ import {
 import { ApiError } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useAuthModalStore } from '../stores/auth-modal';
-import { useSite, useSiteName } from '../hooks/use-site';
+import { useSite, useSignupGiftDays, useSiteName } from '../hooks/use-site';
 import { SlideCaptcha } from './SlideCaptcha';
 
 export function AuthModal() {
@@ -31,6 +31,7 @@ export function AuthModal() {
   const register = useAuthStore((s) => s.register);
   const siteName = useSiteName();
   const { data: site } = useSite();
+  const giftDays = useSignupGiftDays();
 
   const [identifier, setIdentifier] = React.useState('');
   const [username, setUsername] = React.useState('');
@@ -171,6 +172,13 @@ export function AuthModal() {
                 onToggle={() => setShowPassword((v) => !v)}
               />
             </Field>
+            {giftDays > 0 ? (
+              <p className="flex flex-wrap items-center justify-center gap-x-1 rounded-lg border border-vip/40 bg-vip/10 px-3 py-2 text-xs">
+                <Gift className="size-3.5 shrink-0 text-vip" aria-hidden />
+                <span className="font-medium text-foreground">注册即赠 {giftDays} 天会员</span>
+                <span className="text-muted-foreground">，到期自动失效</span>
+              </p>
+            ) : null}
             <SlideCaptcha key={captchaKey} onComplete={submitRegister} disabled={pending} />
             <p className="text-center text-sm text-muted-foreground">
               已有账号？

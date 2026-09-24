@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Gift } from 'lucide-react';
 import { toast } from 'sonner';
 import { Field, Input } from '@videox/ui';
 import { ApiError } from '../lib/api';
@@ -9,11 +9,12 @@ import { AppHeader } from '../components/AppHeader';
 import { SlideCaptcha } from '../components/SlideCaptcha';
 import { SiteFooter } from '../components/SiteFooter';
 import { useSeo } from '../hooks/use-seo';
-import { useSiteName } from '../hooks/use-site';
+import { useSiteName, useSignupGiftDays } from '../hooks/use-site';
 
 export function RegisterPage() {
   useSeo({ title: '注册' });
   const siteName = useSiteName();
+  const giftDays = useSignupGiftDays();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const redirect = params.get('redirect') ?? '/mine';
@@ -90,6 +91,13 @@ export function RegisterPage() {
                 </button>
               </div>
             </Field>
+            {giftDays > 0 ? (
+              <p className="flex flex-wrap items-center justify-center gap-x-1 rounded-xl border border-vip/40 bg-vip/10 px-3 py-2.5 text-xs">
+                <Gift className="size-3.5 shrink-0 text-vip" aria-hidden />
+                <span className="font-medium text-foreground">注册即赠 {giftDays} 天会员</span>
+                <span className="text-muted-foreground">，到期自动失效</span>
+              </p>
+            ) : null}
             <SlideCaptcha key={captchaKey} onComplete={submit} />
           </div>
           <p className="text-center text-sm text-muted-foreground">

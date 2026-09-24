@@ -42,7 +42,7 @@ authRouter.post(
   validate({ body: registerSchema }),
   asyncHandler(async (req, res) => {
     const input = body<{ email?: string; username: string; password: string; displayName?: string }>(req);
-    const user = await registerUser(input);
+    const { user, giftDays } = await registerUser(input);
     const ctx = sessionContext(req);
     const { access, refresh } = await issueSession(user, ctx);
     await markLogin(user.id, ctx.ip);
@@ -55,7 +55,7 @@ authRouter.post(
       accessToken: access.token,
       accessTokenExpiresAt: access.expiresAt.toISOString(),
     };
-    ok(res, payload, '注册成功');
+    ok(res, payload, giftDays > 0 ? `注册成功，已赠送 ${giftDays} 天会员` : '注册成功');
   }),
 );
 

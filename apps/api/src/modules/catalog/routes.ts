@@ -150,6 +150,7 @@ catalogRouter.get(
       footerText: settings.footerText,
       contactEmail: settings.contactEmail,
       allowRegistration: settings.allowRegistration,
+      signupGiftDays: settings.signupGiftDays,
       previewSeconds: 0,
       shortsFreeCount: settings.shortsFreeCount,
     });

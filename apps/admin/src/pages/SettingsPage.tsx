@@ -2,7 +2,13 @@ import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink, RefreshCw, Save } from 'lucide-react';
 import { toast } from 'sonner';
-import { ADMIN_PATH_MAX, isValidAdminPath, normalizeAdminPath, type SiteSettings } from '@videox/shared';
+import {
+  ADMIN_PATH_MAX,
+  isValidAdminPath,
+  normalizeAdminPath,
+  SIGNUP_GIFT_MAX_DAYS,
+  type SiteSettings,
+} from '@videox/shared';
 import {
   Button,
   Field,
@@ -34,6 +40,7 @@ export function SettingsPage() {
         ...data,
         previewSeconds: 0,
         shortsFreeCount: data.shortsFreeCount ?? 3,
+        signupGiftDays: data.signupGiftDays ?? 0,
         defaultBrowseMode: data.defaultBrowseMode ?? 'paged',
         showViewCount: data.showViewCount ?? false,
         adminPath: data.adminPath ?? '',
@@ -79,7 +86,7 @@ export function SettingsPage() {
     <div>
       <PageHeader
         title="站点设置"
-        description="标题、主题、注册开关、Shorts 试看与 SEO 模板"
+        description="标题、主题、注册开关与注册赠会员、Shorts 试看与 SEO 模板"
         actions={
           <Button
             size="sm"
@@ -188,6 +195,21 @@ export function SettingsPage() {
             </Panel>
 
             <Panel title="会员与播放">
+              <Field
+                label="新用户注册赠送会员"
+                hint="填 0 表示不赠送。填写后每个新注册用户立刻成为会员，到期时间自动按天数算好，到期即失效，不需要人工干预。"
+              >
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={SIGNUP_GIFT_MAX_DAYS}
+                    value={draft.signupGiftDays}
+                    onChange={(e) => patch({ signupGiftDays: clampGiftDays(e.target.value) })}
+                  />
+                  <span className="shrink-0 text-sm text-muted-foreground">天</span>
+                </div>
+              </Field>
               <Field
                 label="Shorts 免费试看条数"
                 hint="游客与非会员可完整观看的不同 Shorts 条数。超出后需订阅。同一条再看不占名额。"
@@ -315,6 +337,16 @@ export function SettingsPage() {
       </Tabs>
     </div>
   );
+}
+
+/**
+ * 注册赠送天数的输入处理。输入框允许中途为空（清空再重打），空值一律当 0；
+ * 超出上限直接夹住，避免手滑多打一个 0 把到期时间算到几十年后。
+ */
+function clampGiftDays(raw: string): number {
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.min(value, SIGNUP_GIFT_MAX_DAYS);
 }
 
 /** 字母开头 + 8 位字母数字，且保证至少有一个数字（nginx 的入口正则要求带数字）。 */

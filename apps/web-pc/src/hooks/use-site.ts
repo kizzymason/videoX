@@ -25,6 +25,15 @@ export function useShowViewCount(): boolean {
   return data?.showViewCount === true;
 }
 
+/**
+ * 新用户注册赠送的会员天数（后台「功能策略 → 新用户注册赠送会员」）。
+ * 0 表示站点没开启赠送，调用方据此决定要不要渲染提示文案。
+ */
+export function useSignupGiftDays(): number {
+  const { data } = useSite();
+  return data?.signupGiftDays ?? 0;
+}
+
 function upsertMeta(attr: 'name' | 'property', key: string, content: string): () => void {
   const selector = `meta[${attr}="${key}"]`;
   let el = document.head.querySelector<HTMLMetaElement>(selector);

@@ -4,8 +4,10 @@ import type { CurrentUser } from '@videox/shared';
 import { isComplimentaryVip } from '@videox/shared';
 import { db, t, sqlRows } from '../../core/db.js';
 import { AppError, ErrorCode } from '../../core/errors.js';
+import { logger } from '../../core/logger.js';
 import { createRefreshToken, hashRefreshToken, signAccessToken } from './tokens.js';
 import { getSiteSettings } from '../settings/service.js';
+import { applyVipDays } from '../membership/service.js';
 import { normalizeRegisterEmail, resolveDisplayName } from './register-input.js';
 
 // OWASP 推荐的 argon2id 参数，在 19MB 内存下单次约 50ms。
@@ -66,12 +68,25 @@ export async function issueSession(user: UserRow, ctx: SessionContext) {
   return { access, refresh };
 }
 
+export interface RegisterResult {
+  user: UserRow;
+  /** 本次注册赠送的会员天数，0 表示站点未开启赠送。 */
+  giftDays: number;
+}
+
+/**
+ * 注册。站点设置里的「新用户注册赠送会员天数」大于 0 时，建号与赠期在同一个事务里完成。
+ *
+ * 之所以必须同事务：赠期的三个动作（写 vip_expires_at、写 subscriptions、写零元订单）
+ * 与建号要么一起成功要么一起回滚，否则会留下「用户建好了但会员没到账」或者
+ * 「订阅挂在了一个不存在的用户上」这类脏数据。
+ */
 export async function registerUser(input: {
   email?: string;
   username: string;
   password: string;
   displayName?: string;
-}): Promise<UserRow> {
+}): Promise<RegisterResult> {
   const settings = await getSiteSettings();
   if (!settings.allowRegistration) {
     throw new AppError({ message: '站点当前已关闭注册', code: ErrorCode.REGISTRATION_CLOSED, status: 403 });
@@ -97,19 +112,39 @@ export async function registerUser(input: {
 
   const passwordHash = await hashPassword(input.password);
 
-  const [user] = await db
-    .insert(t.users)
-    .values({
-      email,
-      emailNormalized,
-      username: input.username.trim(),
-      usernameNormalized,
-      passwordHash,
-      displayName: resolveDisplayName(input.username, input.displayName),
-    })
-    .returning();
+  const values = {
+    email,
+    emailNormalized,
+    username: input.username.trim(),
+    usernameNormalized,
+    passwordHash,
+    displayName: resolveDisplayName(input.username, input.displayName),
+  };
 
-  return user!;
+  const giftDays = settings.signupGiftDays;
+
+  // 没开启赠送就保持原来那条单条 INSERT，不为了统一而多开一个事务。
+  if (giftDays <= 0) {
+    const [user] = await db.insert(t.users).values(values).returning();
+    return { user: user!, giftDays: 0 };
+  }
+
+  const user = await db.transaction(async (tx) => {
+    const [created] = await tx.insert(t.users).values(values).returning();
+    const { vipExpiresAt } = await applyVipDays(tx, {
+      userId: created!.id,
+      days: giftDays,
+      note: `新用户注册赠送 ${giftDays} 天`,
+      source: 'signup_gift',
+    });
+    // 把事务里刚写好的到期时间并进返回行：调用方紧接着要签 access token
+    //（token 里带 vip_exp 快照）并算 isVip，拿到 null 的话新会员开局就是非会员。
+    return { ...created!, vipExpiresAt: new Date(vipExpiresAt) };
+  });
+
+  logger.info({ userId: user.id, giftDays }, '新用户注册已赠送会员');
+
+  return { user, giftDays };
 }
 
 export async function authenticate(identifier: string, password: string): Promise<UserRow> {
