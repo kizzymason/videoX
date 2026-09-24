@@ -19,6 +19,7 @@ import type {
   VideoVisibility,
 } from './constants.js';
 import type { ShortsTrialQuota } from './shorts-trial.js';
+import type { TitleLang } from './text-lang.js';
 
 /** 统一响应包裹。所有 API 返回都是这个形状。 */
 export interface ApiEnvelope<T> {
@@ -318,6 +319,11 @@ export interface VideoSummary {
   author: Pick<PublicUser, 'id' | 'username' | 'displayName' | 'avatarUrl'> | null;
   /** 推荐引擎回填，仅在推荐流里出现 */
   recommendReason?: string | null;
+  /**
+   * 标题主语种，落库时由 detectTitleLang 算出。首页「推荐」视图按它做语种加权，
+   * 也方便后台/接口自查某条视频被判成了什么。
+   */
+  titleLang?: TitleLang | null;
 }
 
 export interface VideoDetail extends VideoSummary {

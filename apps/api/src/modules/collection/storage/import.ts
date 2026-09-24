@@ -7,7 +7,7 @@ import { classifyImportFailure, shouldGiveUpImport } from '@videox/shared';
 import { db, t } from '../../../core/db.js';
 import { logger } from '../../../core/logger.js';
 import { AppError } from '../../../core/errors.js';
-import { generateUniqueSlug, refreshCategoryCounts } from '../../videos/service.js';
+import { generateUniqueSlug, refreshCategoryCounts, titleLangOf } from '../../videos/service.js';
 import { StorageDecider, type VideoMetadataForDecision } from './decider.js';
 import { HotlinkProxyService } from './hotlink-proxy.js';
 import { R2TransferService } from './r2-transfer.js';
@@ -90,6 +90,7 @@ export async function fromExternalImport(params: {
     .values({
       slug,
       title: collected.title,
+      titleLang: titleLangOf(collected.title),
       description: typeof metadata.description === 'string' ? metadata.description : null,
       authorId: params.userId,
       categoryId,

@@ -36,6 +36,7 @@ import type {
   VideoKind,
   VideoStatus,
   VideoVisibility,
+  TitleLang,
 } from '@videox/shared';
 
 const now = sql`now()`;
@@ -146,6 +147,14 @@ export const videos = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     slug: varchar('slug', { length: 120 }).notNull(),
     title: text('title').notNull(),
+    /**
+     * 标题主语种，写入时由 detectTitleLang 算出。
+     *
+     * 存下来而不是每次查询现算：首页推荐要把它当排序键，而按行跑中文/日文/韩文
+     * 等一串正则会让那条查询从 300ms 涨到 2s 量级（实测 EXPLAIN ANALYZE），
+     * 一个 8 字节的短字符串列便宜太多。
+     */
+    titleLang: varchar('title_lang', { length: 8 }).$type<TitleLang>(),
     description: text('description'),
     authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
     categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
@@ -511,6 +520,25 @@ export const homeRecommendKeywords = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex('home_recommend_keywords_keyword_uq').on(t.keyword)],
+);
+
+/**
+ * 首页推荐：标题语种权重。一个语种一行，后台可改。
+ *
+ * 与 home_recommend_keywords 分开建表而不是并进去，是因为两者的键不同：
+ * 关键词是自由文本、需要 ILIKE 匹配；语种是固定枚举、直接等值命中 videos.title_lang，
+ * 混在一张表里就得加一个 kind 判别列，查询也会跟着变复杂。
+ */
+export const homeRecommendLangRules = pgTable(
+  'home_recommend_lang_rules',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    lang: varchar('lang', { length: 8 }).$type<TitleLang>().notNull(),
+    direction: varchar('direction', { length: 16 }).$type<'boost' | 'penalty'>().notNull(),
+    weight: doublePrecision('weight').notNull().default(1),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('home_recommend_lang_rules_lang_uq').on(t.lang)],
 );
 
 export const banners = pgTable(

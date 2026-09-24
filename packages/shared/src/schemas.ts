@@ -26,6 +26,7 @@ import {
   VIDEO_VISIBILITIES,
 } from './constants.js';
 import { normalizeRedeemInput, REDEEM_CODE_PREFIX_MAX } from './redeem-code.js';
+import { TITLE_LANGS } from './text-lang.js';
 
 // --------------------------------------------------------------------------
 // 通用
@@ -509,6 +510,23 @@ export const homeRecommendKeywordSchema = z.object({
   weight: z.coerce.number().min(0.05).max(20).default(1),
 });
 
+/** 首页推荐：按标题语种增减分。语种是固定枚举，一行一个。 */
+export const homeRecommendLangRuleSchema = z.object({
+  lang: z.enum(TITLE_LANGS),
+  direction: z.enum(['boost', 'penalty']),
+  weight: z.coerce.number().min(0.05).max(20).default(1),
+});
+
+/**
+ * 语种规则整表覆盖。
+ *
+ * 语种是闭集合（六个），一次改完一起提交比逐行增删更贴近后台的实际操作：
+ * 界面上就是六个语种各选「升权 / 降权 / 不参与」并填权重。不在数组里的语种 = 不参与。
+ */
+export const homeRecommendLangRulesSchema = z.object({
+  rules: z.array(homeRecommendLangRuleSchema).max(TITLE_LANGS.length),
+});
+
 export const bannerSchema = z.object({
   title: z.string().min(1).max(120),
   subtitle: z.string().max(200).nullable().optional(),
@@ -593,3 +611,5 @@ export type SiteSettingsInput = z.infer<typeof siteSettingsSchema>;
 export type AlgoWeightsInput = z.infer<typeof algoWeightsSchema>;
 export type AiProfileInput = z.infer<typeof aiProfileSchema>;
 export type HomeRecommendKeywordInput = z.infer<typeof homeRecommendKeywordSchema>;
+export type HomeRecommendLangRuleInput = z.infer<typeof homeRecommendLangRuleSchema>;
+export type HomeRecommendLangRulesInput = z.infer<typeof homeRecommendLangRulesSchema>;

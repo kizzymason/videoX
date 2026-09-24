@@ -24,6 +24,7 @@ import type {
   StorageProfile,
   VideoSeoItem,
   Tag,
+  TitleLang,
   TranscodeJob,
   UploadSession,
   VideoRetentionPoint,
@@ -245,6 +246,10 @@ export const catalogApi = {
   updateHomeKeyword: (id: string, body: { keyword?: string; direction?: 'boost' | 'penalty'; weight?: number }) =>
     api.patch<HomeRecommendKeyword>(`/admin/home-recommend/keywords/${id}`, body),
   deleteHomeKeyword: (id: string) => api.delete<null>(`/admin/home-recommend/keywords/${id}`),
+
+  homeLangRules: () => api.get<HomeRecommendLangRule[]>('/admin/home-recommend/lang-rules'),
+  saveHomeLangRules: (rules: HomeRecommendLangRule[]) =>
+    api.put<HomeRecommendLangRule[]>('/admin/home-recommend/lang-rules', { rules }),
 };
 
 export interface HomeRecommendPin {
@@ -262,6 +267,13 @@ export interface HomeRecommendKeyword {
   weight: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/** 首页推荐的标题语种权重。语种是闭集合，一行一个。 */
+export interface HomeRecommendLangRule {
+  lang: TitleLang;
+  direction: 'boost' | 'penalty';
+  weight: number;
 }
 
 // ---------------------------------------------------------------------------

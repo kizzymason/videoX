@@ -1,10 +1,16 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Plus, Search, Star, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, Languages, Plus, Search, Star, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
-import type { VideoSummary } from '@videox/shared';
+import { TITLE_LANGS, TITLE_LANG_LABELS, type TitleLang, type VideoSummary } from '@videox/shared';
 import { Badge, Button, Field, Input, Skeleton } from '@videox/ui';
-import { catalogApi, videosApi, type HomeRecommendKeyword, type HomeRecommendPin } from '../lib/api';
+import {
+  catalogApi,
+  videosApi,
+  type HomeRecommendKeyword,
+  type HomeRecommendLangRule,
+  type HomeRecommendPin,
+} from '../lib/api';
 import { formatDateTime } from '../lib/format';
 import { PageHeader, SectionTitle } from '../components/Page';
 import { useConfirm } from '../components/ConfirmDialog';
@@ -14,11 +20,14 @@ export function HomeRecommendPage() {
     <div>
       <PageHeader
         title="首页推荐"
-        description="手动置顶的视频会排在默认推荐之前；升降权关键词会改写首页与发现页的排序"
+        description="手动置顶的视频会排在默认推荐之前；升降权关键词与标题语种权重会改写首页与发现页的排序"
       />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <PinnedVideosPanel />
-        <KeywordsPanel />
+        <div className="space-y-6">
+          <KeywordsPanel />
+          <LangRulesPanel />
+        </div>
       </div>
     </div>
   );
@@ -396,5 +405,154 @@ function VideoThumb({ video }: { video: VideoSummary }) {
     <img src={video.posterUrl} alt="" className="h-10 w-[4.5rem] shrink-0 rounded object-cover" />
   ) : (
     <span className="h-10 w-[4.5rem] shrink-0 rounded bg-muted" />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 标题语种权重
+// ---------------------------------------------------------------------------
+
+type LangMode = 'boost' | 'penalty' | 'off';
+
+interface LangDraft {
+  mode: LangMode;
+  weight: string;
+}
+
+/** 库里只存「参与」的语种，界面要六个都摆出来，缺的补成「不参与」。 */
+function toDraft(rules: HomeRecommendLangRule[]): Record<TitleLang, LangDraft> {
+  const byLang = new Map(rules.map((rule) => [rule.lang, rule]));
+  const draft = {} as Record<TitleLang, LangDraft>;
+  for (const lang of TITLE_LANGS) {
+    const rule = byLang.get(lang);
+    draft[lang] = rule ? { mode: rule.direction, weight: String(rule.weight) } : { mode: 'off', weight: '1' };
+  }
+  return draft;
+}
+
+const MODE_LABEL: Record<LangMode, string> = { boost: '升权', penalty: '降权', off: '不参与' };
+
+function LangRulesPanel() {
+  const queryClient = useQueryClient();
+  const list = useQuery({ queryKey: ['home-lang-rules'], queryFn: catalogApi.homeLangRules });
+  const [draft, setDraft] = React.useState<Record<TitleLang, LangDraft> | null>(null);
+
+  // 拉到数据后灌进草稿；之后以本地草稿为准，避免每次重取把用户没保存的改动冲掉。
+  React.useEffect(() => {
+    if (list.data) setDraft(toDraft(list.data));
+  }, [list.data]);
+
+  const save = useMutation({
+    mutationFn: (rules: HomeRecommendLangRule[]) => catalogApi.saveHomeLangRules(rules),
+    onSuccess: async () => {
+      toast.success('语种权重已保存，首页排序立即生效');
+      await queryClient.invalidateQueries({ queryKey: ['home-lang-rules'] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const setRow = (lang: TitleLang, patch: Partial<LangDraft>) => {
+    setDraft((prev) => (prev ? { ...prev, [lang]: { ...prev[lang]!, ...patch } } : prev));
+  };
+
+  const submit = () => {
+    if (!draft) return;
+    const rules: HomeRecommendLangRule[] = [];
+    for (const lang of TITLE_LANGS) {
+      const row = draft[lang]!;
+      if (row.mode === 'off') continue;
+      const weight = Number(row.weight);
+      if (!Number.isFinite(weight) || weight <= 0 || weight > 20) {
+        toast.error(`「${TITLE_LANG_LABELS[lang]}」的权重需为 0 到 20 之间的正数`);
+        return;
+      }
+      rules.push({ lang, direction: row.mode, weight });
+    }
+    save.mutate(rules);
+  };
+
+  const activeBoost = draft
+    ? TITLE_LANGS.filter((lang) => draft[lang]!.mode === 'boost').map((lang) => TITLE_LANG_LABELS[lang])
+    : [];
+  const activePenalty = draft
+    ? TITLE_LANGS.filter((lang) => draft[lang]!.mode === 'penalty').map((lang) => TITLE_LANG_LABELS[lang])
+    : [];
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4">
+      <SectionTitle>标题语种权重</SectionTitle>
+      <p className="mb-3 text-xs text-muted-foreground">
+        按视频标题的主语种加减分，语种在视频入库时判定一次（假名优先于汉字，所以「汉字 + 假名」的日文标题
+        不会被认成中文；汉字里再按繁体专用字分繁简）。权重越大的语种越靠前，降权则往后压。
+      </p>
+      <p className="mb-4 rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+        推荐视图的排序层级：手动置顶 → 升降权关键词 → <span className="font-medium text-foreground">标题语种</span> → 发布时间。
+        语种只影响「推荐」，不会改动「最新 / 热门排行 / 最多点赞」三个视图。
+      </p>
+
+      {list.isLoading || !draft ? (
+        <Skeleton className="h-56" />
+      ) : (
+        <>
+          <ul className="mb-4 space-y-1.5">
+            {TITLE_LANGS.map((lang) => {
+              const row = draft[lang]!;
+              return (
+                <li
+                  key={lang}
+                  className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-2.5 py-2"
+                >
+                  <span className="w-24 shrink-0 text-sm">{TITLE_LANG_LABELS[lang]}</span>
+                  <div className="flex overflow-hidden rounded-md border border-border">
+                    {(['boost', 'penalty', 'off'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setRow(lang, { mode })}
+                        className={
+                          'px-2.5 py-1 text-xs transition-colors ' +
+                          (row.mode === mode
+                            ? mode === 'penalty'
+                              ? 'bg-destructive text-white'
+                              : 'bg-primary text-primary-foreground'
+                            : 'bg-transparent text-muted-foreground hover:bg-muted')
+                        }
+                      >
+                        {MODE_LABEL[mode]}
+                      </button>
+                    ))}
+                  </div>
+                  <Input
+                    type="number"
+                    min={0.05}
+                    max={20}
+                    step={0.1}
+                    value={row.weight}
+                    disabled={row.mode === 'off'}
+                    onChange={(event) => setRow(lang, { weight: event.target.value })}
+                    className="ml-auto h-8 w-20"
+                    title="权重"
+                  />
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Languages className="size-3.5" />
+            <span>
+              当前：升权
+              {activeBoost.length > 0 ? ` ${activeBoost.join('、')}` : ' 无'}｜降权
+              {activePenalty.length > 0 ? ` ${activePenalty.join('、')}` : ' 无'}
+              {activeBoost.length === 0 && activePenalty.length === 0 ? '（语种不影响排序）' : ''}
+            </span>
+          </div>
+
+          <Button size="sm" disabled={save.isPending} onClick={submit}>
+            保存语种权重
+          </Button>
+        </>
+      )}
+    </section>
   );
 }

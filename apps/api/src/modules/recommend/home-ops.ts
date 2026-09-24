@@ -1,10 +1,18 @@
 import { desc, sql, type SQL } from 'drizzle-orm';
+import type { TitleLang } from '@videox/shared';
 import { db, t } from '../../core/db.js';
 
 export type HomeKeywordDirection = 'boost' | 'penalty';
 
 export interface HomeKeyword {
   keyword: string;
+  direction: HomeKeywordDirection;
+  weight: number;
+}
+
+/** 标题语种的升降权规则，一行一个语种。 */
+export interface HomeLangRule {
+  lang: TitleLang;
   direction: HomeKeywordDirection;
   weight: number;
 }
@@ -66,8 +74,37 @@ export function homeRecommendedOrderBy(): SQL[] {
     sql`CASE WHEN ${t.homeRecommendPins.videoId} IS NOT NULL THEN 0 ELSE 1 END ASC`,
     sql`${t.homeRecommendPins.sortOrder} ASC NULLS LAST`,
     sql`${homeKeywordScoreSql()} DESC`,
+    // 语种权重排在关键词之后、时间之前：运营点名要推的词优先于语种偏好，
+    // 同语种 / 同命中下的先后仍然交给新鲜度决定。
+    sql`${homeLangScoreSql()} DESC`,
     desc(sql`coalesce(${t.videos.publishedAt}, ${t.videos.createdAt})`),
   ];
+}
+
+/**
+ * 标题语种命中时的加减分。
+ *
+ * 语种用等值命中 videos.title_lang，不再现算——按行跑一串中文/日文/韩文正则会
+ * 把首页那条查询从 300ms 拉到 2.2s 量级（线上 EXPLAIN ANALYZE 实测），
+ * 而语种在写入时就由 detectTitleLang 定好并存下来了。
+ */
+export function homeLangScoreSql(): SQL {
+  return sql`COALESCE((
+    SELECT SUM(CASE WHEN r.direction = 'boost' THEN r.weight ELSE -r.weight END)
+    FROM home_recommend_lang_rules r
+    WHERE r.lang = ${t.videos.titleLang}
+  ), 0)`;
+}
+
+/** 纯函数版：给单条视频算语种分，测试与后台预览用。 */
+export function langRuleScore(lang: string | null | undefined, rules: HomeLangRule[]): number {
+  if (!lang) return 0;
+  let score = 0;
+  for (const rule of rules) {
+    if (rule.lang !== lang) continue;
+    score += rule.direction === 'boost' ? rule.weight : -rule.weight;
+  }
+  return score;
 }
 
 export async function listHomeKeywords(): Promise<HomeKeyword[]> {
@@ -80,6 +117,21 @@ export async function listHomeKeywords(): Promise<HomeKeyword[]> {
     .from(t.homeRecommendKeywords);
   return rows.map((row) => ({
     keyword: row.keyword,
+    direction: row.direction,
+    weight: Number(row.weight),
+  }));
+}
+
+export async function listHomeLangRules(): Promise<HomeLangRule[]> {
+  const rows = await db
+    .select({
+      lang: t.homeRecommendLangRules.lang,
+      direction: t.homeRecommendLangRules.direction,
+      weight: t.homeRecommendLangRules.weight,
+    })
+    .from(t.homeRecommendLangRules);
+  return rows.map((row) => ({
+    lang: row.lang,
     direction: row.direction,
     weight: Number(row.weight),
   }));

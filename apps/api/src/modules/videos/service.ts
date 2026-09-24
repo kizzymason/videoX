@@ -3,8 +3,10 @@ import {
   PLAYABLE_VIDEO_STATUSES,
   slugify,
   evaluateGate,
+  detectTitleLang,
   type SortOption,
   type CaptionTrack,
+  type TitleLang,
   type VideoDetail,
   type VideoSummary,
 } from '@videox/shared';
@@ -14,6 +16,17 @@ import { captionPublicUrl } from '../storage/keys.js';
 import { homeRecommendedOrderBy } from '../recommend/home-ops.js';
 
 export type VideoRow = typeof t.videos.$inferSelect;
+
+/**
+ * 视频标题的主语种，落库时算一次存进 `videos.title_lang`。
+ *
+ * 首页「推荐」视图要按语种加权排序，而把判定放在查询里现算会让那条 SQL 从 300ms
+ * 涨到 2.2s（线上 EXPLAIN ANALYZE 实测）。判不出语种（纯符号 / 纯数字）时返回 null，
+ * 排序里视作「不属于任何语种」，不加不减。
+ */
+export function titleLangOf(title: string): TitleLang | null {
+  return detectTitleLang(title);
+}
 
 export interface VideoRelations {
   category: { id: string; slug: string; name: string } | null;
@@ -26,6 +39,7 @@ const summaryColumns = {
   id: t.videos.id,
   slug: t.videos.slug,
   title: t.videos.title,
+  titleLang: t.videos.titleLang,
   description: t.videos.description,
   posterUrl: t.videos.posterUrl,
   verticalPosterUrl: t.videos.verticalPosterUrl,
@@ -102,6 +116,7 @@ export function toSummary(row: SummaryRow, tags: VideoRelations['tags'] = []): V
     commentCount: row.commentCount,
     publishedAt: row.publishedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
+    titleLang: row.titleLang ?? null,
     category: row.categoryId && row.categorySlug
       ? { id: row.categoryId, slug: row.categorySlug, name: row.categoryName! }
       : null,
@@ -160,12 +175,28 @@ function buildOrderBy(sort: SortOption | undefined): SQL[] {
   }
 }
 
+/**
+ * 「最新」视图：与源站「最新上传」对齐。
+ *
+ * 源站列表（`sort=latest`，实测与它自己的 `sort=default` 同序）第 1 页前 24 条严格按
+ * 视频号递减 —— 源站就是「刚发布的排最前」。所以这里按源站视频号倒序排。
+ *
+ * 原先按 `collected_videos.page ASC, created_at ASC` 排是错的：采集从第 1 页往后连续跑，
+ * 第 1 页最早入库，升序等于把几天前那批最旧的内容顶到「最新」第一屏。
+ *
+ * 也从封面文件名里解析过「源站发布时间」，但实测它与视频号的相关性只有 0.23（封面异步生成），
+ * 排出来的顺序反而偏离源站，已弃用。详见 ./source-latest.ts 里的对照数据。
+ *
+ * 本地上传没有源站号，恒排最前；其余键只负责把排序补成全序，翻页不会抖动。
+ */
 function sourceLatestOrderBy(): SQL[] {
   return [
-    sql`CASE WHEN ${t.collectedVideos.id} IS NULL THEN 0 ELSE 1 END ASC`,
-    sql`${t.collectedVideos.page} ASC NULLS LAST`,
-    sql`${t.collectedVideos.createdAt} ASC NULLS LAST`,
-    desc(sql`coalesce(${t.videos.publishedAt}, ${t.videos.createdAt})`),
+    sql`CASE WHEN ${t.collectedVideos.externalId} IS NULL THEN 0 ELSE 1 END ASC`,
+    // 只在确实是纯数字时才转 bigint：换片源后 external_id 可能是别的形态，
+    // 直接 ::bigint 会在排序时整条查询报错。CASE 是惰性的，不会先算后判。
+    sql`CASE WHEN ${t.collectedVideos.externalId} ~ '^[0-9]+$' THEN ${t.collectedVideos.externalId}::bigint END DESC NULLS LAST`,
+    sql`coalesce(${t.videos.publishedAt}, ${t.videos.createdAt}) DESC`,
+    desc(t.videos.id),
   ];
 }
 

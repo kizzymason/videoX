@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { and, desc, eq, inArray, not, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, not, notInArray, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import {
@@ -14,6 +14,7 @@ import {
   grantVipSchema,
   transferRedeemCodesSchema,
   homeRecommendKeywordSchema,
+  homeRecommendLangRulesSchema,
   homeRecommendPinReorderSchema,
   homeRecommendPinSchema,
   orderQuerySchema,
@@ -27,6 +28,7 @@ import {
   updateVideoSchema,
   userAdminQuerySchema,
   videoListQuerySchema,
+  type HomeRecommendLangRuleInput,
 } from '@videox/shared';
 import { db, t } from '../../core/db.js';
 import { AppError } from '../../core/errors.js';
@@ -66,8 +68,9 @@ import {
   refreshCategoryCounts,
   requireVideo,
   syncVideoTags,
+  titleLangOf,
 } from '../videos/service.js';
-import { normalizeHomeKeyword } from '../recommend/home-ops.js';
+import { normalizeHomeKeyword, listHomeLangRules } from '../recommend/home-ops.js';
 import { enqueueTranscode } from '../uploads/service.js';
 import { getVideoRetention, getVisitorInsights } from '../analytics/service.js';
 import { aggregateDailyStats, getDashboardOverview, getTopVideos } from './dashboard.js';
@@ -167,6 +170,8 @@ adminRouter.patch(
     }
     if (typeof input.title === 'string' && input.title !== video.title) {
       patch.slug = await generateUniqueSlug(input.title, video.id);
+      // 标题换了语种得跟着重算，否则首页语种加权还在按旧标题排。
+      patch.titleLang = titleLangOf(input.title);
     }
     // 全站只保留会员档。不在这里改 isEncrypted：明文存量片改标加密会解不开，需重新转码。
     if (input.accessLevel !== undefined) patch.accessLevel = 'vip';
@@ -1021,6 +1026,59 @@ adminRouter.delete(
     if (!row) throw AppError.notFound('关键词不存在');
     await audit(req, 'home_recommend.keyword.delete', { type: 'home_recommend_keyword', id });
     ok(res, null, '关键词已删除');
+  }),
+);
+
+// --------------------------------------------------------------------------
+// 标题语种权重
+// --------------------------------------------------------------------------
+
+adminRouter.get(
+  '/home-recommend/lang-rules',
+  asyncHandler(async (_req, res) => {
+    const rules = await listHomeLangRules();
+    ok(res, rules);
+  }),
+);
+
+/**
+ * 整表覆盖语种规则。
+ *
+ * 语种是闭集合，一次提交六个语种的取向比逐行增删更贴近后台的操作方式；
+ * 不在请求体里的语种视为「不参与」，从表里删掉。
+ */
+adminRouter.put(
+  '/home-recommend/lang-rules',
+  validate({ body: homeRecommendLangRulesSchema }),
+  asyncHandler(async (req, res) => {
+    const { rules } = body<{ rules: HomeRecommendLangRuleInput[] }>(req);
+
+    // 同语种重复提交时以最后一条为准，避免撞唯一索引直接 500。
+    const byLang = new Map<HomeRecommendLangRuleInput['lang'], HomeRecommendLangRuleInput>();
+    for (const rule of rules) byLang.set(rule.lang, rule);
+    const next = [...byLang.values()];
+    const keep = next.map((rule) => rule.lang);
+
+    await db.transaction(async (tx) => {
+      // 不在提交里的语种 = 不参与，直接删掉；空数组时等价于清空全表。
+      await tx
+        .delete(t.homeRecommendLangRules)
+        .where(keep.length > 0 ? notInArray(t.homeRecommendLangRules.lang, keep) : sql`true`);
+
+      for (const rule of next) {
+        await tx
+          .insert(t.homeRecommendLangRules)
+          .values({ lang: rule.lang, direction: rule.direction, weight: rule.weight })
+          .onConflictDoUpdate({
+            target: t.homeRecommendLangRules.lang,
+            set: { direction: rule.direction, weight: rule.weight, updatedAt: new Date() },
+          });
+      }
+    });
+
+    await audit(req, 'home_recommend.lang_rules.update', { type: 'home_recommend_lang_rules', id: 'all' }, { count: next.length });
+    const saved = await listHomeLangRules();
+    ok(res, saved, '语种权重已保存');
   }),
 );
 
