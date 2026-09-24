@@ -15,6 +15,7 @@ describe('SEO 设置 schema', () => {
     expect(settings.indexNow).toEqual({ enabled: false, key: '' });
     expect(settings.baidu).toEqual({ enabled: false, site: '', token: '' });
     expect(settings.ai.dailyLimit).toBe(300);
+    expect(settings.pages.homeTitle).toBe('');
     expect(settings.pages.homeKeywords).toBe('');
   });
 

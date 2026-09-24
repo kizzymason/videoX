@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest';
 import {
   absoluteUrl,
   buildHtmlDocument,
+  canonicalUrl,
   escapeHtml,
   isoDuration,
+  mobileUrl,
   normalizeRenderPath,
   type SeoPageData,
 } from '../apps/api/src/modules/seo/render.ts';
+
+const ORIGIN = 'https://example.com';
 
 describe('渲染工具函数', () => {
   it('HTML 转义', () => {
@@ -41,6 +45,23 @@ describe('渲染路径解析', () => {
   it('非法编码不崩溃', () => {
     expect(normalizeRenderPath('/watch/%E4%B8%AD%E6%96%87')).toEqual({ path: '/watch/中文', isMobile: false });
     expect(() => normalizeRenderPath('/watch/%zz')).not.toThrow();
+  });
+});
+
+describe('规范地址', () => {
+  it('首页 canonical 带尾斜杠，和 sitemap 里的 loc 完全一致', () => {
+    // sitemap-pages.xml 写的是 https://example.com/ ，canonical 少个斜杠就会被判成不一致
+    expect(canonicalUrl(ORIGIN, '/')).toBe('https://example.com/');
+  });
+
+  it('其余页面不带尾斜杠', () => {
+    expect(canonicalUrl(ORIGIN, '/watch/abc')).toBe('https://example.com/watch/abc');
+    expect(canonicalUrl(ORIGIN, '/category/asian')).toBe('https://example.com/category/asian');
+  });
+
+  it('移动版地址加 /m 前缀', () => {
+    expect(mobileUrl(ORIGIN, '/')).toBe('https://example.com/m/');
+    expect(mobileUrl(ORIGIN, '/watch/abc')).toBe('https://example.com/m/watch/abc');
   });
 });
 
@@ -87,5 +108,18 @@ describe('HTML 文档组装', () => {
     const html = buildHtmlDocument({ ...page, image: null });
     expect(html).toContain('<meta name="twitter:card" content="summary" />');
     expect(html).not.toContain('og:image');
+  });
+
+  it('lang 缺省用站点 UI 语言，给了就按内容语言标注', () => {
+    expect(buildHtmlDocument(page)).toContain('<html lang="zh-CN">');
+    expect(buildHtmlDocument({ ...page, lang: 'en' })).toContain('<html lang="en">');
+  });
+
+  it('声明了移动版就输出 rel=alternate，没声明就不输出', () => {
+    const withAlternate = buildHtmlDocument({ ...page, alternateMobile: 'https://example.com/m/watch/abc' });
+    expect(withAlternate).toContain(
+      '<link rel="alternate" media="only screen and (max-width: 640px)" href="https://example.com/m/watch/abc" />',
+    );
+    expect(buildHtmlDocument(page)).not.toContain('rel="alternate"');
   });
 });

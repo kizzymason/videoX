@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { formatCount, formatDuration, type VideoSummary } from '@videox/shared';
 import { cn } from '@videox/ui';
 import { prefetchWatchPage } from '../lib/prefetch-watch';
+import { useShowViewCount } from '../hooks/use-site';
 
 export const CARD_TEXT_HEIGHT = 62;
 
@@ -31,6 +32,7 @@ export function MobileVideoCard({
 }) {
   const poster = video.posterUrl ?? video.verticalPosterUrl;
   const ratio = aspect ?? LIST_POSTER_ASPECT;
+  const showViewCount = useShowViewCount();
 
   return (
     <Link
@@ -43,9 +45,13 @@ export function MobileVideoCard({
           <img src={poster} alt={video.title} loading="lazy" decoding="async" className="size-full object-cover" />
         ) : null}
 
-        <span className="absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white tabular-nums">
-          {formatDuration(video.durationSeconds)}
-        </span>
+        {/* 只有拿到真实时长才显示。早期热链片源时长全是 0，标 00:00 反而误导。 */}
+        {video.durationSeconds > 0 ? (
+          <span className="absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white tabular-nums">
+            {formatDuration(video.durationSeconds)}
+          </span>
+        ) : null}
+
         {progressPercent !== undefined && progressPercent > 0 ? (
           <span className="absolute inset-x-0 bottom-0 h-[3px] bg-white/25">
             <span className="block h-full bg-white" style={{ width: `${Math.min(100, progressPercent)}%` }} />
@@ -57,8 +63,12 @@ export function MobileVideoCard({
         <p className="line-clamp-2-cjk text-[13px] leading-[1.35] font-medium">{video.title}</p>
         <p className="mt-1 truncate text-[11px] text-muted-foreground">
           {video.author?.displayName ?? '未知作者'}
-          <span className="mx-1 text-muted-foreground/40">·</span>
-          <span className="tabular-nums">{formatCount(video.viewCount)}</span>
+          {showViewCount ? (
+            <>
+              <span className="mx-1 text-muted-foreground/40">·</span>
+              <span className="tabular-nums">{formatCount(video.viewCount)}</span>
+            </>
+          ) : null}
         </p>
       </div>
     </Link>

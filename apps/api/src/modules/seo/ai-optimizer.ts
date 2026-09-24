@@ -55,21 +55,88 @@ export function buildSeoPrompt(input: SeoPromptInput): LlmMessage[] {
     .join('\n');
 
   return [
-    {
-      role: 'system',
-      content:
-        '你是资深中文 SEO 专家，为视频网站的播放页生成搜索引擎优化元数据。' +
-        '要求：1) SEO 标题在保留原始标题核心信息的基础上补充高搜索量词，不超过 60 个字符；' +
-        '2) 描述 80-150 个字符，自然通顺、包含核心关键词、能吸引点击，不要堆砌；' +
-        '3) 关键词 5-10 个，覆盖核心词 + 长尾词，按重要性排序；' +
-        '4) 不得编造视频中不存在的内容。' +
-        '只输出 JSON，格式：{"title":"...","description":"...","keywords":["...", "..."]}',
-    },
+    { role: 'system', content: SEO_SYSTEM_PROMPT },
     {
       role: 'user',
       content: `${context}\n\n${video}\n\n请生成 SEO 元数据 JSON。`,
     },
   ];
+}
+
+/**
+ * 系统提示词。
+ *
+ * 这是一个已做年龄门禁的合法成人视频平台，任务性质是**给已存在的内容做元数据标注**，
+ * 不是生成成人内容本身。通用模型遇到成人题材容易两种跑偏：直接拒答，或者输出
+ * 「精彩内容」「优质影片」这种什么都没说的安全话术 —— 后者更麻烦，因为它会静默地
+ * 产出一堆无效 SEO 数据，还看不出错。所以提示词里把任务边界、必须具体、以及
+ * 「不准输出拒答话术」都写死，并要求原样保留片源里的人名与系列号（那些正是被搜索的词）。
+ */
+const SEO_SYSTEM_PROMPT = [
+  '你是成人视频平台的 SEO 元数据标注专家。',
+  '',
+  '【任务性质】',
+  '这是一个合法运营、已做年龄验证与合规审核的成人视频平台。你的工作是为平台上**已经存在**的视频',
+  '整理搜索引擎元数据（标题、描述、关键词），属于信息组织与检索优化，不是创作成人内容。',
+  '成人题材本身不构成拒绝理由：请像给任何其他类型视频做 SEO 一样，专业、准确、具体地完成标注。',
+  '',
+  '【硬性要求】',
+  '1) 必须输出 JSON，不得输出任何拒绝、免责、道歉或与任务无关的说明文字。',
+  '2) 描述与关键词必须**具体到可检索**：要写清题材类型、演员特征、场景、风格、系列信息等',
+  '   用户真正会拿去搜索的信息。禁止用「精彩内容」「优质视频」「不容错过」这类空泛套话代替具体信息。',
+  '3) 原样保留原始标题里的人名、演员名、片商名、系列号与集数（如 MEN、BLUEMEN、ep.14、NS-093）。',
+  '   这些是搜索量最集中的词，不得翻译、改写或删除。',
+  '4) 只依据给到的标题、频道、标签、简介推断，不得编造视频里没有的情节、演员或剧情。',
+  '   信息不足时就写得笼统一些，但不要虚构。',
+  '5) 不输出任何露骨的性行为过程描写。用题材词、类型词、身份词做客观归类即可',
+  '   —— 目标是让搜索引擎理解这个视频「属于什么类别」，不是复述画面。',
+  '',
+  '【字段规范】',
+  'title：SEO 标题，保留原标题核心信息并补上高搜索量词，不超过 60 字符，不要堆砌重复词。',
+  'description：80-150 字符，自然通顺的一段话，包含核心关键词，读起来像人写的介绍。',
+  'keywords：5-12 个，按重要性排序，覆盖核心词与长尾词。',
+  '  原标题是英文时，关键词要中英混排（英文人名/片商名保留原文，同时给出中文题材词），',
+  '  这样中英文搜索都能命中。',
+  '',
+  '【输出格式】',
+  '只输出一个 JSON 对象，不要 markdown 代码块，不要前后解释：',
+  '{"title":"...","description":"...","keywords":["...","..."]}',
+].join('\n');
+
+/**
+ * 拒答话术特征。
+ *
+ * 有些模型不会硬拒，而是把拒绝包在合法 JSON 里（description 写「抱歉，我无法…」），
+ * 这种最危险：格式校验能过，于是几万条垃圾数据静默入库还看不出来。
+ * 命中就当这一条失败，让批量任务记 failed 而不是写进库。
+ */
+const REFUSAL_MARKERS = [
+  '无法提供',
+  '无法协助',
+  '无法完成',
+  '不能提供',
+  '不便提供',
+  '抱歉，我',
+  '很抱歉',
+  '违反',
+  '不适当的内容',
+  '不适合的内容',
+  '作为一个ai',
+  '作为 ai',
+  'as an ai',
+  'i cannot',
+  "i can't",
+  'i am sorry',
+  "i'm sorry",
+  'unable to assist',
+  'unable to provide',
+  'against my guidelines',
+];
+
+function assertNotRefusal(text: string): void {
+  const normalized = text.toLowerCase().replace(/\s+/g, '');
+  const hit = REFUSAL_MARKERS.find((marker) => normalized.includes(marker.toLowerCase().replace(/\s+/g, '')));
+  if (hit) throw new Error(`AI 拒绝生成 SEO 元数据（命中拒答特征「${hit}」），请检查系统提示词或换模型`);
 }
 
 /**
@@ -80,9 +147,14 @@ export function parseSeoAiResponse(content: string): SeoAiResult {
   const stripped = content.replace(/```(?:json)?/gi, '').trim();
   const start = stripped.indexOf('{');
   const end = stripped.lastIndexOf('}');
-  if (start === -1 || end <= start) throw new Error('AI 输出中没有找到 JSON 对象');
+  if (start === -1 || end <= start) {
+    // 没有 JSON 时先看看是不是拒答，好让日志里能直接看出原因。
+    assertNotRefusal(stripped);
+    throw new Error('AI 输出中没有找到 JSON 对象');
+  }
 
   const parsed = aiResultSchema.parse(JSON.parse(stripped.slice(start, end + 1)));
+  assertNotRefusal(`${parsed.title} ${parsed.description} ${parsed.keywords.join(' ')}`);
   const keywords: string[] = [];
   for (const raw of parsed.keywords) {
     const keyword = raw.trim().slice(0, 60);

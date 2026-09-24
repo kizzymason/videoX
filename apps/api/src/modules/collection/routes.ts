@@ -24,6 +24,8 @@ import {
   type CollectionJobType,
 } from './queues/tasks.js';
 import {
+  getAutoImportConfig,
+  setAutoImportConfig,
   getCollectionConfig,
   setCollectionConfig,
   getStorageStrategyConfig,
@@ -33,6 +35,12 @@ import {
   getPoolConfig,
   setPoolConfig,
 } from './storage/config.js';
+import {
+  cleanupStuckCollected,
+  countImportablePending,
+  runAutoImport,
+  syncVideoDurations,
+} from './auto-import.js';
 import { getPendingImportVideos, getCollectedVideoByExternalId } from './storage/ingestor.js';
 import {
   fromExternalImport,
@@ -500,15 +508,80 @@ collectionRouter.get(
   }),
 );
 
-/** GET /videos/pending-count - 待导入数量（徽标用） */
+/** GET /videos/pending-count - 待导入 / 失效数量（徽标 + 自动导入状态用） */
 collectionRouter.get(
   '/videos/pending-count',
   asyncHandler(async (_req, res) => {
+    const autoImport = await getAutoImportConfig();
     const [row] = await db
       .select({ total: sql<number>`count(*)::int` })
       .from(t.collectedVideos)
       .where(and(eq(t.collectedVideos.targetSite, TARGET_SITE), eq(t.collectedVideos.status, 'pending')));
-    ok(res, { count: Number(row?.total ?? 0) });
+    const [failedRow] = await db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(t.collectedVideos)
+      .where(and(eq(t.collectedVideos.targetSite, TARGET_SITE), eq(t.collectedVideos.status, 'failed')));
+
+    ok(res, {
+      count: Number(row?.total ?? 0),
+      // 还能重试的条数：达到重试上限的记录不再计入，否则徽标永远清不掉。
+      importable: await countImportablePending(autoImport.maxAttempts),
+      failed: Number(failedRow?.total ?? 0),
+      autoImport,
+    });
+  }),
+);
+
+/** POST /videos/auto-import/run - 立即跑一轮自动导入（不改开关） */
+collectionRouter.post(
+  '/videos/auto-import/run',
+  asyncHandler(async (req, res) => {
+    const cleanup = await cleanupStuckCollected();
+    const result = await runAutoImport({ maxBatches: 3 });
+    await audit(req, 'collection.videos.autoImportRun', undefined, { ...result, ...cleanup });
+
+    const message =
+      result.skipped === 'disabled'
+        ? '自动导入当前是关闭状态，已只做一次状态清理'
+        : result.skipped === 'empty'
+          ? '没有待导入的采集视频'
+          : result.skipped === 'no-operator'
+            ? '找不到可用的管理员账号，无法确定视频作者'
+            : `本轮导入 ${result.imported} 条，失败 ${result.failed} 条，判定失效 ${result.givenUp} 条，剩余 ${result.remaining} 条`;
+    ok(res, { ...result, cleanup }, message);
+  }),
+);
+
+/** POST /videos/sync-durations - 把采集库里的真实时长同步到正式视频表 */
+collectionRouter.post(
+  '/videos/sync-durations',
+  asyncHandler(async (req, res) => {
+    const result = await syncVideoDurations();
+    await audit(req, 'collection.videos.syncDurations', undefined, { ...result });
+    ok(
+      res,
+      result,
+      result.updated === 0 && result.pending === 0
+        ? '所有已入库视频都已有真实时长'
+        : `已同步 ${result.updated} 个视频的时长，还有 ${result.pending} 个等源站补齐（跑一次全量抓取即可）`,
+    );
+  }),
+);
+
+/** POST /videos/cleanup-stuck - 清理卡住 / 状态不一致的采集记录 */
+collectionRouter.post(
+  '/videos/cleanup-stuck',
+  asyncHandler(async (req, res) => {
+    const result = await cleanupStuckCollected();
+    await audit(req, 'collection.videos.cleanupStuck', undefined, { ...result });
+    const changed = result.markedFailed + result.archivedOrphans + result.fixedImported;
+    ok(
+      res,
+      result,
+      changed === 0
+        ? '没有需要清理的采集记录'
+        : `已标记失效 ${result.markedFailed} 条、归档失联 ${result.archivedOrphans} 条、修正状态 ${result.fixedImported} 条`,
+    );
   }),
 );
 
@@ -696,13 +769,14 @@ collectionRouter.get(
 collectionRouter.get(
   '/settings',
   asyncHandler(async (_req, res) => {
-    const [storage, daily, weekly, pool] = await Promise.all([
+    const [storage, daily, weekly, pool, autoImport] = await Promise.all([
       getStorageStrategyConfig(),
       getScheduleConfig('daily'),
       getScheduleConfig('weekly'),
       getPoolConfig(TARGET_SITE),
+      getAutoImportConfig(),
     ]);
-    ok(res, { storage, dailySchedule: daily, weeklySchedule: weekly, pool });
+    ok(res, { storage, dailySchedule: daily, weeklySchedule: weekly, pool, autoImport });
   }),
 );
 
@@ -717,6 +791,7 @@ collectionRouter.put(
     if (input.dailySchedule) await setScheduleConfig('daily', input.dailySchedule);
     if (input.weeklySchedule) await setScheduleConfig('weekly', input.weeklySchedule);
     if (input.pool) await setPoolConfig(TARGET_SITE, input.pool);
+    if (input.autoImport) await setAutoImportConfig(input.autoImport);
 
     await audit(req, 'collection.settings.update', undefined, input);
     ok(res, null, '配置已保存');

@@ -5,12 +5,13 @@ import { Bookmark, Heart, MessageCircle, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MobilePlayer } from '@videox/player/mobile';
 import type { PlayerSource } from '@videox/player';
-import { formatCount, formatRelativeTime, type VideoDetail } from '@videox/shared';
-import { Avatar, AvatarFallback, AvatarImage, Badge, Button, Skeleton, cn } from '@videox/ui';
+import { formatCount, formatRelativeTime, resolveHtmlLang, type VideoDetail } from '@videox/shared';
+import { Avatar, AvatarFallback, AvatarImage, Badge, Button, Skeleton, cn, useConsoleShield } from '@videox/ui';
 import { contentApi, socialApi, ApiError } from '../lib/api';
 import { track } from '../lib/analytics';
 import { useAuthStore } from '../stores/auth';
 import { useSeo } from '../hooks/use-seo';
+import { useShowViewCount } from '../hooks/use-site';
 import { MobileVideoCard } from '../components/MobileVideoCard';
 import { CommentSheet } from '../components/CommentSheet';
 
@@ -23,6 +24,13 @@ export function WatchPage() {
   const [commentsOpen, setCommentsOpen] = React.useState(false);
   const viewerKey = user?.id ?? 'guest';
   const videoQueryKey = ['video', idOrSlug, viewerKey] as const;
+  const shielded = useConsoleShield();
+  const showViewCount = useShowViewCount();
+
+  React.useEffect(() => {
+    if (!shielded) return;
+    queryClient.removeQueries({ queryKey: ['play-ticket'] });
+  }, [shielded, queryClient]);
 
   const videoQuery = useQuery({
     queryKey: videoQueryKey,
@@ -40,7 +48,7 @@ export function WatchPage() {
   const ticketQuery = useQuery({
     queryKey: ['play-ticket', video?.id, viewerKey],
     queryFn: () => contentApi.playTicket(video!.id),
-    enabled: !initializing && Boolean(video?.id) && Boolean(video?.viewer.canPlay),
+    enabled: !shielded && !initializing && Boolean(video?.id) && Boolean(video?.viewer.canPlay),
     staleTime: 0,
     gcTime: 0,
     retry: false,
@@ -63,6 +71,7 @@ export function WatchPage() {
           description: seoMeta?.description ?? video.description ?? undefined,
           keywords: seoMeta?.keywords || undefined,
           canonical: seoMeta?.canonical,
+          lang: resolveHtmlLang(video.title, video.description),
           jsonLd: seoMeta?.jsonLd,
         }
       : undefined,
@@ -127,6 +136,17 @@ export function WatchPage() {
     }
     action();
   };
+
+  if (shielded) {
+    return (
+      <div className="grid flex-1 place-items-center px-6 text-center">
+        <div className="space-y-2">
+          <p className="text-sm font-medium">请关闭开发者工具后刷新再观看</p>
+          <p className="text-xs text-muted-foreground">检测到调试控制台已打开</p>
+        </div>
+      </div>
+    );
+  }
 
   if (initializing || videoQuery.isLoading) {
     return (
@@ -227,8 +247,12 @@ export function WatchPage() {
             <h1 className="flex-1 text-[15px] leading-snug font-medium">{video.title}</h1>
           </div>
           <p className="text-xs text-muted-foreground tabular-nums">
-            {formatCount(video.viewCount)} 次播放
-            <span className="mx-1.5 text-muted-foreground/40">·</span>
+            {showViewCount ? (
+              <>
+                {formatCount(video.viewCount)} 次播放
+                <span className="mx-1.5 text-muted-foreground/40">·</span>
+              </>
+            ) : null}
             {formatRelativeTime(video.publishedAt ?? video.createdAt)}
           </p>
 

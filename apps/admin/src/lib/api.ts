@@ -507,11 +507,14 @@ export interface CollectedVideoRow {
   title: string;
   kind: 'gv' | 'mv' | 'tv';
   page: number;
-  status: 'pending' | 'imported' | 'updating' | 'archived';
+  status: 'pending' | 'imported' | 'updating' | 'archived' | 'failed';
   importMode: 'hotlink' | 'r2_transfer' | null;
   localVideoUrl: string | null;
   externalPlayUrl: string | null;
   metadata: Record<string, unknown> | null;
+  importAttempts: number;
+  importError: string | null;
+  lastImportAttemptAt: string | null;
   lastFetchedAt: string | null;
   importedAt: string | null;
   createdAt: string;
@@ -597,11 +600,21 @@ export interface CollectionPoolSettings {
   autoRemoveFailedAfterAttempts: number;
 }
 
+export interface CollectionAutoImportSettings {
+  enabled: boolean;
+  autoPublish: boolean;
+  batchSize: number;
+  intervalMinutes: number;
+  maxAttempts: number;
+  forceMode: 'auto' | 'hotlink' | 'r2_transfer';
+}
+
 export interface CollectionSettings {
   storage: CollectionStorageStrategy;
   dailySchedule: CollectionScheduleSettings;
   weeklySchedule: CollectionScheduleSettings;
   pool: CollectionPoolSettings;
+  autoImport: CollectionAutoImportSettings;
 }
 
 export interface CollectionStats {
@@ -684,7 +697,13 @@ export const collectionApi = {
 
   // 采集视频
   videos: (query: Query) => api.get<Paginated<CollectedVideoRow>>('/collection/videos', query),
-  pendingCount: () => api.get<{ count: number }>('/collection/videos/pending-count'),
+  pendingCount: () =>
+    api.get<{
+      count: number;
+      importable: number;
+      failed: number;
+      autoImport: CollectionAutoImportSettings;
+    }>('/collection/videos/pending-count'),
   importVideos: (body: {
     collectedVideoIds?: string[];
     allPending?: boolean;
@@ -696,9 +715,24 @@ export const collectionApi = {
     api.post<{
       imported: Array<{ collectedVideoId: string; videoId: string; importMode: string }>;
       failed: Array<{ collectedVideoId: string; error: string }>;
+      givenUp?: number;
       processed?: number;
       remaining?: number;
     }>('/collection/videos/import', body),
+  runAutoImport: () =>
+    api.post<{
+      skipped?: 'disabled' | 'no-operator' | 'empty';
+      imported: number;
+      failed: number;
+      givenUp: number;
+      remaining: number;
+      batches: number;
+      cleanup: { markedFailed: number; archivedOrphans: number; fixedImported: number };
+    }>('/collection/videos/auto-import/run'),
+  cleanupStuck: () =>
+    api.post<{ markedFailed: number; archivedOrphans: number; fixedImported: number }>(
+      '/collection/videos/cleanup-stuck',
+    ),
   publishVideo: (id: string) => api.post<null>(`/collection/videos/${id}/publish`),
   unpublishVideo: (id: string) => api.post<null>(`/collection/videos/${id}/unpublish`),
 

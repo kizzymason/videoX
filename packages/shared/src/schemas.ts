@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import {
   ACCESS_LEVELS,
+  ADMIN_PATH_MAX,
+  ADMIN_PATH_MIN,
   ANALYTICS_EVENTS,
+  CARD_SHOP_MAX_QUANTITY,
+  isValidAdminPath,
+  normalizeAdminPath,
   COMMENT_STATUSES,
   VIDEO_KINDS,
   ORDER_STATUSES,
@@ -12,6 +17,7 @@ import {
   PARTNER_STATUSES,
   REDEEM_CODE_STATUSES,
   SORT_OPTIONS,
+  BROWSE_MODES,
   STORAGE_DRIVERS,
   USER_ROLES,
   USER_STATUSES,
@@ -193,6 +199,13 @@ export const redeemSchema = z.object({
     .refine((v) => /^[A-Z0-9-]+$/.test(v), '订阅码只能是字母、数字'),
 });
 
+/** 卡密下单。email 只交给上游做买家自助找回，不进本站营销链路。 */
+export const cardCheckoutSchema = z.object({
+  productId: z.string().min(1).max(64),
+  quantity: z.coerce.number().int().min(1).max(CARD_SHOP_MAX_QUANTITY),
+  email: z.string().email('请填写正确的邮箱').max(160),
+});
+
 export const planSchema = z.object({
   code: z.string().min(1).max(40).regex(/^[a-z0-9_-]+$/i, '套餐编码只能包含字母数字和 -_'),
   name: z.string().min(1).max(60),
@@ -340,6 +353,19 @@ export const siteSettingsSchema = z.object({
   logoUrl: z.string().max(500).nullable().default(null),
   faviconUrl: z.string().max(500).nullable().default(null),
   defaultTheme: z.enum(['light', 'dark', 'system']).default('light'),
+  defaultBrowseMode: z.enum(BROWSE_MODES).default('paged'),
+  /**
+   * 前台是否展示播放量。默认关：热链片源的播放数据不完整，露出来反而不可信。
+   * 卡片、播放页、Shorts 一起生效，统计本身照常累计。
+   */
+  showViewCount: z.boolean().default(false),
+  // 后台入口路径。校验规则前后端共用；刻意不给 default —— 默认值会被打进公开的前台包里，
+  // 兜底交给 API（见 apps/api/src/modules/settings/service.ts），缺省时保留库里的旧值。
+  adminPath: z
+    .string()
+    .transform(normalizeAdminPath)
+    .refine(isValidAdminPath, `入口路径需 ${ADMIN_PATH_MIN}-${ADMIN_PATH_MAX} 位小写字母数字，且至少含一个数字`)
+    .optional(),
   icpBeian: z.string().max(120).nullable().default(null),
   footerText: z.string().max(300).nullable().default(null),
   contactEmail: z.string().max(160).nullable().default(null),
@@ -399,9 +425,10 @@ export const seoSettingsSchema = z.object({
       siteContext: z.string().max(500).default(''),
     })
     .prefault({}),
-  /** 首页 / 固定页的关键词与描述（逗号分隔关键词） */
+  /** 首页独立 SEO。标题留空用站点名，不再拼接副标题。 */
   pages: z
     .object({
+      homeTitle: z.string().max(200).default(''),
       homeKeywords: z.string().max(500).default(''),
       homeDescription: z.string().max(300).default(''),
     })

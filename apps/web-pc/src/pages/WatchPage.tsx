@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bookmark, Heart, Share2, UserPlus, UserCheck } from 'lucide-react';
 import { DesktopPlayer } from '@videox/player/desktop';
 import type { PlayerSource } from '@videox/player';
-import { formatCount, formatDate, type VideoDetail } from '@videox/shared';
+import { formatCount, formatDate, resolveHtmlLang, type VideoDetail } from '@videox/shared';
 import {
   Avatar,
   AvatarFallback,
@@ -14,6 +14,7 @@ import {
   Skeleton,
   Switch,
   cn,
+  useConsoleShield,
 } from '@videox/ui';
 import { toast } from 'sonner';
 import { contentApi, socialApi, ApiError } from '../lib/api';
@@ -24,6 +25,7 @@ import { useUiStore } from '../stores/ui';
 import { VideoCard, VideoCardSkeleton } from '../components/video/VideoCard';
 import { CommentSection } from '../components/CommentSection';
 import { useSeo } from '../hooks/use-seo';
+import { useShowViewCount } from '../hooks/use-site';
 
 export function WatchPage() {
   const { idOrSlug = '' } = useParams();
@@ -36,6 +38,13 @@ export function WatchPage() {
   const setAutoplayNext = useUiStore((s) => s.setAutoplayNext);
   const viewerKey = user?.id ?? 'guest';
   const videoQueryKey = ['video', idOrSlug, viewerKey] as const;
+  const shielded = useConsoleShield();
+  const showViewCount = useShowViewCount();
+
+  React.useEffect(() => {
+    if (!shielded) return;
+    queryClient.removeQueries({ queryKey: ['play-ticket'] });
+  }, [shielded, queryClient]);
 
   const videoQuery = useQuery({
     queryKey: videoQueryKey,
@@ -54,7 +63,7 @@ export function WatchPage() {
   const ticketQuery = useQuery({
     queryKey: ['play-ticket', video?.id, viewerKey],
     queryFn: () => contentApi.playTicket(video!.id),
-    enabled: !initializing && Boolean(video?.id) && Boolean(video?.viewer.canPlay),
+    enabled: !shielded && !initializing && Boolean(video?.id) && Boolean(video?.viewer.canPlay),
     staleTime: 0,
     gcTime: 0,
     retry: false,
@@ -78,6 +87,7 @@ export function WatchPage() {
           image: video.posterUrl ?? undefined,
           keywords: seoMeta?.keywords || undefined,
           canonical: seoMeta?.canonical,
+          lang: resolveHtmlLang(video.title, video.description),
           jsonLd: seoMeta?.jsonLd ?? buildVideoJsonLd(video),
         }
       : undefined,
@@ -179,6 +189,17 @@ export function WatchPage() {
     if (next) navigate(`/watch/${next.slug || next.id}`);
   }, [autoplayNext, related, navigate]);
 
+  if (shielded) {
+    return (
+      <div className="grid min-h-[60vh] place-items-center px-6 text-center">
+        <div className="space-y-2">
+          <p className="text-base font-medium">请关闭开发者工具后刷新再观看</p>
+          <p className="text-sm text-muted-foreground">检测到调试控制台已打开</p>
+        </div>
+      </div>
+    );
+  }
+
   if (initializing || videoQuery.isLoading) return <WatchSkeleton />;
   if (videoQuery.isError || !video) {
     return (
@@ -255,8 +276,12 @@ export function WatchPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
-              <span className="tabular-nums">{formatCount(video.viewCount)} 次播放</span>
-              <span className="text-muted-foreground/40">·</span>
+              {showViewCount ? (
+                <>
+                  <span className="tabular-nums">{formatCount(video.viewCount)} 次播放</span>
+                  <span className="text-muted-foreground/40">·</span>
+                </>
+              ) : null}
               <span>{formatDate(video.publishedAt ?? video.createdAt)}</span>
               {video.category ? (
                 <>
@@ -464,7 +489,10 @@ function buildVideoJsonLd(video: VideoDetail): Record<string, unknown> {
     description: video.description ?? '',
     thumbnailUrl: video.posterUrl ? [video.posterUrl] : [],
     uploadDate: video.publishedAt ?? video.createdAt,
-    duration: `PT${Math.floor(video.durationSeconds / 60)}M${video.durationSeconds % 60}S`,
+    // 热链片源没有时长，宁可不给这个字段也不要报 PT0M0S。
+    ...(video.durationSeconds > 0
+      ? { duration: `PT${Math.floor(video.durationSeconds / 60)}M${video.durationSeconds % 60}S` }
+      : {}),
     interactionStatistic: {
       '@type': 'InteractionCounter',
       interactionType: { '@type': 'WatchAction' },

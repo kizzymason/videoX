@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Save } from 'lucide-react';
+import { ExternalLink, RefreshCw, Save } from 'lucide-react';
 import { toast } from 'sonner';
-import type { SiteSettings } from '@videox/shared';
+import { ADMIN_PATH_MAX, isValidAdminPath, normalizeAdminPath, type SiteSettings } from '@videox/shared';
 import {
   Button,
   Field,
@@ -29,18 +29,38 @@ export function SettingsPage() {
 
   const { data, isLoading } = useQuery({ queryKey: ['site-settings'], queryFn: systemApi.site });
   React.useEffect(() => {
-    if (data) setDraft({ ...data, previewSeconds: 0, shortsFreeCount: data.shortsFreeCount ?? 3 });
+    if (data)
+      setDraft({
+        ...data,
+        previewSeconds: 0,
+        shortsFreeCount: data.shortsFreeCount ?? 3,
+        defaultBrowseMode: data.defaultBrowseMode ?? 'paged',
+        showViewCount: data.showViewCount ?? false,
+        adminPath: data.adminPath ?? '',
+      });
   }, [data]);
 
   const save = useMutation({
     mutationFn: (body: SiteSettings) => systemApi.saveSite(body),
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
+      // 入口一改，当前地址立刻失效，必须带着用户搬到新地址，否则下一次刷新就进不来了。
+      if (data?.adminPath && saved.adminPath && saved.adminPath !== data.adminPath) {
+        const rest = window.location.pathname.split('/').slice(2).filter(Boolean).join('/');
+        const next = `/${saved.adminPath}${rest ? `/${rest}` : ''}`;
+        toast.success(`后台入口已改为 ${next}，正在跳转…`);
+        window.setTimeout(() => window.location.replace(next), 1500);
+        return;
+      }
       toast.success('站点设置已保存');
       await queryClient.invalidateQueries({ queryKey: ['site-settings'] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const adminPathError =
+    draft && !isValidAdminPath(draft.adminPath ?? '')
+      ? '需 6-32 位小写字母或数字、字母开头且至少含一个数字，且不能用 admin/api/assets 等保留词'
+      : undefined;
   const dirty = draft && data ? JSON.stringify(draft) !== JSON.stringify(data) : false;
   const patch = (part: Partial<SiteSettings>) => setDraft((prev) => (prev ? { ...prev, ...part } : prev));
   const patchSeo = (part: Partial<SiteSettings['seo']>) =>
@@ -61,7 +81,11 @@ export function SettingsPage() {
         title="站点设置"
         description="标题、主题、注册开关、Shorts 试看与 SEO 模板"
         actions={
-          <Button size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate(draft)}>
+          <Button
+            size="sm"
+            disabled={!dirty || save.isPending || Boolean(adminPathError)}
+            onClick={() => save.mutate(draft)}
+          >
             <Save />
             {save.isPending ? '保存中…' : '保存设置'}
           </Button>
@@ -139,6 +163,28 @@ export function SettingsPage() {
                 checked={draft.commentsRequireApproval}
                 onChange={(checked) => patch({ commentsRequireApproval: checked })}
               />
+              <Toggle
+                label="展示播放量"
+                hint="关闭后前台卡片、播放页与 Shorts 都不显示播放次数，统计照常累计。热链片源的播放数据不完整，默认关闭。"
+                checked={draft.showViewCount}
+                onChange={(checked) => patch({ showViewCount: checked })}
+              />
+              <Field label="默认浏览模式" hint="访客首次进入视频列表时的模式，用户可在顶栏自行切换">
+                <Select
+                  value={draft.defaultBrowseMode}
+                  onValueChange={(value) =>
+                    patch({ defaultBrowseMode: value as SiteSettings['defaultBrowseMode'] })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="paged">分页（每页 20 条）</SelectItem>
+                    <SelectItem value="infinite">无限流</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
             </Panel>
 
             <Panel title="会员与播放">
@@ -163,6 +209,42 @@ export function SettingsPage() {
                   onChange={(e) => patch({ maxConcurrentStreams: Number(e.target.value) || 1 })}
                 />
               </Field>
+            </Panel>
+
+            <Panel
+              title="后台入口"
+              action={
+                <Button variant="ghost" size="sm" onClick={() => patch({ adminPath: randomAdminPath() })}>
+                  <RefreshCw />
+                  随机生成
+                </Button>
+              }
+            >
+              <Field
+                label="入口路径"
+                hint="6-32 位小写字母或数字，字母开头且至少含一个数字。保存后立即生效，不需要重启。"
+                error={adminPathError}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="shrink-0 text-xs text-muted-foreground">{window.location.origin}/</span>
+                  <Input
+                    value={draft.adminPath ?? ''}
+                    maxLength={ADMIN_PATH_MAX}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="font-mono"
+                    onChange={(e) => patch({ adminPath: normalizeAdminPath(e.target.value) })}
+                  />
+                </div>
+              </Field>
+              <p className="text-xs text-muted-foreground">
+                当前入口：
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                  {window.location.origin}/{data?.adminPath ?? draft.adminPath}
+                </code>
+                。保存新路径后浏览器会自动跳到新地址，旧地址会立刻变成前台页面。请先自行记录，
+                这个地址只在本页显示，公开接口不会下发。
+              </p>
             </Panel>
           </div>
         </TabsContent>
@@ -233,6 +315,18 @@ export function SettingsPage() {
       </Tabs>
     </div>
   );
+}
+
+/** 字母开头 + 8 位字母数字，且保证至少有一个数字（nginx 的入口正则要求带数字）。 */
+function randomAdminPath(): string {
+  const letters = 'abcdefghijkmnpqrstuvwxyz';
+  const alphabet = `${letters}23456789`;
+  const bytes = new Uint32Array(9);
+  crypto.getRandomValues(bytes);
+  const head = letters[bytes[0]! % letters.length]!;
+  const body = Array.from(bytes.slice(1), (n) => alphabet[n % alphabet.length]!).join('');
+  const withDigit = /[0-9]/.test(body) ? body : `${body.slice(0, -1)}${(bytes[0]! % 8) + 2}`;
+  return `${head}${withDigit}`;
 }
 
 function Panel({

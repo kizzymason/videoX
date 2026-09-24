@@ -1,9 +1,9 @@
 import * as React from 'react';
 import { useParams } from 'react-router-dom';
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { cn } from '@videox/ui';
+import { useQuery } from '@tanstack/react-query';
+import { ListPager, cn } from '@videox/ui';
 import { contentApi } from '../lib/api';
-import { flatten, nextPageParam } from '../lib/query';
+import { useBrowsableList } from '../lib/query';
 import { AppHeader } from '../components/AppHeader';
 import { PullToRefresh } from '../components/PullToRefresh';
 import { MasonryFeed } from '../components/MasonryFeed';
@@ -18,28 +18,34 @@ export function CategoriesTab() {
 
   const slug = activeSlug ?? categories?.[0]?.slug ?? null;
 
-  const query = useInfiniteQuery({
-    queryKey: ['category-feed', slug],
-    queryFn: ({ pageParam }) =>
-      contentApi.videos({ page: pageParam, pageSize: 20, categorySlug: slug!, sort: 'latest' }),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
-    enabled: Boolean(slug),
-    placeholderData: keepPreviousData,
-  });
+  const query = useBrowsableList(
+    ['category-feed', slug],
+    (page, pageSize) => contentApi.videos({ page, pageSize, categorySlug: slug!, sort: 'latest' }),
+    { enabled: Boolean(slug), urlPage: false },
+  );
 
-  const videos = flatten(query.data?.pages);
+  const videos = query.items;
+  const bodyRef = React.useRef<HTMLDivElement | null>(null);
+
+  // 换频道时右侧列表滚回顶部；左栏与右栏都是 .tab-scroll，右栏在后面。
+  const selectCategory = (nextSlug: string) => {
+    if (nextSlug === slug) return;
+    setActiveSlug(nextSlug);
+    query.setPage(1);
+    const scrollers = bodyRef.current?.querySelectorAll<HTMLElement>('.tab-scroll');
+    scrollers?.[scrollers.length - 1]?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <>
       <AppHeader title="频道" showSearch />
-      <div className="flex min-h-0 flex-1">
+      <div ref={bodyRef} className="flex min-h-0 flex-1">
         <div className="tab-scroll w-[88px] shrink-0 border-r border-border bg-muted/30">
           {(categories ?? []).map((category) => (
             <button
               key={category.id}
               type="button"
-              onClick={() => setActiveSlug(category.slug)}
+              onClick={() => selectCategory(category.slug)}
               className={cn(
                 'no-tap-highlight relative block w-full px-2 py-3.5 text-center text-[13px] transition-colors duration-200',
                 category.slug === slug ? 'bg-background font-medium text-foreground' : 'text-muted-foreground',
@@ -56,11 +62,18 @@ export function CategoriesTab() {
         <PullToRefresh onRefresh={() => query.refetch()} className="min-w-0 flex-1">
           <MasonryFeed
             videos={videos}
-            loading={query.isLoading}
-            loadingMore={query.isFetchingNextPage}
-            fetching={query.isFetching && !query.isFetchingNextPage && videos.length > 0}
-            hasMore={query.hasNextPage}
-            onEndReached={() => void query.fetchNextPage()}
+            loading={query.loading}
+            loadingMore={query.mode === 'infinite' && query.isFetchingNextPage}
+            fetching={query.fetching}
+            transitionKey={query.transitionKey}
+            hasMore={query.mode === 'infinite' && query.hasNextPage}
+            onEndReached={query.mode === 'infinite' ? query.fetchNextPage : undefined}
+            showEndStatus={query.mode === 'infinite'}
+            footer={
+              query.mode === 'paged' ? (
+                <ListPager meta={query.meta} page={query.page} onChange={query.setPage} busy={query.fetching} />
+              ) : null
+            }
             className="pt-3"
           />
         </PullToRefresh>
@@ -75,15 +88,11 @@ export function CategoryPage() {
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: contentApi.categories });
   const category = categories?.find((c) => c.slug === slug);
 
-  const query = useInfiniteQuery({
-    queryKey: ['category-feed', slug],
-    queryFn: ({ pageParam }) => contentApi.videos({ page: pageParam, pageSize: 20, categorySlug: slug, sort: 'latest' }),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
-    placeholderData: keepPreviousData,
-  });
+  const query = useBrowsableList(['category-feed', slug], (page, pageSize) =>
+    contentApi.videos({ page, pageSize, categorySlug: slug, sort: 'latest' }),
+  );
 
-  const videos = flatten(query.data?.pages);
+  const videos = query.items;
 
   return (
     <>
@@ -91,11 +100,18 @@ export function CategoryPage() {
       <PullToRefresh onRefresh={() => query.refetch()}>
         <MasonryFeed
           videos={videos}
-          loading={query.isLoading}
-          loadingMore={query.isFetchingNextPage}
-          fetching={query.isFetching && !query.isFetchingNextPage && videos.length > 0}
-          hasMore={query.hasNextPage}
-          onEndReached={() => void query.fetchNextPage()}
+          loading={query.loading}
+          loadingMore={query.mode === 'infinite' && query.isFetchingNextPage}
+          fetching={query.fetching}
+          transitionKey={query.transitionKey}
+          hasMore={query.mode === 'infinite' && query.hasNextPage}
+          onEndReached={query.mode === 'infinite' ? query.fetchNextPage : undefined}
+          showEndStatus={query.mode === 'infinite'}
+          footer={
+            query.mode === 'paged' ? (
+              <ListPager meta={query.meta} page={query.page} onChange={query.setPage} busy={query.fetching} />
+            ) : null
+          }
           className="pt-3"
         />
       </PullToRefresh>
@@ -111,15 +127,11 @@ export function ChannelPage() {
     queryFn: () => contentApi.channel(username),
   });
 
-  const query = useInfiniteQuery({
-    queryKey: ['channel-videos', username],
-    queryFn: ({ pageParam }) => contentApi.channelVideos(username, pageParam, 20),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
-    placeholderData: keepPreviousData,
-  });
+  const query = useBrowsableList(['channel-videos', username], (page, pageSize) =>
+    contentApi.channelVideos(username, page, pageSize),
+  );
 
-  const videos = flatten(query.data?.pages);
+  const videos = query.items;
 
   return (
     <>
@@ -145,11 +157,18 @@ export function ChannelPage() {
         ) : null}
         <MasonryFeed
           videos={videos}
-          loading={query.isLoading}
-          loadingMore={query.isFetchingNextPage}
-          fetching={query.isFetching && !query.isFetchingNextPage && videos.length > 0}
-          hasMore={query.hasNextPage}
-          onEndReached={() => void query.fetchNextPage()}
+          loading={query.loading}
+          loadingMore={query.mode === 'infinite' && query.isFetchingNextPage}
+          fetching={query.fetching}
+          transitionKey={query.transitionKey}
+          hasMore={query.mode === 'infinite' && query.hasNextPage}
+          onEndReached={query.mode === 'infinite' ? query.fetchNextPage : undefined}
+          showEndStatus={query.mode === 'infinite'}
+          footer={
+            query.mode === 'paged' ? (
+              <ListPager meta={query.meta} page={query.page} onChange={query.setPage} busy={query.fetching} />
+            ) : null
+          }
         />
       </PullToRefresh>
     </>

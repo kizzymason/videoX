@@ -132,6 +132,163 @@ export function useLocalStorage<T>(key: string, initial: T) {
   return [value, setValue] as const;
 }
 
+/**
+ * 防窥：拦右键、拖拽与常见的调试快捷键。
+ *
+ * 边界要说清楚：浏览器层面无法真正禁用 devtools，这里只提高随手偷看的成本，
+ * 真正的防线在服务端（密文存储、订单归属校验、密钥不出后端）。
+ * 输入框与文本复制仍要能用，所以不拦 selectstart，禁选交给容器上的 CSS。
+ * 局部要放开长按/右键（比如付款二维码）时，在该元素上 stopPropagation 即可。
+ */
+export type BrowseMode = 'paged' | 'infinite';
+
+const BROWSE_KEY = 'videox:browse-mode';
+
+function parseBrowseMode(raw: string | null): BrowseMode | null {
+  return raw === 'paged' || raw === 'infinite' ? raw : null;
+}
+
+/**
+ * 浏览模式是跨子树共享的状态：顶栏开关和各列表页不在同一棵 React 树里，
+ * 只用组件内 state + localStorage 的话，切换后列表要整页刷新才生效。
+ * 所以放一个模块级订阅，谁改都能立刻通知到所有列表。
+ */
+let browseOverride: BrowseMode | null = null;
+let browseLoaded = false;
+const browseListeners = new Set<() => void>();
+
+function browseSnapshot(): BrowseMode | null {
+  if (!browseLoaded) {
+    browseOverride = typeof window === 'undefined' ? null : parseBrowseMode(localStorage.getItem(BROWSE_KEY));
+    browseLoaded = true;
+  }
+  return browseOverride;
+}
+
+function subscribeBrowse(onChange: () => void) {
+  browseListeners.add(onChange);
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== BROWSE_KEY) return;
+    browseOverride = parseBrowseMode(event.newValue);
+    browseLoaded = true;
+    onChange();
+  };
+  window.addEventListener('storage', onStorage);
+  return () => {
+    browseListeners.delete(onChange);
+    window.removeEventListener('storage', onStorage);
+  };
+}
+
+function writeBrowseMode(next: BrowseMode) {
+  browseLoaded = true;
+  if (browseOverride === next) return;
+  browseOverride = next;
+  try {
+    localStorage.setItem(BROWSE_KEY, next);
+  } catch {
+    /* 隐私模式写不进去就算了，本次会话内仍然生效 */
+  }
+  for (const listener of browseListeners) listener();
+}
+
+/**
+ * 视频列表浏览模式。用户点过顶栏开关后写 localStorage；
+ * 没选过则跟随后台 defaultBrowseMode（默认分页）。
+ */
+export function useBrowseMode(siteDefault: BrowseMode = 'paged') {
+  const override = React.useSyncExternalStore(subscribeBrowse, browseSnapshot, () => null);
+  const mode = override ?? siteDefault;
+
+  const setMode = React.useCallback((next: BrowseMode) => writeBrowseMode(next), []);
+  const toggle = React.useCallback(() => {
+    writeBrowseMode(mode === 'paged' ? 'infinite' : 'paged');
+  }, [mode]);
+
+  return { mode, setMode, toggle } as const;
+}
+
+function isViteDev(): boolean {
+  try {
+    return Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 播放页控台劝退。开 DevTools 后返回 true，由页面卸播放器、清票据。
+ * 不拦右键、不拦选中——和订阅页 useAntiPeek 刻意分开。
+ * 浏览器关不掉控制台，尺寸差 + 调试器耗时只提高随手偷看的成本。
+ */
+export function useConsoleShield(options: { enabled?: boolean } = {}) {
+  const { enabled = true } = options;
+  const [tripped, setTripped] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!enabled || tripped) return undefined;
+    if (isViteDev()) return undefined;
+
+    const trip = () => setTripped(true);
+
+    const checkSize = () => {
+      const widthGap = Math.abs(window.outerWidth - window.innerWidth);
+      const heightGap = Math.abs(window.outerHeight - window.innerHeight);
+      if (widthGap > 180 || heightGap > 180) trip();
+    };
+
+    const checkDebugger = () => {
+      const start = performance.now();
+      // eslint-disable-next-line no-debugger
+      debugger;
+      if (performance.now() - start > 120) trip();
+    };
+
+    checkSize();
+    const timer = window.setInterval(() => {
+      checkSize();
+      checkDebugger();
+    }, 1600);
+    window.addEventListener('resize', checkSize);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('resize', checkSize);
+    };
+  }, [enabled, tripped]);
+
+  return tripped;
+}
+
+export function useAntiPeek(options: { enabled?: boolean } = {}) {
+  const { enabled = true } = options;
+
+  React.useEffect(() => {
+    if (!enabled) return undefined;
+
+    const block = (e: Event) => e.preventDefault();
+    const onKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      const mod = e.ctrlKey || e.metaKey;
+      if (key === 'f12' || (mod && e.shiftKey && (key === 'i' || key === 'j' || key === 'c'))) {
+        e.preventDefault();
+        return;
+      }
+      if (mod && (key === 'u' || key === 's' || key === 'p')) e.preventDefault();
+    };
+
+    document.addEventListener('contextmenu', block);
+    document.addEventListener('dragstart', block);
+    document.addEventListener('keydown', onKeyDown, true);
+
+    return () => {
+      document.removeEventListener('contextmenu', block);
+      document.removeEventListener('dragstart', block);
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [enabled]);
+}
+
 /** 复制到剪贴板，返回的 copied 会在 2s 后自动复位。 */
 export function useCopy(resetAfter = 2000) {
   const [copied, setCopied] = React.useState(false);

@@ -8,6 +8,7 @@
 // ========================================================================
 
 import { sql as dsql } from 'drizzle-orm';
+import { resolveHomeSeo, resolveHtmlLang, SITE_UI_LANG, videoEmbedPath } from '@videox/shared';
 import { sqlRows } from '../../core/db.js';
 import { env } from '../../config/env.js';
 import { getSiteSettings } from '../settings/service.js';
@@ -52,6 +53,29 @@ export interface SeoPageData {
   h1: string;
   /** 已转义好的正文 HTML 片段 */
   contentHtml: string;
+  /** 对应的移动版地址。PC 页声明它，与移动页的 canonical 组成 Google 要求的「独立网址」注解对。 */
+  alternateMobile?: string | null;
+  /**
+   * `<html lang>` 的值。导航、页脚这类固定文案是中文，所以列表页用站点 UI 语言；
+   * 播放页的主体内容是片源标题，按标题实际语言标注（片源里有一万多个纯英文标题）。
+   */
+  lang?: string;
+}
+
+/**
+ * 规范地址。
+ *
+ * 根路径必须带尾斜杠：sitemap 里写的是 https://pandagv.com/ ，
+ * canonical 少一个斜杠就会和 Google 抓取的地址不一致，容易被判成
+ * 「Google 选择的规范网页与用户指定的不同」。其余路径一律不带尾斜杠，与 sitemap 保持一致。
+ */
+export function canonicalUrl(origin: string, path: string): string {
+  return path === '/' ? `${origin}/` : `${origin}${path}`;
+}
+
+/** 移动版地址：/m 前缀 + 同一路径。 */
+export function mobileUrl(origin: string, path: string): string {
+  return path === '/' ? `${origin}/m/` : `${origin}/m${path}`;
 }
 
 /** 组装完整 HTML 文档。所有动态字段在此前必须已转义。 */
@@ -61,7 +85,7 @@ export function buildHtmlDocument(page: SeoPageData): string {
     .join('\n');
 
   return `<!doctype html>
-<html lang="zh-CN">
+<html lang="${escapeHtml(page.lang ?? SITE_UI_LANG)}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -70,6 +94,7 @@ export function buildHtmlDocument(page: SeoPageData): string {
 ${page.keywords ? `<meta name="keywords" content="${escapeHtml(page.keywords)}" />` : ''}
 <meta name="robots" content="${page.robots}" />
 <link rel="canonical" href="${escapeHtml(page.canonical)}" />
+${page.alternateMobile ? `<link rel="alternate" media="only screen and (max-width: 640px)" href="${escapeHtml(page.alternateMobile)}" />` : ''}
 <meta property="og:site_name" content="${escapeHtml(page.siteName)}" />
 <meta property="og:type" content="${page.ogType}" />
 <meta property="og:title" content="${escapeHtml(page.title)}" />
@@ -144,17 +169,24 @@ export async function buildHomePage(origin: string, pageUrl: string): Promise<Se
     `),
   ]);
 
-  const description = seo.pages.homeDescription || site.siteDescription || site.siteTagline || site.siteName;
-  const keywords = seo.pages.homeKeywords || site.siteKeywords;
+  const home = resolveHomeSeo({
+    siteName: site.siteName,
+    siteTagline: site.siteTagline,
+    siteDescription: site.siteDescription,
+    siteKeywords: site.siteKeywords,
+    homeTitle: seo.pages.homeTitle,
+    homeDescription: seo.pages.homeDescription,
+    homeKeywords: seo.pages.homeKeywords,
+  });
   const categoryLinks = categories
     .map((c) => `<li><a href="${escapeHtml(`${origin}/category/${c.slug}`)}">${escapeHtml(c.name)}</a></li>`)
     .join('\n');
 
   return {
-    title: site.siteTagline ? `${site.siteName} - ${site.siteTagline}` : site.siteName,
-    description,
-    keywords,
-    canonical: origin,
+    title: home.title,
+    description: home.description,
+    keywords: home.keywords,
+    canonical: canonicalUrl(origin, '/'),
     pageUrl,
     ogType: 'website',
     image: absoluteUrl(site.logoUrl, origin),
@@ -164,8 +196,8 @@ export async function buildHomePage(origin: string, pageUrl: string): Promise<Se
         '@context': 'https://schema.org',
         '@type': 'WebSite',
         name: site.siteName,
-        url: origin,
-        description,
+        url: canonicalUrl(origin, '/'),
+        description: home.description,
         potentialAction: {
           '@type': 'SearchAction',
           target: `${origin}/search?q={search_term_string}`,
@@ -175,7 +207,7 @@ export async function buildHomePage(origin: string, pageUrl: string): Promise<Se
     ],
     siteName: site.siteName,
     h1: site.siteName,
-    contentHtml: `<p>${escapeHtml(description)}</p>\n<h2>频道</h2>\n<ul>\n${categoryLinks}\n</ul>\n<h2>最新视频</h2>\n${videoLinkList(videos, origin)}`,
+    contentHtml: `<p>${escapeHtml(home.description)}</p>\n<h2>频道</h2>\n<ul>\n${categoryLinks}\n</ul>\n<h2>最新视频</h2>\n${videoLinkList(videos, origin)}`,
   };
 }
 
@@ -221,8 +253,10 @@ export async function buildWatchPage(slug: string, origin: string, pageUrl: stri
       description,
       thumbnailUrl: image ? [image] : [],
       uploadDate,
-      duration: isoDuration(video.duration_seconds),
-      embedUrl: canonical,
+      // 热链片源拿不到时长（库里是 0）。duration 是可选字段，宁可不给，
+      // 也不能报个 PT1S 让 Google 以为全站都是 1 秒的视频。
+      ...(video.duration_seconds > 0 ? { duration: isoDuration(video.duration_seconds) } : {}),
+      embedUrl: `${origin}${videoEmbedPath(video.slug)}`,
       keywords: keywords || undefined,
       publisher: { '@type': 'Organization', name: site.siteName, url: origin },
       ...(video.author_name ? { creator: { '@type': 'Person', name: video.author_name } } : {}),
@@ -279,6 +313,31 @@ export async function buildWatchPage(slug: string, origin: string, pageUrl: stri
     siteName: site.siteName,
     h1: displayTitle,
     contentHtml,
+    lang: resolveHtmlLang(displayTitle, video.description),
+  };
+}
+
+/**
+ * 爬虫可见的独立 URL，只为满足 Google：player_loc 不能等于播放页 loc。
+ * 只出封面和回链，不写 src / m3u8 / playToken，避免变成第二条播放入口。
+ */
+export async function buildEmbedPage(slug: string, origin: string, pageUrl: string): Promise<SeoPageData | null> {
+  const page = await buildWatchPage(slug, origin, pageUrl);
+  if (!page) return null;
+  const poster = page.image
+    ? `<p><img src="${escapeHtml(page.image)}" alt="${escapeHtml(page.h1)}" width="640" /></p>`
+    : '';
+  return {
+    ...page,
+    pageUrl,
+    robots: 'noindex,follow',
+    contentHtml: [
+      poster,
+      `<p>${escapeHtml(page.description)}</p>`,
+      `<p><a href="${escapeHtml(page.canonical)}">在网页中观看</a></p>`,
+    ]
+      .filter(Boolean)
+      .join('\n'),
   };
 }
 
@@ -364,7 +423,7 @@ async function buildSimplePage(
     title: `${h1} - ${site.siteName}`,
     description,
     keywords: site.siteKeywords,
-    canonical: `${origin}${path}`,
+    canonical: canonicalUrl(origin, path),
     pageUrl,
     ogType: 'website',
     image: null,
@@ -403,18 +462,22 @@ export function normalizeRenderPath(rawPath: string): { path: string; isMobile: 
 export async function renderForCrawler(rawPath: string): Promise<RenderOutcome> {
   const origin = env.SITE_PUBLIC_URL.replace(/\/+$/, '');
   const { path, isMobile } = normalizeRenderPath(rawPath);
-  const pageUrl = isMobile ? `${origin}/m${path === '/' ? '' : path}` : `${origin}${path === '/' ? '' : path}` || origin;
+  const pageUrl = isMobile ? mobileUrl(origin, path) : canonicalUrl(origin, path);
 
   let page: SeoPageData | null = null;
   let status = 200;
 
   const watchMatch = /^\/watch\/([^/]+)$/.exec(path);
+  const embedMatch = /^\/embed\/([^/]+)$/.exec(path);
   const categoryMatch = /^\/category\/([^/]+)$/.exec(path);
 
   if (path === '/') {
     page = await buildHomePage(origin, pageUrl);
   } else if (watchMatch?.[1]) {
     page = await buildWatchPage(watchMatch[1], origin, pageUrl);
+    if (!page) status = 404;
+  } else if (embedMatch?.[1]) {
+    page = await buildEmbedPage(embedMatch[1], origin, pageUrl);
     if (!page) status = 404;
   } else if (categoryMatch?.[1]) {
     page = await buildCategoryPage(categoryMatch[1], origin, pageUrl);
@@ -424,7 +487,8 @@ export async function renderForCrawler(rawPath: string): Promise<RenderOutcome> 
   } else if (path === '/shorts') {
     page = await buildSimplePage(origin, pageUrl, '/shorts', 'Shorts 短视频', '竖屏短视频，随刷随看');
   } else if (path === '/search') {
-    page = await buildSimplePage(origin, pageUrl, '/search', '搜索', '搜索全站视频');
+    // 站内搜索结果页不进索引：Google 明确不建议收录搜索结果页，收了也只会算低质量页面。
+    page = await buildSimplePage(origin, pageUrl, '/search', '搜索', '搜索全站视频', 'noindex,follow');
   } else if (path === '/membership') {
     page = await buildSimplePage(origin, pageUrl, '/membership', '会员中心', '开通会员，解锁全站会员专享内容');
   } else {
@@ -440,7 +504,7 @@ export async function renderForCrawler(rawPath: string): Promise<RenderOutcome> 
         title: `内容不存在 - ${site.siteName}`,
         description: '内容不存在或已下架',
         keywords: '',
-        canonical: origin,
+        canonical: canonicalUrl(origin, '/'),
         pageUrl,
         ogType: 'website',
         image: null,
@@ -451,6 +515,13 @@ export async function renderForCrawler(rawPath: string): Promise<RenderOutcome> 
         contentHtml: `<p>内容不存在或已下架，<a href="${escapeHtml(origin)}">返回首页</a>。</p>`,
       }),
     };
+  }
+
+  // PC 版声明移动版地址，移动版本身 canonical 已指回 PC —— 两者合起来就是
+  // Google 文档里「独立网址」要求的注解对，能明确告诉它 /m/ 只是同一页的移动版。
+  // 只有能进索引的页面才需要这层声明。
+  if (!isMobile && page.robots === 'index,follow') {
+    page.alternateMobile = mobileUrl(origin, path);
   }
 
   return { status, html: buildHtmlDocument(page) };

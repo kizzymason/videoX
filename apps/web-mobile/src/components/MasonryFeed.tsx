@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { VideoSummary } from '@videox/shared';
-import { Skeleton, Spinner, cn } from '@videox/ui';
+import { ListLoadingBar, Skeleton, cn } from '@videox/ui';
 import { MobileVideoCard, cardHeight } from './MobileVideoCard';
 
 const GAP = 10;
@@ -20,14 +20,19 @@ export interface MasonryFeedProps {
   videos: VideoSummary[];
   loading?: boolean;
   loadingMore?: boolean;
-  /** 已有列表时的后台刷新，角上细转圈，不卸卡片 */
+  /** 已有列表时的后台刷新（翻页 / 换页签），顶部跑一条进度线，不卸卡片 */
   fetching?: boolean;
+  /** 变化时重播进场动画，通常传 useBrowsableList 的 transitionKey */
+  transitionKey?: string | number;
   hasMore?: boolean;
   onEndReached?: () => void;
   /** 列表顶部插入的内容（轮播、分类胶囊等） */
   header?: React.ReactNode;
   emptyText?: string;
   className?: string;
+  /** 分页模式下关掉「已经到底了」，改由外部 ListPager 接管 */
+  showEndStatus?: boolean;
+  footer?: React.ReactNode;
 }
 
 /**
@@ -42,11 +47,14 @@ export function MasonryFeed({
   loading,
   loadingMore,
   fetching,
+  transitionKey,
   hasMore,
   onEndReached,
   header,
   emptyText = '这里还没有内容',
   className,
+  showEndStatus = true,
+  footer,
 }: MasonryFeedProps) {
   const showSkeleton = Boolean(loading) && videos.length === 0;
   // 容器在骨架屏与真实列表之间会整体换挂，用 state 持有节点，
@@ -137,6 +145,8 @@ export function MasonryFeed({
     <div className={cn('relative px-3', className)}>
       {header}
 
+      <ListLoadingBar active={showSkeleton || (fetching && !loadingMore)} className="mb-2" />
+
       {/* 骨架屏也挂在同一个 ref 上，宽度在数据到达前就量好，首帧即可定位卡片 */}
       <div
         ref={setContainer}
@@ -144,7 +154,7 @@ export function MasonryFeed({
         style={{ height: showSkeleton ? undefined : totalHeight }}
       >
         {showSkeleton ? (
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="vx-list-enter grid grid-cols-2 gap-2.5">
             {Array.from({ length: 8 }, (_, i) => (
               <div key={i} className="space-y-2">
                 <Skeleton className="aspect-[3/2] w-full rounded-xl" />
@@ -154,31 +164,30 @@ export function MasonryFeed({
             ))}
           </div>
         ) : (
-          visible.map((item) => (
-            <div
-              key={item.video.id}
-              className="absolute"
-              style={{ top: item.top, left: item.left, width: item.width, height: item.height }}
-            >
-              <MobileVideoCard video={item.video} />
-            </div>
-          ))
+          // 定位容器（setContainer）不能跟着换页重挂，否则宽度要重新测量；
+          // 动画挂在这层铺满的内层上，卡片坐标不变。
+          <div key={transitionKey} className="vx-list-enter absolute inset-0">
+            {visible.map((item) => (
+              <div
+                key={item.video.id}
+                className="absolute"
+                style={{ top: item.top, left: item.left, width: item.width, height: item.height }}
+              >
+                <MobileVideoCard video={item.video} />
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
-      {fetching && videos.length > 0 && !loadingMore ? (
-        <div className="pointer-events-none absolute top-2 right-3">
-          <Spinner className="size-4 text-muted-foreground" />
-        </div>
-      ) : null}
-
       {!showSkeleton && videos.length === 0 ? (
         <p className="py-16 text-center text-sm text-muted-foreground">{emptyText}</p>
-      ) : (
+      ) : showEndStatus ? (
         <div className="py-6 text-center text-xs text-muted-foreground">
           {loadingMore ? '加载中…' : hasMore ? '' : videos.length > 0 ? '已经到底了' : ''}
         </div>
-      )}
+      ) : null}
+      {footer}
     </div>
   );
 }

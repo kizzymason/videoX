@@ -10,8 +10,10 @@ import { logger } from '../../core/logger.js';
 import { normalizeScheduleKinds, planFullCrawl } from '@videox/shared';
 import { enqueueCollectionJob, type CollectionJobType } from './queues/tasks.js';
 import { resolveHealthCheckIntervalMinutes } from './pool-schedule.js';
-import { getScheduleConfig, getPoolConfig } from './storage/config.js';
+import { getAutoImportConfig, getScheduleConfig, getPoolConfig } from './storage/config.js';
 import { AccountPoolManager } from './pool-manager.js';
+import { cleanupStuckCollected, runAutoImport, syncVideoDurations } from './auto-import.js';
+import { dedupeCollectedLibrary } from './task-maintenance.js';
 
 const TARGET_SITE = 'yitongkan' as const;
 const KINDS = ['gv', 'mv', 'tv'] as const;
@@ -21,6 +23,7 @@ const scheduledTasks: cron.ScheduledTask[] = [];
 /** 简易防重入锁：上一个 cron 触发还没跑完时跳过本次 */
 const runningFlags = new Map<string, boolean>();
 let lastPoolHealthCheckAt = 0;
+let lastAutoImportAt = 0;
 
 async function runExclusively(key: string, fn: () => Promise<void>): Promise<void> {
   if (runningFlags.get(key)) {
@@ -65,7 +68,22 @@ export function scheduleCollectionTasks(): void {
     cron.schedule('0 5 * * 1', () => void runExclusively('logcleanup', runLogCleanup)),
   );
 
-  logger.info('采集调度器已就绪：每日增量(03:00) / 每周全量(周日 04:00) / 号池每分钟自动换 token + 按配置巡检 / 日志清理(周一 05:00)');
+  // 5. 自动导入：每分钟唤醒，按配置的间隔真正执行。间隔在后台改完立刻生效，不用重启。
+  scheduledTasks.push(
+    cron.schedule('* * * * *', () => void runExclusively('auto-import', runScheduledAutoImport)),
+  );
+
+  // 6. 采集库自动维护（每日 05:30）：状态纠偏 + 去重，避免重复视频与卡住的记录堆积。
+  scheduledTasks.push(
+    cron.schedule('30 5 * * *', () => void runExclusively('collected-maintain', runCollectedMaintenance)),
+  );
+
+  // 进程重启后先跑一次自动导入，把上次停机期间攒下的待导入清掉。
+  void runExclusively('auto-import-startup', runScheduledAutoImport);
+
+  logger.info(
+    '采集调度器已就绪：每日增量(03:00) / 每周全量(周日 04:00) / 号池每分钟自动换 token + 按配置巡检 / 自动导入按配置间隔 / 采集库维护(05:30) / 日志清理(周一 05:00)',
+  );
 }
 
 /**
@@ -232,6 +250,39 @@ async function runScheduledHealthCheck(): Promise<void> {
 async function runScheduledPoolMaintain(): Promise<void> {
   await runScheduledTokenRefresh();
   await runScheduledHealthCheck();
+}
+
+/**
+ * 自动导入的节流：cron 每分钟醒一次，真正跑不跑看配置里的 intervalMinutes。
+ * 这样管理员在后台把间隔从 10 分钟改成 30 分钟，下一次唤醒就按新值算，不必重启进程。
+ */
+async function runScheduledAutoImport(): Promise<void> {
+  try {
+    const config = await getAutoImportConfig();
+    if (!config.enabled) return;
+    const intervalMs = Math.max(1, config.intervalMinutes) * 60 * 1000;
+    if (Date.now() - lastAutoImportAt < intervalMs) return;
+    lastAutoImportAt = Date.now();
+
+    const result = await runAutoImport();
+    if (result.imported > 0 || result.givenUp > 0) {
+      logger.info({ ...result }, '定时自动导入采集视频完成');
+    }
+  } catch (error) {
+    logger.error({ err: error }, '定时自动导入失败');
+  }
+}
+
+/** 每日采集库维护：状态纠偏 → 时长回填 → 去重（去重要读全表，放最后省一次无用扫描）。 */
+async function runCollectedMaintenance(): Promise<void> {
+  try {
+    const cleanup = await cleanupStuckCollected();
+    const durations = await syncVideoDurations();
+    const dedupe = await dedupeCollectedLibrary();
+    logger.info({ cleanup, durations, dedupe: { ...dedupe, samples: undefined } }, '采集库每日维护完成');
+  } catch (error) {
+    logger.error({ err: error }, '采集库每日维护失败');
+  }
 }
 
 /**

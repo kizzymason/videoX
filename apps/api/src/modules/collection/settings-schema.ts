@@ -4,6 +4,14 @@
 // ========================================================================
 
 import { z } from 'zod';
+import {
+  AUTO_IMPORT_ATTEMPTS_MAX,
+  AUTO_IMPORT_ATTEMPTS_MIN,
+  AUTO_IMPORT_BATCH_MAX,
+  AUTO_IMPORT_BATCH_MIN,
+  AUTO_IMPORT_INTERVAL_MAX,
+  AUTO_IMPORT_INTERVAL_MIN,
+} from '@videox/shared';
 
 const scheduleKindsSchema = z.array(z.enum(['gv', 'mv', 'tv'])).max(3);
 
@@ -34,6 +42,21 @@ export const collectionSettingsPatchSchema = z.object({
       pageCountPerRun: z.number().int().min(1).max(500).optional(),
       incremental: z.boolean().optional(),
       startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    })
+    .optional(),
+  autoImport: z
+    .object({
+      enabled: z.boolean().optional(),
+      autoPublish: z.boolean().optional(),
+      batchSize: z.number().int().min(AUTO_IMPORT_BATCH_MIN).max(AUTO_IMPORT_BATCH_MAX).optional(),
+      intervalMinutes: z
+        .number()
+        .int()
+        .min(AUTO_IMPORT_INTERVAL_MIN)
+        .max(AUTO_IMPORT_INTERVAL_MAX)
+        .optional(),
+      maxAttempts: z.number().int().min(AUTO_IMPORT_ATTEMPTS_MIN).max(AUTO_IMPORT_ATTEMPTS_MAX).optional(),
+      forceMode: z.enum(['auto', 'hotlink', 'r2_transfer']).optional(),
     })
     .optional(),
   pool: z

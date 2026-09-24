@@ -6,7 +6,8 @@ import { asyncHandler } from '../../core/respond.js';
 import { cached } from '../../core/redis.js';
 import { getSiteSettings } from '../settings/service.js';
 import { getSeoSettings } from './settings.js';
-import { absoluteUrl, renderForCrawler } from './render.js';
+import { videoEmbedPath, videoWatchPath } from '@videox/shared';
+import { absoluteUrl, isoDuration, renderForCrawler } from './render.js';
 
 export const seoRouter: Router = Router();
 
@@ -99,7 +100,8 @@ seoRouter.get(
   '/sitemap-pages.xml',
   asyncHandler(async (_req, res) => {
     const now = new Date().toISOString();
-    const paths = ['/', '/categories', '/search', '/membership'];
+    // 不放 /search：站内搜索结果页 Google 不建议收录，渲染时也已标 noindex。
+    const paths = ['/', '/categories', '/membership'];
     const urls = paths.map(
       (p) =>
         `<url><loc>${escapeXml(siteUrl(p))}</loc><lastmod>${now}</lastmod><changefreq>daily</changefreq><priority>${p === '/' ? '1.0' : '0.7'}</priority></url>`,
@@ -163,8 +165,8 @@ seoRouter.get(
 
       const origin = env.SITE_PUBLIC_URL.replace(/\/+$/, '');
       const urls = rows.map((r) => {
-        const loc = siteUrl(`/watch/${r.slug}`);
-        // sitemap 与页面 meta 使用同一份 SEO 数据，元数据一致是富媒体结果的前提。
+        const loc = siteUrl(videoWatchPath(r.slug));
+        const playerLoc = siteUrl(videoEmbedPath(r.slug));
         const title = r.seo_title ?? r.title;
         const description = (r.seo_description ?? r.description ?? r.title).slice(0, 2000);
         const thumb = absoluteUrl(r.poster_url, origin) ?? '';
@@ -182,8 +184,10 @@ seoRouter.get(
           thumb ? `<video:thumbnail_loc>${escapeXml(thumb)}</video:thumbnail_loc>` : '',
           `<video:title>${escapeXml(title)}</video:title>`,
           `<video:description>${escapeXml(description)}</video:description>`,
-          `<video:player_loc>${escapeXml(loc)}</video:player_loc>`,
-          `<video:duration>${Math.max(1, r.duration_seconds)}</video:duration>`,
+          `<video:player_loc>${escapeXml(playerLoc)}</video:player_loc>`,
+          // 时长未知（热链片源库里是 0）就整个标签不输出。它是可选字段，
+          // 之前兜底成 1 等于告诉 Google 全站 5 万多个视频都只有 1 秒。
+          r.duration_seconds > 0 ? `<video:duration>${r.duration_seconds}</video:duration>` : '',
           r.published_at
             ? `<video:publication_date>${new Date(r.published_at).toISOString()}</video:publication_date>`
             : '',
@@ -283,9 +287,9 @@ seoRouter.get(
       description: description.slice(0, 500),
       thumbnailUrl: image ? [image] : [],
       uploadDate: (video.published_at ? new Date(video.published_at) : new Date()).toISOString(),
-      // ISO 8601 时长格式
-      duration: `PT${Math.floor(video.duration_seconds / 60)}M${video.duration_seconds % 60}S`,
-      embedUrl: siteUrl(`/watch/${video.slug}`),
+      // 时长未知就不给这个字段：报 PT0M0S 属于错误元数据。
+      ...(video.duration_seconds > 0 ? { duration: isoDuration(video.duration_seconds) } : {}),
+      embedUrl: siteUrl(videoEmbedPath(video.slug)),
       keywords: keywords || undefined,
       publisher: { '@type': 'Organization', name: settings.siteName },
       ...(video.author_name ? { creator: { '@type': 'Person', name: video.author_name } } : {}),
@@ -312,7 +316,7 @@ seoRouter.get(
         description: description.slice(0, 200),
         keywords,
         image,
-        canonical: siteUrl(`/watch/${video.slug}`),
+        canonical: siteUrl(videoWatchPath(video.slug)),
         jsonLd,
       },
     });

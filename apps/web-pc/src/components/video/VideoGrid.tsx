@@ -1,5 +1,5 @@
 import type { VideoSummary } from '@videox/shared';
-import { EmptyState, Spinner, cn } from '@videox/ui';
+import { EmptyState, ListLoadingBar, cn } from '@videox/ui';
 import { Clapperboard } from 'lucide-react';
 import { VideoCard, VideoCardSkeleton } from './VideoCard';
 
@@ -8,8 +8,10 @@ export interface VideoGridProps {
   loading?: boolean;
   /** 加载更多时追加的骨架数量 */
   loadingMore?: boolean;
-  /** 已有列表时的后台刷新（切 sort / 筛选），角上细转圈，不卸卡片 */
+  /** 已有列表时的后台刷新（翻页 / 切筛选），顶部跑一条进度线，不卸卡片 */
   fetching?: boolean;
+  /** 变化时重播进场动画，通常传 useBrowsableList 的 transitionKey */
+  transitionKey?: string | number;
   emptyTitle?: string;
   emptyDescription?: string;
   progressOf?: (video: VideoSummary) => number | undefined;
@@ -25,6 +27,7 @@ export function VideoGrid({
   loading,
   loadingMore,
   fetching,
+  transitionKey,
   emptyTitle = '这里还没有内容',
   emptyDescription,
   progressOf,
@@ -38,10 +41,13 @@ export function VideoGrid({
 
   if (showSkeleton) {
     return (
-      <div className={gridClass}>
-        {Array.from({ length: 12 }, (_, i) => (
-          <VideoCardSkeleton key={i} />
-        ))}
+      <div className="space-y-2">
+        <ListLoadingBar active />
+        <div className={cn(gridClass, 'vx-list-enter')}>
+          {Array.from({ length: 12 }, (_, i) => (
+            <VideoCardSkeleton key={i} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -51,8 +57,9 @@ export function VideoGrid({
   }
 
   return (
-    <div className="relative">
-      <div className={cn(gridClass, 'vx-page-enter')}>
+    <div className="space-y-2">
+      <ListLoadingBar active={fetching} />
+      <div key={transitionKey} className={cn(gridClass, 'vx-list-enter')}>
         {videos.map((video) => (
           <VideoCard key={video.id} video={video} progressPercent={progressOf?.(video)} />
         ))}
@@ -60,11 +67,6 @@ export function VideoGrid({
           ? Array.from({ length: 6 }, (_, i) => <VideoCardSkeleton key={`more-${i}`} />)
           : null}
       </div>
-      {fetching ? (
-        <div className="pointer-events-none absolute top-0 right-0">
-          <Spinner className="size-4 text-muted-foreground" />
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -57,11 +57,24 @@ export {
   fromExternalImport,
   batchFromExternalImport,
   importPendingVideos,
+  recordImportFailure,
   unpublishCollectedVideo,
 } from './storage/import.js';
 
+// 自动导入与卡单清理
+export {
+  runAutoImport,
+  cleanupStuckCollected,
+  countImportablePending,
+  syncVideoDurations,
+  type AutoImportRunResult,
+  type CollectedCleanupResult,
+} from './auto-import.js';
+
 // 配置
 export {
+  getAutoImportConfig,
+  setAutoImportConfig,
   getCollectionConfig,
   setCollectionConfig,
   getStorageStrategyConfig,

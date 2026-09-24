@@ -108,6 +108,8 @@ const DEFAULT_SITE_SETTINGS = {
   logoUrl: null,
   faviconUrl: null,
   defaultTheme: 'light',
+  defaultBrowseMode: 'paged',
+  showViewCount: false,
   icpBeian: null,
   footerText: '© PandaGV. 内容仅供演示。',
   contactEmail: 'hello@videox.local',

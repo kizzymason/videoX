@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { formatCount, formatDuration, formatRelativeTime, type VideoSummary } from '@videox/shared';
 import { Badge, Skeleton, cn } from '@videox/ui';
 import { prefetchWatchPage } from '../../lib/prefetch-watch';
+import { useShowViewCount } from '../../hooks/use-site';
 
 export interface VideoCardProps {
   video: VideoSummary;
@@ -17,6 +18,7 @@ export interface VideoCardProps {
  */
 export function VideoCard({ video, progressPercent, className, layout = 'grid' }: VideoCardProps) {
   const isRow = layout === 'row';
+  const showViewCount = useShowViewCount();
 
   return (
     <Link
@@ -40,9 +42,12 @@ export function VideoCard({ video, progressPercent, className, layout = 'grid' }
           />
         ) : null}
 
-        <span className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">
-          {formatDuration(video.durationSeconds)}
-        </span>
+        {/* 只有拿到真实时长才显示。早期热链片源时长全是 0，标 00:00 反而误导。 */}
+        {video.durationSeconds > 0 ? (
+          <span className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">
+            {formatDuration(video.durationSeconds)}
+          </span>
+        ) : null}
 
         {progressPercent !== undefined && progressPercent > 0 ? (
           <span className="absolute inset-x-0 bottom-0 h-[3px] bg-white/25">
@@ -64,8 +69,12 @@ export function VideoCard({ video, progressPercent, className, layout = 'grid' }
         <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
           {video.author ? <span className="truncate">{video.author.displayName}</span> : null}
           {video.author ? <span className="text-muted-foreground/40">·</span> : null}
-          <span className="shrink-0 tabular-nums">{formatCount(video.viewCount)} 播放</span>
-          <span className="text-muted-foreground/40">·</span>
+          {showViewCount ? (
+            <>
+              <span className="shrink-0 tabular-nums">{formatCount(video.viewCount)} 播放</span>
+              <span className="text-muted-foreground/40">·</span>
+            </>
+          ) : null}
           <span className="shrink-0">{formatRelativeTime(video.publishedAt ?? video.createdAt)}</span>
         </div>
         {video.recommendReason ? (

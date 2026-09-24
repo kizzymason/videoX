@@ -74,6 +74,7 @@ export {
   SelectSeparator,
 } from './components/menu.js';
 export { Label, Checkbox, Switch, Slider, Field, type FieldProps } from './components/form.js';
+export { AlipayIcon } from './components/brand.js';
 export {
   Avatar,
   AvatarImage,
@@ -87,6 +88,10 @@ export {
   TabsContent,
 } from './components/display.js';
 
+export { ListPager, type ListPagerMeta } from './components/pager.js';
+export { ListLoadingBar } from './components/loading-bar.js';
+export { BrowseModeToggle } from './components/browse-toggle.js';
+
 export {
   useTheme,
   useMediaQuery,
@@ -95,5 +100,9 @@ export {
   useInView,
   useLocalStorage,
   useCopy,
+  useAntiPeek,
+  useBrowseMode,
+  useConsoleShield,
   type ThemeMode,
+  type BrowseMode,
 } from './hooks.js';

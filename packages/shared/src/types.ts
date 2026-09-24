@@ -1,6 +1,7 @@
 import type {
   AccessLevel,
   AnalyticsEvent,
+  BrowseMode,
   CommentStatus,
   OrderSource,
   OrderStatus,
@@ -478,6 +479,14 @@ export interface SiteSettings {
   logoUrl: string | null;
   faviconUrl: string | null;
   defaultTheme: 'light' | 'dark' | 'system';
+  defaultBrowseMode: BrowseMode;
+  /** 前台是否展示播放量（卡片 / 播放页 / Shorts 一起生效），默认关。 */
+  showViewCount: boolean;
+  /**
+   * 后台入口路径（单段，不含斜杠）。只有管理端接口会下发，公开 /site 不带这个字段，
+   * 兜底值也只存在于 API 侧 —— 所以这里是可选的。
+   */
+  adminPath?: string;
   icpBeian: string | null;
   footerText: string | null;
   contactEmail: string | null;
@@ -493,6 +502,10 @@ export interface SiteSettings {
     sitemapPageSize: number;
     robotsExtra: string;
   };
+  /** 公开 /site 下发的首页 SEO（已按 SEO 设置解析） */
+  homeTitle?: string;
+  homeDescription?: string;
+  homeKeywords?: string;
 }
 
 // --------------------------------------------------------------------------
@@ -516,7 +529,7 @@ export interface SeoSettings {
     dailyLimit: number;
     siteContext: string;
   };
-  pages: { homeKeywords: string; homeDescription: string };
+  pages: { homeTitle: string; homeKeywords: string; homeDescription: string };
 }
 
 export interface SeoSubmissionItem {

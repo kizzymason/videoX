@@ -2,6 +2,9 @@ import { ApiClient, ApiError } from '@videox/shared';
 import type {
   AuthSession,
   Banner,
+  CardCheckout,
+  CardProduct,
+  CardPurchaseRecord,
   Category,
   Comment,
   CurrentUser,
@@ -151,4 +154,17 @@ export const membershipApi = {
       daysRemaining: number | null;
       subscriptions: Subscription[];
     }>('/membership/me'),
+};
+
+// ---------------------------------------------------------------------------
+// 卡密自助购买
+// ---------------------------------------------------------------------------
+
+export const cardShopApi = {
+  status: () => api.get<{ enabled: boolean }>('/card-shop/status'),
+  products: () => api.get<CardProduct[]>('/card-shop/products'),
+  checkout: (body: { productId: string; quantity: number; email: string }) =>
+    api.post<CardCheckout>('/card-shop/checkouts', body),
+  order: (orderNo: string) => api.get<CardCheckout>(`/card-shop/checkouts/${encodeURIComponent(orderNo)}`),
+  purchases: () => api.get<CardPurchaseRecord[]>('/card-shop/purchases'),
 };

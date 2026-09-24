@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { and, desc, eq, gte, lte, or, sql, isNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { paginationSchema, type Banner, type Category, type Tag } from '@videox/shared';
+import { paginationSchema, resolveHomeSeo, type Banner, type Category, type Tag } from '@videox/shared';
 import { db, t, sqlRows } from '../../core/db.js';
 import { AppError } from '../../core/errors.js';
 import { asyncHandler, ok, paginated } from '../../core/respond.js';
@@ -10,6 +10,7 @@ import { query, validate } from '../../middleware/validate.js';
 import { cached } from '../../core/redis.js';
 import { listVideos } from '../videos/service.js';
 import { getSiteSettings } from '../settings/service.js';
+import { getSeoSettings } from '../seo/settings.js';
 import { getCatalogHome } from './home.js';
 
 export const catalogRouter: Router = Router();
@@ -122,15 +123,29 @@ catalogRouter.post(
 catalogRouter.get(
   '/site',
   asyncHandler(async (_req, res) => {
-    const settings = await getSiteSettings();
+    const [settings, seo] = await Promise.all([getSiteSettings(), getSeoSettings()]);
+    const home = resolveHomeSeo({
+      siteName: settings.siteName,
+      siteTagline: settings.siteTagline,
+      siteDescription: settings.siteDescription,
+      siteKeywords: settings.siteKeywords,
+      homeTitle: seo.pages.homeTitle,
+      homeDescription: seo.pages.homeDescription,
+      homeKeywords: seo.pages.homeKeywords,
+    });
     ok(res, {
       siteName: settings.siteName,
       siteTagline: settings.siteTagline,
       siteDescription: settings.siteDescription,
       siteKeywords: settings.siteKeywords,
+      homeTitle: home.title,
+      homeDescription: home.description,
+      homeKeywords: home.keywords,
       logoUrl: settings.logoUrl,
       faviconUrl: settings.faviconUrl,
       defaultTheme: settings.defaultTheme,
+      defaultBrowseMode: settings.defaultBrowseMode,
+      showViewCount: settings.showViewCount,
       icpBeian: settings.icpBeian,
       footerText: settings.footerText,
       contactEmail: settings.contactEmail,

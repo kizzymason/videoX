@@ -3,7 +3,11 @@
 // ========================================================================
 
 import { eq } from 'drizzle-orm';
-import { normalizeScheduleKinds } from '@videox/shared';
+import {
+  normalizeAutoImportConfig,
+  normalizeScheduleKinds,
+  type CollectionAutoImportConfig,
+} from '@videox/shared';
 import { db, t } from '../../../core/db.js';
 import { logger } from '../../../core/logger.js';
 import {
@@ -100,6 +104,22 @@ export async function setScheduleConfig(kind: 'daily' | 'weekly', config: Partia
   if (config.kinds !== undefined) next.kinds = normalizeScheduleKinds(config.kinds);
   const { kind: _legacyKind, ...stored } = next as CollectionScheduleConfig & { kind?: string };
   await setCollectionConfig(`schedule:${kind}`, stored);
+}
+
+/**
+ * 自动导入配置。缺省即启用：采集完不该还要人手点一次导入。
+ * 未落库时返回默认值，管理员在采集视频页拨一次开关就会写进 collection_configs。
+ */
+export async function getAutoImportConfig(): Promise<CollectionAutoImportConfig> {
+  return normalizeAutoImportConfig(await getCollectionConfig('import:auto'));
+}
+
+export async function setAutoImportConfig(
+  patch: Partial<CollectionAutoImportConfig>,
+): Promise<CollectionAutoImportConfig> {
+  const next = normalizeAutoImportConfig({ ...(await getAutoImportConfig()), ...patch });
+  await setCollectionConfig('import:auto', next as unknown as Record<string, unknown>);
+  return next;
 }
 
 export async function getPoolConfig(targetSite: string): Promise<CollectionPoolConfig> {

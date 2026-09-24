@@ -1,10 +1,11 @@
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Flame, LogOut, Monitor, Moon, Sun, User as UserIcon } from 'lucide-react';
 import {
   Avatar,
   AvatarFallback,
   AvatarImage,
   Badge,
+  BrowseModeToggle,
   Button,
   DropdownMenu,
   DropdownMenuContent,
@@ -17,22 +18,31 @@ import {
 import { useAuthStore } from '../../stores/auth';
 import { useAuthModalStore } from '../../stores/auth-modal';
 import { useUiStore } from '../../stores/ui';
+import { useSite } from '../../hooks/use-site';
+import { HomeSortSlider } from '../HomeSortSlider';
 import { SearchBox } from './SearchBox';
 
 export function Topbar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const user = useAuthStore((s) => s.user);
   const initializing = useAuthStore((s) => s.initializing);
   const logout = useAuthStore((s) => s.logout);
   const openAuth = useAuthModalStore((s) => s.openAuth);
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
+  const { data: site } = useSite();
+  const hideHomeTabs = location.pathname.startsWith('/shorts');
 
   return (
     <header className="vx-chrome-topbar sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background/85 px-6 backdrop-blur-md">
-      <SearchBox className="max-w-2xl flex-1" />
+      {hideHomeTabs ? null : <HomeSortSlider />}
 
-      <div className="ml-auto flex items-center gap-2">
+      <SearchBox className="ml-auto w-full max-w-xl" />
+
+      <div className="flex items-center gap-2">
+        <BrowseModeToggle siteDefault={site?.defaultBrowseMode ?? 'paged'} />
+
         <div className="flex items-center rounded-lg border border-border p-0.5">
           {(
             [

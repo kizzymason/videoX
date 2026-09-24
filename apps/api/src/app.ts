@@ -19,6 +19,7 @@ import { commentsRouter } from './modules/comments/routes.js';
 import { interactionsRouter } from './modules/interactions/routes.js';
 import { uploadsRouter } from './modules/uploads/routes.js';
 import { membershipRouter } from './modules/membership/routes.js';
+import { cardShopRouter } from './modules/card-shop/routes.js';
 import { recommendRouter } from './modules/recommend/routes.js';
 import { analyticsRouter } from './modules/analytics/routes.js';
 import { adminRouter } from './modules/admin/routes.js';
@@ -28,6 +29,7 @@ import { mediaRouter } from './modules/media/routes.js';
 import { seoRouter } from './modules/seo/routes.js';
 import { seoAdminRouter } from './modules/seo/admin-routes.js';
 import { staticRouter } from './modules/static/routes.js';
+import { internalRouter } from './modules/settings/entry-gate.js';
 import { collectionRouter } from './modules/collection/routes.js';
 import { partnerRouter } from './modules/partner/routes.js';
 
@@ -70,7 +72,11 @@ export function createApp(): Express {
       genReqId: (req) => (req as { traceId?: string }).traceId ?? '',
       autoLogging: {
         // 分片请求量极大，全部打日志会淹没有用信息。
-        ignore: (req) => Boolean(req.url?.startsWith('/media/hls/')) || req.url === '/health',
+        // /internal/ 是 nginx 的 auth_request 子请求，每个前台深链都会来一次，同样不记。
+        ignore: (req) =>
+          Boolean(req.url?.startsWith('/media/hls/')) ||
+          Boolean(req.url?.startsWith('/internal/')) ||
+          req.url === '/health',
       },
       customLogLevel: (_req, res, err) => {
         if (err || res.statusCode >= 500) return 'error';
@@ -83,9 +89,10 @@ export function createApp(): Express {
   app.use(compression({ filter: (req, res) => !req.path.startsWith('/media/hls/') && compression.filter(req, res) }));
   app.use(cookieParser(env.COOKIE_SECRET));
 
-  // 分片上传走裸二进制，必须在 json 解析之前挂载并跳过 body 解析。
+  // 分片上传走裸二进制，卡密回调要按原始 body 验签：两者都必须跳过 json 解析。
   app.use((req, res, next) => {
     if (req.method === 'PUT' && /^\/api\/uploads\/[^/]+\/part\/\d+$/.test(req.path)) return next();
+    if (req.method === 'POST' && req.path === '/api/card-shop/webhook') return next();
     express.json({ limit: '2mb' })(req, res, next);
   });
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
@@ -107,6 +114,7 @@ export function createApp(): Express {
   app.use('/api/comments', commentsRouter);
   app.use('/api/uploads', uploadsRouter);
   app.use('/api/membership', membershipRouter);
+  app.use('/api/card-shop', cardShopRouter);
   app.use('/api/recommend', recommendRouter);
   app.use('/api/partner', partnerRouter);
   app.use('/api/admin/seo', seoAdminRouter);
@@ -120,6 +128,8 @@ export function createApp(): Express {
 
   app.use('/media', mediaRouter);
   app.use('/static', staticRouter);
+  // 仅供 nginx 子请求，公网无 location 指向这里。
+  app.use('/internal', internalRouter);
   app.use('/', seoRouter);
 
   app.get('/', (req, res) => {

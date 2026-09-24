@@ -9,6 +9,8 @@ export interface SeoInput {
   keywords?: string;
   /** 规范链接，去重复收录；移动页应指向对应的 PC 页 */
   canonical?: string;
+  /** 正文主语言（BCP-47）。播放页按片源标题判定，离开时复位成站点 UI 语言。 */
+  lang?: string;
   jsonLd?: Record<string, unknown>;
 }
 
@@ -79,6 +81,13 @@ export function useSeo(input: SeoInput | undefined): void {
     if (seo.canonical) {
       cleanups.push(setCanonical(seo.canonical));
       cleanups.push(setMeta('meta[property="og:url"]', 'property', 'og:url', seo.canonical));
+    }
+    if (seo.lang) {
+      const previous = document.documentElement.lang;
+      document.documentElement.lang = seo.lang;
+      cleanups.push(() => {
+        document.documentElement.lang = previous;
+      });
     }
 
     if (seo.jsonLd) {

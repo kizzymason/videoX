@@ -1,10 +1,10 @@
 import * as React from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Search, TrendingUp, X } from 'lucide-react';
-import { Skeleton, useDebouncedValue, useLocalStorage } from '@videox/ui';
+import { ListPager, Skeleton, useDebouncedValue, useLocalStorage } from '@videox/ui';
 import { contentApi } from '../lib/api';
-import { flatten, nextPageParam } from '../lib/query';
+import { useBrowsableList } from '../lib/query';
 import { track } from '../lib/analytics';
 import { MasonryFeed } from '../components/MasonryFeed';
 import { useSiteName } from '../hooks/use-site';
@@ -31,14 +31,11 @@ export function SearchPage() {
     enabled: debounced.length > 0 && debounced !== q,
   });
 
-  const results = useInfiniteQuery({
-    queryKey: ['search', q],
-    queryFn: ({ pageParam }) => contentApi.search({ q, page: pageParam, pageSize: 20 }),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
-    enabled: q.length > 0,
-    placeholderData: keepPreviousData,
-  });
+  const results = useBrowsableList(
+    ['search', q],
+    (page, pageSize) => contentApi.search({ q, page, pageSize }),
+    { enabled: q.length > 0 },
+  );
 
   const submit = (keyword: string) => {
     const value = keyword.trim();
@@ -49,7 +46,7 @@ export function SearchPage() {
     setParams({ q: value }, { replace: true });
   };
 
-  const videos = flatten(results.data?.pages);
+  const videos = results.items;
   const showResults = q.length > 0 && debounced === q;
 
   return (
@@ -107,6 +104,18 @@ export function SearchPage() {
         </div>
       ) : debounced.length > 0 && debounced !== q && suggestions ? (
         <div className="tab-scroll flex-1 divide-y divide-border">
+          {debounced ? (
+            <button
+              type="button"
+              onClick={() => submit(debounced)}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors duration-200 active:bg-accent"
+            >
+              <Search className="size-4 shrink-0 text-muted-foreground" />
+              <span className="flex-1 truncate">
+                搜索 <span className="font-medium">{debounced}</span>
+              </span>
+            </button>
+          ) : null}
           {suggestions.tags.map((tag) => (
             <button
               key={tag.slug}
@@ -123,7 +132,7 @@ export function SearchPage() {
             <button
               key={item.id}
               type="button"
-              onClick={() => navigate(`/watch/${item.id}`)}
+              onClick={() => submit(item.title)}
               className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-200 active:bg-accent"
             >
               {item.posterUrl ? (
@@ -139,11 +148,18 @@ export function SearchPage() {
         <div className="tab-scroll flex-1">
           <MasonryFeed
             videos={videos}
-            loading={results.isLoading}
-            loadingMore={results.isFetchingNextPage}
-            fetching={results.isFetching && !results.isFetchingNextPage && videos.length > 0}
-            hasMore={results.hasNextPage}
-            onEndReached={() => void results.fetchNextPage()}
+            loading={results.loading}
+            loadingMore={results.mode === 'infinite' && results.isFetchingNextPage}
+            fetching={results.fetching}
+            transitionKey={results.transitionKey}
+            hasMore={results.mode === 'infinite' && results.hasNextPage}
+            onEndReached={results.mode === 'infinite' ? results.fetchNextPage : undefined}
+            showEndStatus={results.mode === 'infinite'}
+            footer={
+              results.mode === 'paged' ? (
+                <ListPager meta={results.meta} page={results.page} onChange={results.setPage} busy={results.fetching} />
+              ) : null
+            }
             className="pt-3"
           />
         </div>

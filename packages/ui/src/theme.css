@@ -257,6 +257,44 @@
     }
   }
 
+  /* 列表换页 / 换页签时的进场：轻微上浮 + 淡入，让新旧内容有明确的交接。 */
+  .vx-list-enter {
+    animation: vx-list-enter 240ms var(--ease-out-quint) both;
+  }
+  @keyframes vx-list-enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* 列表刷新的跑马线，只在容器内平移，不引起重排。 */
+  .vx-loading-bar {
+    position: relative;
+  }
+  .vx-loading-bar::after {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: 35%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    animation: vx-loading-slide 1.05s linear infinite;
+  }
+  @keyframes vx-loading-slide {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(330%);
+    }
+  }
+
   .vx-press {
     transition: transform 150ms var(--ease-out-quint);
   }

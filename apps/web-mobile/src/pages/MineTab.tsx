@@ -23,11 +23,12 @@ import {
   Button,
   Field,
   Input,
+  ListPager,
   Skeleton,
   cn,
 } from '@videox/ui';
 import { ApiError, socialApi } from '../lib/api';
-import { flatten, nextPageParam } from '../lib/query';
+import { flatten, nextPageParam, useBrowsableList } from '../lib/query';
 import { useAuthStore } from '../stores/auth';
 import { useUiStore } from '../stores/ui';
 import { AppHeader } from '../components/AppHeader';
@@ -168,12 +169,7 @@ export function MineTab() {
 
 export function HistoryPage() {
   const queryClient = useQueryClient();
-  const query = useInfiniteQuery({
-    queryKey: ['history'],
-    queryFn: ({ pageParam }) => socialApi.history(pageParam, 20),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
-  });
+  const query = useBrowsableList(['history'], (page, pageSize) => socialApi.history(page, pageSize));
 
   const clearMutation = useMutation({
     mutationFn: () => socialApi.clearHistory(),
@@ -183,7 +179,7 @@ export function HistoryPage() {
     },
   });
 
-  const items = flatten(query.data?.pages);
+  const items = query.items;
 
   return (
     <>
@@ -206,10 +202,18 @@ export function HistoryPage() {
       <PullToRefresh onRefresh={() => query.refetch()}>
         <MasonryFeed
           videos={items.map((item) => item.video)}
-          loading={query.isLoading}
-          loadingMore={query.isFetchingNextPage}
-          hasMore={query.hasNextPage}
-          onEndReached={() => void query.fetchNextPage()}
+          loading={query.loading}
+          loadingMore={query.mode === 'infinite' && query.isFetchingNextPage}
+          fetching={query.fetching}
+          transitionKey={query.transitionKey}
+          hasMore={query.mode === 'infinite' && query.hasNextPage}
+          onEndReached={query.mode === 'infinite' ? query.fetchNextPage : undefined}
+          showEndStatus={query.mode === 'infinite'}
+          footer={
+            query.mode === 'paged' ? (
+              <ListPager meta={query.meta} page={query.page} onChange={query.setPage} busy={query.fetching} />
+            ) : null
+          }
           className="pt-3"
         />
       </PullToRefresh>
@@ -218,14 +222,9 @@ export function HistoryPage() {
 }
 
 export function FavoritesPage() {
-  const query = useInfiniteQuery({
-    queryKey: ['favorites'],
-    queryFn: ({ pageParam }) => socialApi.favorites(pageParam, 20),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
-  });
+  const query = useBrowsableList(['favorites'], (page, pageSize) => socialApi.favorites(page, pageSize));
 
-  const items = flatten(query.data?.pages);
+  const items = query.items;
 
   return (
     <>
@@ -233,10 +232,18 @@ export function FavoritesPage() {
       <PullToRefresh onRefresh={() => query.refetch()}>
         <MasonryFeed
           videos={items.map((item) => item.video)}
-          loading={query.isLoading}
-          loadingMore={query.isFetchingNextPage}
-          hasMore={query.hasNextPage}
-          onEndReached={() => void query.fetchNextPage()}
+          loading={query.loading}
+          loadingMore={query.mode === 'infinite' && query.isFetchingNextPage}
+          fetching={query.fetching}
+          transitionKey={query.transitionKey}
+          hasMore={query.mode === 'infinite' && query.hasNextPage}
+          onEndReached={query.mode === 'infinite' ? query.fetchNextPage : undefined}
+          showEndStatus={query.mode === 'infinite'}
+          footer={
+            query.mode === 'paged' ? (
+              <ListPager meta={query.meta} page={query.page} onChange={query.setPage} busy={query.fetching} />
+            ) : null
+          }
           className="pt-3"
         />
       </PullToRefresh>
@@ -247,11 +254,7 @@ export function FavoritesPage() {
 export function FollowingPage() {
   const [tab, setTab] = React.useState<'feed' | 'authors'>('feed');
 
-  const feedQuery = useInfiniteQuery({
-    queryKey: ['following-feed'],
-    queryFn: ({ pageParam }) => socialApi.followingFeed(pageParam, 20),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
+  const feedQuery = useBrowsableList(['following-feed'], (page, pageSize) => socialApi.followingFeed(page, pageSize), {
     enabled: tab === 'feed',
   });
 
@@ -263,7 +266,7 @@ export function FollowingPage() {
     enabled: tab === 'authors',
   });
 
-  const videos = flatten(feedQuery.data?.pages);
+  const videos = feedQuery.items;
   const authors = flatten(authorsQuery.data?.pages);
 
   return (
@@ -294,10 +297,23 @@ export function FollowingPage() {
         <PullToRefresh onRefresh={() => feedQuery.refetch()}>
           <MasonryFeed
             videos={videos}
-            loading={feedQuery.isLoading}
-            loadingMore={feedQuery.isFetchingNextPage}
-            hasMore={feedQuery.hasNextPage}
-            onEndReached={() => void feedQuery.fetchNextPage()}
+            loading={feedQuery.loading}
+            loadingMore={feedQuery.mode === 'infinite' && feedQuery.isFetchingNextPage}
+            fetching={feedQuery.fetching}
+            transitionKey={feedQuery.transitionKey}
+            hasMore={feedQuery.mode === 'infinite' && feedQuery.hasNextPage}
+            onEndReached={feedQuery.mode === 'infinite' ? feedQuery.fetchNextPage : undefined}
+            showEndStatus={feedQuery.mode === 'infinite'}
+            footer={
+              feedQuery.mode === 'paged' ? (
+                <ListPager
+                  meta={feedQuery.meta}
+                  page={feedQuery.page}
+                  onChange={feedQuery.setPage}
+                  busy={feedQuery.fetching}
+                />
+              ) : null
+            }
             className="pt-3"
           />
         </PullToRefresh>

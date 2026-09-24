@@ -6,9 +6,11 @@ import { cn, Skeleton, useDebouncedValue } from '@videox/ui';
 import { formatCount } from '@videox/shared';
 import { contentApi } from '../../lib/api';
 import { track } from '../../lib/analytics';
+import { useShowViewCount } from '../../hooks/use-site';
 
 export function SearchBox({ className }: { className?: string }) {
   const navigate = useNavigate();
+  const showViewCount = useShowViewCount();
   const [value, setValue] = React.useState('');
   const [open, setOpen] = React.useState(false);
   const [activeIndex, setActiveIndex] = React.useState(-1);
@@ -31,11 +33,13 @@ export function SearchBox({ className }: { className?: string }) {
 
   const flatOptions = React.useMemo(() => {
     if (debounced.length === 0) return (hot ?? []).map((keyword) => ({ kind: 'keyword' as const, keyword }));
+    const query = value.trim();
     return [
-      ...(suggestions?.videos ?? []).map((v) => ({ kind: 'video' as const, video: v })),
+      ...(query ? [{ kind: 'query' as const, keyword: query }] : []),
       ...(suggestions?.tags ?? []).map((t) => ({ kind: 'tag' as const, tag: t })),
+      ...(suggestions?.videos ?? []).map((v) => ({ kind: 'video' as const, video: v })),
     ];
-  }, [debounced, hot, suggestions]);
+  }, [debounced, hot, suggestions, value]);
 
   React.useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -59,12 +63,9 @@ export function SearchBox({ className }: { className?: string }) {
       submit(value);
       return;
     }
-    if (option.kind === 'keyword') submit(option.keyword);
+    if (option.kind === 'keyword' || option.kind === 'query') submit(option.keyword);
     else if (option.kind === 'tag') submit(option.tag.name);
-    else {
-      setOpen(false);
-      navigate(`/watch/${option.video.id}`);
-    }
+    else submit(option.video.title);
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -132,8 +133,8 @@ export function SearchBox({ className }: { className?: string }) {
               {flatOptions.map((option, index) => (
                 <button
                   key={
-                    option.kind === 'keyword'
-                      ? `k-${option.keyword}`
+                    option.kind === 'keyword' || option.kind === 'query'
+                      ? `${option.kind}-${option.keyword}`
                       : option.kind === 'tag'
                         ? `t-${option.tag.slug}`
                         : `v-${option.video.id}`
@@ -146,7 +147,14 @@ export function SearchBox({ className }: { className?: string }) {
                     index === activeIndex ? 'bg-accent' : 'hover:bg-accent/60',
                   )}
                 >
-                  {option.kind === 'keyword' ? (
+                  {option.kind === 'query' ? (
+                    <>
+                      <Search className="size-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate">
+                        搜索 <span className="font-medium text-foreground">{option.keyword}</span>
+                      </span>
+                    </>
+                  ) : option.kind === 'keyword' ? (
                     <>
                       <TrendingUp className="size-4 shrink-0 text-muted-foreground" />
                       <span className="truncate">{option.keyword}</span>
@@ -174,9 +182,11 @@ export function SearchBox({ className }: { className?: string }) {
                         <span className="h-8 w-14 shrink-0 rounded bg-muted" />
                       )}
                       <span className="truncate">{option.video.title}</span>
-                      <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
-                        {formatCount(option.video.viewCount)} 播放
-                      </span>
+                      {showViewCount ? (
+                        <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
+                          {formatCount(option.video.viewCount)} 播放
+                        </span>
+                      ) : null}
                     </>
                   )}
                 </button>

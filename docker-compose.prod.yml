@@ -134,6 +134,8 @@ services:
       SITE_PUBLIC_URL: ${SITE_PUBLIC_URL:?set SITE_PUBLIC_URL}
       MOBILE_PUBLIC_URL: ${MOBILE_PUBLIC_URL:?set MOBILE_PUBLIC_URL}
       ADMIN_PUBLIC_URL: ${ADMIN_PUBLIC_URL:?set ADMIN_PUBLIC_URL}
+      # 后台入口路径的初始值。留空则用 API 内置兜底；后台「站点设置 → 后台入口」保存后以库为准。
+      ADMIN_ENTRY_PATH: ${ADMIN_ENTRY_PATH:-}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
       PLAY_TOKEN_SECRET: ${PLAY_TOKEN_SECRET:?set PLAY_TOKEN_SECRET}
@@ -145,6 +147,11 @@ services:
       UPLOAD_TMP_DIR: /data/storage/tmp
       # 本地盘分片交给 nginx sendfile，Node 只做鉴权。S3/R2 驱动会自动忽略。
       MEDIA_ACCEL_PREFIX: ${MEDIA_ACCEL_PREFIX-/__accel}
+      # 卡密渠道密钥只给 API：worker 不碰收款，也就不该拿到这把钥匙。
+      JT_CARD_API_BASE: ${JT_CARD_API_BASE:-https://jingtiang.com/api/card-dist/v1}
+      JT_CHANNEL_SECRET: ${JT_CHANNEL_SECRET:-}
+      JT_WEBHOOK_SECRET: ${JT_WEBHOOK_SECRET:-}
+      CARD_SHOP_RETURN_URL: ${CARD_SHOP_RETURN_URL:-}
     volumes:
       - videox_storage:/data/storage
     depends_on:

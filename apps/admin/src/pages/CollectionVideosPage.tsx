@@ -3,7 +3,7 @@
 // ========================================================================
 
 import * as React from 'react';
-import { Download, ExternalLink, Loader2, RefreshCw, Search } from 'lucide-react';
+import { Broom, Download, ExternalLink, Loader2, RefreshCw, Search } from 'lucide-react';
 import type { PageMeta } from '@videox/shared';
 import {
   Badge,
@@ -24,13 +24,18 @@ import {
 } from '@videox/ui';
 import { DataTable, Pagination, type Column } from '@/components/DataTable';
 import { FilterBar, PageHeader } from '@/components/Page';
-import { collectionApi, type CollectedVideoRow } from '@/lib/api';
+import {
+  collectionApi,
+  type CollectedVideoRow,
+  type CollectionAutoImportSettings,
+} from '@/lib/api';
 
 const STATUS_TEXT: Record<string, string> = {
   pending: '待导入',
   imported: '已导入',
   updating: '更新中',
   archived: '已归档',
+  failed: '源站失效',
 };
 
 const KIND_TEXT: Record<string, string> = { gv: 'GV', mv: 'MV', tv: '剧集' };
@@ -50,11 +55,19 @@ export function CollectionVideosPage() {
   const [importOpen, setImportOpen] = React.useState(false);
   const [importScope, setImportScope] = React.useState<'selected' | 'all'>('selected');
   const [pendingTotal, setPendingTotal] = React.useState(0);
+  const [importableTotal, setImportableTotal] = React.useState(0);
+  const [failedTotal, setFailedTotal] = React.useState(0);
   const [autoPublish, setAutoPublish] = React.useState(true);
   const [forceMode, setForceMode] = React.useState('auto');
   const [importing, setImporting] = React.useState(false);
   const [importResult, setImportResult] = React.useState<string | null>(null);
   const [importProgress, setImportProgress] = React.useState<string | null>(null);
+
+  // 自动导入
+  const [auto, setAuto] = React.useState<CollectionAutoImportSettings | null>(null);
+  const [autoSaving, setAutoSaving] = React.useState(false);
+  const [autoRunning, setAutoRunning] = React.useState(false);
+  const [autoHint, setAutoHint] = React.useState<string | null>(null);
 
   const pageSize = 20;
 
@@ -73,12 +86,77 @@ export function CollectionVideosPage() {
       setSelected(new Set());
       const pending = await collectionApi.pendingCount();
       setPendingTotal(pending.count);
+      setImportableTotal(pending.importable ?? pending.count);
+      setFailedTotal(pending.failed ?? 0);
+      setAuto(pending.autoImport ?? null);
     } catch (error) {
       console.error('获取采集视频失败:', error);
     } finally {
       setLoading(false);
     }
   }, [page, status, kind, search]);
+
+  async function toggleAutoImport(enabled: boolean) {
+    if (!auto) return;
+    const previous = auto;
+    setAuto({ ...auto, enabled });
+    setAutoSaving(true);
+    setAutoHint(null);
+    try {
+      await collectionApi.updateSettings({ autoImport: { enabled } });
+      setAutoHint(
+        enabled
+          ? `已开启：每 ${auto.intervalMinutes} 分钟自动把新采集的视频入库${auto.autoPublish ? '并发布' : '（待审核）'}`
+          : '已关闭：采集照常进行，入库需要手动点导入',
+      );
+    } catch (error) {
+      setAuto(previous);
+      setAutoHint(`保存失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setAutoSaving(false);
+    }
+  }
+
+  async function handleRunAutoImport() {
+    setAutoRunning(true);
+    setAutoHint(null);
+    try {
+      const result = await collectionApi.runAutoImport();
+      setAutoHint(
+        result.skipped === 'empty'
+          ? '没有待导入的采集视频'
+          : result.skipped === 'disabled'
+            ? '自动导入已关闭，本次只做了状态清理'
+            : result.skipped === 'no-operator'
+              ? '找不到可用的管理员账号，无法确定视频作者'
+              : `本轮导入 ${result.imported} 条，失败 ${result.failed} 条，判定失效 ${result.givenUp} 条，剩余 ${result.remaining} 条`,
+      );
+      await fetchVideos();
+    } catch (error) {
+      setAutoHint(`执行失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setAutoRunning(false);
+    }
+  }
+
+  async function handleCleanupStuck() {
+    setAutoRunning(true);
+    setAutoHint(null);
+    try {
+      const result = await collectionApi.cleanupStuck();
+      const changed = result.markedFailed + result.archivedOrphans + result.fixedImported;
+      setAutoHint(
+        changed === 0
+          ? '没有需要清理的采集记录'
+          : `已标记失效 ${result.markedFailed} 条、归档失联 ${result.archivedOrphans} 条、修正状态 ${result.fixedImported} 条`,
+      );
+      await fetchVideos();
+    } catch (error) {
+      setAutoHint(`清理失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setAutoRunning(false);
+    }
+  }
 
   React.useEffect(() => {
     void fetchVideos();
@@ -122,7 +200,7 @@ export function CollectionVideosPage() {
       } else {
         let imported = 0;
         let failed: Array<{ collectedVideoId: string; error: string }> = [];
-        let remaining = pendingTotal;
+        let remaining = importableTotal || pendingTotal;
         while (remaining > 0) {
           setImportProgress(`正在导入，已成功 ${imported} 条，还剩约 ${remaining} 条…`);
           const result = await collectionApi.importVideos({
@@ -136,6 +214,8 @@ export function CollectionVideosPage() {
           failed = failed.concat(result.failed);
           remaining = result.remaining ?? 0;
           if ((result.processed ?? 0) === 0) break;
+          // 整批既没导进去也没被判失效：源站或号池整体不可用，再刷下去只是空转。
+          if (result.imported.length === 0 && (result.givenUp ?? 0) === 0) break;
         }
         setImportProgress(null);
         setImportResult(formatImportResult(imported, failed));
@@ -226,11 +306,29 @@ export function CollectionVideosPage() {
       key: 'status',
       header: '状态',
       cell: (v) => (
-        <Badge
-          variant={v.status === 'imported' ? 'default' : v.status === 'archived' ? 'secondary' : 'outline'}
-        >
-          {STATUS_TEXT[v.status] ?? v.status}
-        </Badge>
+        <div className="flex items-center gap-1.5">
+          <Badge
+            variant={
+              v.status === 'imported'
+                ? 'default'
+                : v.status === 'failed'
+                  ? 'destructive'
+                  : v.status === 'archived'
+                    ? 'secondary'
+                    : 'outline'
+            }
+          >
+            {STATUS_TEXT[v.status] ?? v.status}
+          </Badge>
+          {v.importError ? (
+            <span
+              className="max-w-[180px] truncate text-xs text-muted-foreground"
+              title={`${v.importError}（已尝试 ${v.importAttempts} 次）`}
+            >
+              {v.importError}
+            </span>
+          ) : null}
+        </div>
       ),
     },
     {
@@ -285,11 +383,11 @@ export function CollectionVideosPage() {
             </Button>
             <Button
               variant="outline"
-              disabled={pendingTotal === 0 || importing}
+              disabled={importableTotal === 0 || importing}
               onClick={() => openImport('all')}
             >
               <Download className="mr-2 size-4" />
-              导入全部未导入{pendingTotal > 0 ? `（${pendingTotal}）` : ''}
+              导入全部未导入{importableTotal > 0 ? `（${importableTotal}）` : ''}
             </Button>
             <Button disabled={selected.size === 0} onClick={() => openImport('selected')}>
               <Download className="mr-2 size-4" />
@@ -298,6 +396,52 @@ export function CollectionVideosPage() {
           </>
         }
       />
+
+      {/* 自动导入：采集完不用再手动点导入，定时任务按间隔把 pending 入库 */}
+      <section className="mb-3 rounded-xl border border-border bg-card p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">自动导入采集视频</Label>
+              {auto ? (
+                <Badge variant={auto.enabled ? 'default' : 'secondary'}>{auto.enabled ? '已开启' : '已关闭'}</Badge>
+              ) : null}
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {auto
+                ? `每 ${auto.intervalMinutes} 分钟检查一次，单轮最多 ${auto.batchSize} 条，${
+                    auto.autoPublish ? '入库即发布' : '入库后待审核'
+                  }；同一条最多重试 ${auto.maxAttempts} 次，源站已下架的会自动标记失效并跳过。间隔与批量可在「采集设置」调整。`
+                : '正在读取配置…'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={autoRunning} onClick={() => void handleRunAutoImport()}>
+              {autoRunning ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Download className="mr-2 size-4" />}
+              立即导入一轮
+            </Button>
+            <Button variant="outline" size="sm" disabled={autoRunning} onClick={() => void handleCleanupStuck()}>
+              <Broom className="mr-2 size-4" />
+              清理卡住的记录
+            </Button>
+            <Switch
+              checked={auto?.enabled ?? false}
+              disabled={!auto || autoSaving}
+              onCheckedChange={(checked) => void toggleAutoImport(checked)}
+            />
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span>
+            待导入 <span className="font-medium text-foreground tabular-nums">{importableTotal}</span>
+          </span>
+          {pendingTotal !== importableTotal ? <span>其中已达重试上限 {pendingTotal - importableTotal} 条</span> : null}
+          <span>
+            源站失效 <span className="font-medium text-foreground tabular-nums">{failedTotal}</span>
+          </span>
+          {autoHint ? <span className="text-foreground">{autoHint}</span> : null}
+        </div>
+      </section>
 
       <FilterBar>
         <form
@@ -330,6 +474,7 @@ export function CollectionVideosPage() {
             <SelectItem value="all">全部状态</SelectItem>
             <SelectItem value="pending">待导入</SelectItem>
             <SelectItem value="imported">已导入</SelectItem>
+            <SelectItem value="failed">源站失效</SelectItem>
             <SelectItem value="archived">已归档</SelectItem>
           </SelectContent>
         </Select>

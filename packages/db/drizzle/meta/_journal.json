@@ -78,6 +78,20 @@
       "when": 1787915000000,
       "tag": "0010_seo_system",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788600000000,
+      "tag": "0011_card_shop",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788700000000,
+      "tag": "0012_collected_import_state",
+      "breakpoints": true
     }
   ]
 }

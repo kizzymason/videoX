@@ -1,14 +1,31 @@
 import { eq } from 'drizzle-orm';
 import {
   algoWeightsSchema,
+  isValidAdminPath,
+  normalizeAdminPath,
   siteSettingsSchema,
   type AlgoWeights,
   type SiteSettings,
 } from '@videox/shared';
+import { env } from '../../config/env.js';
 import { db, t } from '../../core/db.js';
 
 const SITE_KEY = 'site';
 const ALGO_KEY = 'algo_weights';
+
+/**
+ * 后台入口路径的兜底值，只存在于服务端：packages/shared 会被打进前台的公开 JS，
+ * 把默认值放那里等于把入口写在明面上。优先级：数据库 > ADMIN_ENTRY_PATH > 这里。
+ */
+const FALLBACK_ADMIN_PATH = 'pg7x92k41';
+
+function resolveAdminPath(stored: string | undefined): string {
+  for (const candidate of [stored, env.ADMIN_ENTRY_PATH, FALLBACK_ADMIN_PATH]) {
+    const value = normalizeAdminPath(candidate ?? '');
+    if (isValidAdminPath(value)) return value;
+  }
+  return FALLBACK_ADMIN_PATH;
+}
 
 /**
  * 站点设置几乎每个请求都要读，缓存在进程内存里，
@@ -32,13 +49,17 @@ export async function getSiteSettings(): Promise<SiteSettings> {
   if (siteCache && siteCache.expiresAt > Date.now()) return siteCache.value;
   const raw = (await readSetting(SITE_KEY)) ?? {};
   // 用 schema 兜底：即使数据库里的记录缺字段，也能拿到完整的默认值。
-  const value = siteSettingsSchema.parse({ siteName: 'PandaGV', ...raw });
+  const parsed = siteSettingsSchema.parse({ siteName: 'PandaGV', ...raw });
+  const value: SiteSettings = { ...parsed, adminPath: resolveAdminPath(parsed.adminPath) };
   siteCache = { value, expiresAt: Date.now() + CACHE_TTL_MS };
   return value;
 }
 
 export async function saveSiteSettings(input: unknown): Promise<SiteSettings> {
-  const value = siteSettingsSchema.parse(input);
+  const parsed = siteSettingsSchema.parse(input);
+  // 没带 adminPath 的老客户端不该把入口清掉，沿用当前生效的值。
+  const current = await getSiteSettings();
+  const value: SiteSettings = { ...parsed, adminPath: resolveAdminPath(parsed.adminPath ?? current.adminPath) };
   await db
     .insert(t.settings)
     .values({ key: SITE_KEY, value: value as unknown as Record<string, unknown> })

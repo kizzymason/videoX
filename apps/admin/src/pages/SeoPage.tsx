@@ -343,10 +343,18 @@ function SettingsTab() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-sm font-medium">
             <Sparkles className="size-4" />
-            首页关键词
+            首页 SEO
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>首页标题（搜索结果标题，留空用站点名称；不要再拼副标题）</Label>
+            <Input
+              value={form.pages.homeTitle}
+              onChange={(e) => set({ pages: { ...form.pages, homeTitle: e.target.value } })}
+              placeholder="PandaGV - Gay Videos & GV 男同视频"
+            />
+          </div>
           <div className="space-y-2">
             <Label>首页关键词（逗号分隔，留空用「站点设置」里的全站关键词）</Label>
             <Input
@@ -355,11 +363,11 @@ function SettingsTab() {
             />
           </div>
           <div className="space-y-2">
-            <Label>首页描述（留空用站点描述）</Label>
+            <Label>首页描述（120–160 字人话，留空用站点描述）</Label>
             <Textarea
               value={form.pages.homeDescription}
               onChange={(e) => set({ pages: { ...form.pages, homeDescription: e.target.value } })}
-              rows={2}
+              rows={3}
             />
           </div>
         </CardContent>

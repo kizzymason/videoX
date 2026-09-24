@@ -2,7 +2,8 @@
 // 采集系统 - 视频导入发布服务
 // ========================================================================
 
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, lt, sql } from 'drizzle-orm';
+import { classifyImportFailure, shouldGiveUpImport } from '@videox/shared';
 import { db, t } from '../../../core/db.js';
 import { logger } from '../../../core/logger.js';
 import { AppError } from '../../../core/errors.js';
@@ -11,6 +12,7 @@ import { StorageDecider, type VideoMetadataForDecision } from './decider.js';
 import { HotlinkProxyService } from './hotlink-proxy.js';
 import { R2TransferService } from './r2-transfer.js';
 import { markAsImported } from './ingestor.js';
+import { getAutoImportConfig } from './config.js';
 
 /**
  * 采集视频 → 本地 videos 表的导入发布
@@ -118,6 +120,53 @@ export async function fromExternalImport(params: {
 }
 
 /**
+ * 记录一次导入失败。
+ *
+ * 关键是别让「注定失败」的记录永远停在 pending：源站把片子删了（404）就直接判失效，
+ * 源站抖动 / 号池没号这类临时问题留着重试，攒到 maxAttempts 也转失效。
+ * 不这么做，「导入全部未导入」每轮都会捞到同一批记录，导入进度永远清不完。
+ */
+export async function recordImportFailure(params: {
+  collectedVideoId: string;
+  message: string;
+  maxAttempts: number;
+}): Promise<{ status: 'pending' | 'failed' | 'imported'; attempts: number }> {
+  const [row] = await db
+    .select({
+      attempts: t.collectedVideos.importAttempts,
+      videoId: t.collectedVideos.videoId,
+    })
+    .from(t.collectedVideos)
+    .where(eq(t.collectedVideos.id, params.collectedVideoId))
+    .limit(1);
+
+  // 已经有 videoId 却报失败，说明状态没跟上（比如上一轮写 videos 成功但标记中断），顺手修好。
+  if (row?.videoId) {
+    await db
+      .update(t.collectedVideos)
+      .set({ status: 'imported', importError: null, updatedAt: new Date() })
+      .where(eq(t.collectedVideos.id, params.collectedVideoId));
+    return { status: 'imported', attempts: row.attempts ?? 0 };
+  }
+
+  const attempts = (row?.attempts ?? 0) + 1;
+  const giveUp = shouldGiveUpImport({ message: params.message, attempts, maxAttempts: params.maxAttempts });
+
+  await db
+    .update(t.collectedVideos)
+    .set({
+      importAttempts: attempts,
+      importError: params.message.slice(0, 500),
+      lastImportAttemptAt: new Date(),
+      ...(giveUp ? { status: 'failed' as const } : {}),
+      updatedAt: new Date(),
+    })
+    .where(eq(t.collectedVideos.id, params.collectedVideoId));
+
+  return { status: giveUp ? 'failed' : 'pending', attempts };
+}
+
+/**
  * 批量导入
  */
 export async function batchFromExternalImport(params: {
@@ -126,12 +175,18 @@ export async function batchFromExternalImport(params: {
   autoPublish: boolean;
   forceMode?: 'hotlink' | 'r2_transfer';
   categoryId?: string | null;
+  /** 覆盖自动导入配置里的重试上限；不传则读配置。 */
+  maxAttempts?: number;
 }): Promise<{
   imported: Array<{ collectedVideoId: string; videoId: string; importMode: string }>;
   failed: Array<{ collectedVideoId: string; error: string }>;
+  /** 本批里被判定为失效、后续不再重试的条数 */
+  givenUp: number;
 }> {
   const imported: Array<{ collectedVideoId: string; videoId: string; importMode: string }> = [];
   const failed: Array<{ collectedVideoId: string; error: string }> = [];
+  const maxAttempts = params.maxAttempts ?? (await getAutoImportConfig()).maxAttempts;
+  let givenUp = 0;
 
   for (const id of params.collectedVideoIds) {
     try {
@@ -145,18 +200,26 @@ export async function batchFromExternalImport(params: {
       imported.push({ collectedVideoId: id, ...result });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.warn({ collectedVideoId: id, err: error }, '批量导入单项失败');
+      const state = await recordImportFailure({ collectedVideoId: id, message, maxAttempts }).catch(() => null);
+      if (state?.status === 'failed') givenUp += 1;
+      logger.warn(
+        { collectedVideoId: id, kind: classifyImportFailure(message), nextStatus: state?.status, err: error },
+        '批量导入单项失败',
+      );
       failed.push({ collectedVideoId: id, error: message });
     }
   }
 
-  return { imported, failed };
+  return { imported, failed, givenUp };
 }
 
 const IMPORT_BATCH_MAX = 80;
 
 /**
- * 导入下一批待入库记录。allPending 场景由前端循环调用直到 remaining=0。
+ * 导入下一批待入库记录。allPending 场景由前端 / 定时任务循环调用直到 remaining=0。
+ *
+ * 只捞重试次数还没到上限的记录：判定失效的会被置成 failed，自然从这条查询里消失，
+ * 所以 remaining 一定会往下走，调用方的循环不会卡在同一批上。
  */
 export async function importPendingVideos(params: {
   userId: string;
@@ -165,16 +228,20 @@ export async function importPendingVideos(params: {
   categoryId?: string | null;
   kind?: 'gv' | 'mv' | 'tv';
   batchSize?: number;
+  maxAttempts?: number;
 }): Promise<{
   imported: Array<{ collectedVideoId: string; videoId: string; importMode: string }>;
   failed: Array<{ collectedVideoId: string; error: string }>;
+  givenUp: number;
   processed: number;
   remaining: number;
 }> {
   const batchSize = Math.min(IMPORT_BATCH_MAX, Math.max(1, params.batchSize ?? 40));
+  const maxAttempts = params.maxAttempts ?? (await getAutoImportConfig()).maxAttempts;
   const conditions = [
     eq(t.collectedVideos.targetSite, 'yitongkan'),
     eq(t.collectedVideos.status, 'pending'),
+    lt(t.collectedVideos.importAttempts, maxAttempts),
   ];
   if (params.kind) conditions.push(eq(t.collectedVideos.kind, params.kind));
 
@@ -188,13 +255,14 @@ export async function importPendingVideos(params: {
   const ids = rows.map((row) => row.id);
   const result =
     ids.length === 0
-      ? { imported: [], failed: [] }
+      ? { imported: [], failed: [], givenUp: 0 }
       : await batchFromExternalImport({
           collectedVideoIds: ids,
           userId: params.userId,
           autoPublish: params.autoPublish,
           forceMode: params.forceMode,
           categoryId: params.categoryId,
+          maxAttempts,
         });
 
   const [countRow] = await db

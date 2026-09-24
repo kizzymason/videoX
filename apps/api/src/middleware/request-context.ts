@@ -82,6 +82,28 @@ export const redeemLimiter = makeLimiter({
   message: '兑换尝试过于频繁，请稍后再试',
 });
 
+/**
+ * 卡密下单。买家反复换规格、换数量、付一半又重来都很正常，
+ * 额度给足；真正的滥用由上游的每日额度与库存兜住。
+ */
+export const cardCheckoutLimiter = makeLimiter({
+  name: 'card-checkout',
+  windowMs: 10 * 60_000,
+  limit: 40,
+  message: '下单过于频繁，请稍后再试',
+});
+
+/**
+ * 卡密订单轮询。3 秒一次约 20 次/分钟，这里按十几个标签页同时开着算，
+ * 宁可放宽也不能让正在付款的人被限流打断。
+ */
+export const cardPollLimiter = makeLimiter({
+  name: 'card-poll',
+  windowMs: 60_000,
+  limit: 600,
+  message: '查询过于频繁，请稍后再试',
+});
+
 /** 发评论 */
 export const writeLimiter = makeLimiter({
   name: 'write',

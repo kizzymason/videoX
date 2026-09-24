@@ -3,10 +3,11 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { LayoutGrid, Search as SearchIcon } from 'lucide-react';
 import type { SortOption } from '@videox/shared';
-import { EmptyState, Skeleton, cn } from '@videox/ui';
+import { EmptyState, ListPager, Skeleton, cn, useBrowseMode } from '@videox/ui';
 import { contentApi } from '../lib/api';
-import { flatten, nextPageParam } from '../lib/query';
+import { useBrowsableList } from '../lib/query';
 import { useSeo } from '../hooks/use-seo';
+import { useSite } from '../hooks/use-site';
 import { PageContainer, PageHeader } from '../components/Page';
 import { SortTabs } from '../components/SortTabs';
 import { VideoGrid } from '../components/video/VideoGrid';
@@ -18,8 +19,16 @@ import { InfiniteFooter } from '../components/InfiniteFooter';
 
 export function ExplorePage() {
   useSeo({ title: '发现', description: '算法为你挑选的内容' });
+  const { data: site } = useSite();
+  const { mode } = useBrowseMode(site?.defaultBrowseMode ?? 'paged');
 
-  const query = useInfiniteQuery({
+  const paged = useBrowsableList(
+    ['explore-paged'],
+    (page, pageSize) => contentApi.videos({ page, pageSize, sort: 'recommended' }),
+    { enabled: mode === 'paged' },
+  );
+
+  const infinite = useInfiniteQuery({
     queryKey: ['explore'],
     // 推荐接口不分页，靠 exclude 把已经推过的排掉，避免翻页翻出重复内容。
     queryFn: ({ pageParam }) => contentApi.recommend({ limit: 24, exclude: pageParam }),
@@ -34,25 +43,37 @@ export function ExplorePage() {
     },
     staleTime: 0,
     placeholderData: keepPreviousData,
+    enabled: mode === 'infinite',
   });
 
-  const videos = query.data?.pages.flat() ?? [];
+  const videos = mode === 'paged' ? paged.items : (infinite.data?.pages.flat() ?? []);
+  const loading = mode === 'paged' ? paged.loading : infinite.isLoading;
+  const fetching =
+    mode === 'paged'
+      ? paged.fetching
+      : infinite.isFetching && !infinite.isFetchingNextPage && videos.length > 0;
+  const count = mode === 'paged' ? (paged.meta?.total ?? videos.length) : videos.length;
 
   return (
     <PageContainer>
-      <PageHeader title="发现" description={`已为你计算 ${videos.length} 条个性化推荐`} />
+      <PageHeader title="发现" description={loading ? '正在为你挑选…' : `已为你计算 ${count} 条个性化推荐`} />
       <VideoGrid
         videos={videos}
-        loading={query.isLoading}
-        loadingMore={query.isFetchingNextPage}
-        fetching={query.isFetching && !query.isFetchingNextPage && videos.length > 0}
+        loading={loading}
+        loadingMore={mode === 'infinite' && infinite.isFetchingNextPage}
+        fetching={fetching}
+        transitionKey={mode === 'paged' ? paged.transitionKey : 'explore'}
       />
-      <InfiniteFooter
-        hasNextPage={query.hasNextPage}
-        isFetchingNextPage={query.isFetchingNextPage}
-        fetchNextPage={() => void query.fetchNextPage()}
-        empty={videos.length === 0 && !query.isLoading}
-      />
+      {mode === 'paged' ? (
+        <ListPager meta={paged.meta} page={paged.page} onChange={paged.setPage} busy={paged.fetching} />
+      ) : (
+        <InfiniteFooter
+          hasNextPage={infinite.hasNextPage}
+          isFetchingNextPage={infinite.isFetchingNextPage}
+          fetchNextPage={() => void infinite.fetchNextPage()}
+          empty={videos.length === 0 && !infinite.isLoading}
+        />
+      )}
     </PageContainer>
   );
 }
@@ -141,35 +162,42 @@ export function CategoryPage() {
 
   useSeo(category ? { title: category.name, description: category.description ?? undefined } : undefined);
 
-  const query = useInfiniteQuery({
-    queryKey: ['category-videos', slug, sort],
-    queryFn: ({ pageParam }) => contentApi.videos({ page: pageParam, pageSize: 24, categorySlug: slug, sort }),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
-    placeholderData: keepPreviousData,
-  });
-
-  const videos = flatten(query.data?.pages);
+  const query = useBrowsableList(['category-videos', slug, sort], (page, pageSize) =>
+    contentApi.videos({ page, pageSize, categorySlug: slug, sort }),
+  );
 
   return (
     <PageContainer>
       <PageHeader
         title={category?.name ?? '频道'}
         description={category?.description ?? undefined}
-        action={<SortTabs value={sort} onChange={setSort} />}
+        action={
+          <SortTabs
+            value={sort}
+            onChange={(value) => {
+              setSort(value);
+              query.setPage(1);
+            }}
+          />
+        }
       />
       <VideoGrid
-        videos={videos}
-        loading={query.isLoading}
-        loadingMore={query.isFetchingNextPage}
-        fetching={query.isFetching && !query.isFetchingNextPage && videos.length > 0}
+        videos={query.items}
+        loading={query.loading}
+        loadingMore={query.mode === 'infinite' && query.isFetchingNextPage}
+        fetching={query.fetching}
+        transitionKey={query.transitionKey}
       />
-      <InfiniteFooter
-        hasNextPage={query.hasNextPage}
-        isFetchingNextPage={query.isFetchingNextPage}
-        fetchNextPage={() => void query.fetchNextPage()}
-        empty={videos.length === 0 && !query.isLoading}
-      />
+      {query.mode === 'paged' ? (
+        <ListPager meta={query.meta} page={query.page} onChange={query.setPage} busy={query.fetching} />
+      ) : (
+        <InfiniteFooter
+          hasNextPage={query.hasNextPage}
+          isFetchingNextPage={query.isFetchingNextPage}
+          fetchNextPage={query.fetchNextPage}
+          empty={query.items.length === 0 && !query.loading}
+        />
+      )}
     </PageContainer>
   );
 }
@@ -197,26 +225,22 @@ export function SearchPage() {
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: contentApi.categories });
   const duration = DURATION_FILTERS[durationIndex] ?? DURATION_FILTERS[0]!;
 
-  const query = useInfiniteQuery({
-    queryKey: ['search', q, sort, durationIndex, categoryId],
-    queryFn: ({ pageParam }) =>
+  const query = useBrowsableList(
+    ['search', q, sort, durationIndex, categoryId],
+    (page, pageSize) =>
       contentApi.search({
         q,
-        page: pageParam,
-        pageSize: 24,
+        page,
+        pageSize,
         sort,
         categoryId,
         minDuration: duration.min,
         maxDuration: duration.max,
       }),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
-    enabled: q.length > 0,
-    placeholderData: keepPreviousData,
-  });
+    { enabled: q.length > 0 },
+  );
 
-  const videos = flatten(query.data?.pages);
-  const total = query.data?.pages[0]?.meta.total ?? 0;
+  const total = query.meta?.total ?? 0;
 
   const update = (patch: Record<string, string | undefined>) => {
     const next = new URLSearchParams(params);
@@ -224,6 +248,7 @@ export function SearchPage() {
       if (value === undefined || value === '') next.delete(key);
       else next.set(key, value);
     }
+    next.delete('page');
     setParams(next, { replace: true });
   };
 
@@ -243,7 +268,7 @@ export function SearchPage() {
             <span className="text-muted-foreground">搜索</span> {q}
           </>
         }
-        description={query.isLoading ? '搜索中…' : `找到 ${total} 个结果`}
+        description={query.loading ? '搜索中…' : `找到 ${total} 个结果`}
       />
 
       <div className="space-y-3 border-y border-border py-4">
@@ -284,19 +309,24 @@ export function SearchPage() {
       </div>
 
       <VideoGrid
-        videos={videos}
-        loading={query.isLoading}
-        loadingMore={query.isFetchingNextPage}
-        fetching={query.isFetching && !query.isFetchingNextPage && videos.length > 0}
+        videos={query.items}
+        loading={query.loading}
+        loadingMore={query.mode === 'infinite' && query.isFetchingNextPage}
+        fetching={query.fetching}
+        transitionKey={query.transitionKey}
         emptyTitle="没有找到相关视频"
         emptyDescription="换个关键词，或者放宽筛选条件试试"
       />
-      <InfiniteFooter
-        hasNextPage={query.hasNextPage}
-        isFetchingNextPage={query.isFetchingNextPage}
-        fetchNextPage={() => void query.fetchNextPage()}
-        empty={videos.length === 0 && !query.isLoading}
-      />
+      {query.mode === 'paged' ? (
+        <ListPager meta={query.meta} page={query.page} onChange={query.setPage} busy={query.fetching} />
+      ) : (
+        <InfiniteFooter
+          hasNextPage={query.hasNextPage}
+          isFetchingNextPage={query.isFetchingNextPage}
+          fetchNextPage={query.fetchNextPage}
+          empty={query.items.length === 0 && !query.loading}
+        />
+      )}
     </PageContainer>
   );
 }

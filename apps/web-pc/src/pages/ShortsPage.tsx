@@ -8,6 +8,7 @@ import { ApiError, contentApi, socialApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
 import { track } from '../lib/analytics';
 import { useSeo } from '../hooks/use-seo';
+import { useShowViewCount } from '../hooks/use-site';
 import { useAuthStore } from '../stores/auth';
 import { useAuthModalStore } from '../stores/auth-modal';
 import { Link } from 'react-router-dom';
@@ -83,6 +84,7 @@ function ShortsSlide({
   const slideRef = React.useRef<HTMLDivElement | null>(null);
   const user = useAuthStore((state) => state.user);
   const openAuth = useAuthModalStore((state) => state.openAuth);
+  const showViewCount = useShowViewCount();
   const requireLogin = React.useCallback(
     (action: () => void) => {
       if (!user) {
@@ -121,8 +123,12 @@ function ShortsSlide({
           {video.author ? (
             <p className="text-sm text-white/70">
               @{video.author.username}
-              <span className="mx-1 text-white/35">·</span>
-              {formatCount(video.viewCount)} 播放
+              {showViewCount ? (
+                <>
+                  <span className="mx-1 text-white/35">·</span>
+                  {formatCount(video.viewCount)} 播放
+                </>
+              ) : null}
             </p>
           ) : null}
         </div>

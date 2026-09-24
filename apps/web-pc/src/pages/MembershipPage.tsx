@@ -1,10 +1,17 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Flame, Sparkles } from 'lucide-react';
+import { Check, Copy, Flame, ShoppingCart, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { daysUntil, formatDate, formatPrice } from '@videox/shared';
-import { Badge, Button, Card, CardContent, Input, Skeleton, cn } from '@videox/ui';
-import { ApiError, membershipApi } from '../lib/api';
+import {
+  CARD_PURCHASE_STATUS_LABELS,
+  daysUntil,
+  formatDate,
+  formatPrice,
+  type CardPurchaseRecord,
+} from '@videox/shared';
+import { Badge, Button, Card, CardContent, Input, Skeleton, cn, useAntiPeek, useCopy } from '@videox/ui';
+import { ApiError, cardShopApi, membershipApi } from '../lib/api';
+import { CardShopDialog } from '../components/membership/CardShopDialog';
 import { useAuthStore } from '../stores/auth';
 import { useAuthModalStore } from '../stores/auth-modal';
 import { useSeo } from '../hooks/use-seo';
@@ -18,7 +25,18 @@ export function MembershipPage() {
   const refreshUser = useAuthStore((s) => s.refreshUser);
   const [code, setCode] = React.useState('');
 
+  const [cardShopOpen, setCardShopOpen] = React.useState(false);
+
+  // 整页防窥：拦右键与调试快捷键。卡密本身直接明文给买家，方便复制保存。
+  useAntiPeek();
+
   const { data: plans, isLoading } = useQuery({ queryKey: ['plans'], queryFn: membershipApi.plans });
+  const { data: cardShop } = useQuery({ queryKey: ['card-shop-status'], queryFn: cardShopApi.status });
+  const { data: purchases } = useQuery({
+    queryKey: ['card-purchases'],
+    queryFn: cardShopApi.purchases,
+    enabled: Boolean(user) && Boolean(cardShop?.enabled),
+  });
   const { data: membership } = useQuery({
     queryKey: ['membership-me'],
     queryFn: membershipApi.me,
@@ -59,6 +77,21 @@ export function MembershipPage() {
   };
 
   const remaining = membership?.vipExpiresAt ? daysUntil(membership.vipExpiresAt) : null;
+
+  const openCardShop = () => {
+    if (!user) {
+      openAuth('login', '/membership');
+      return;
+    }
+    setCardShopOpen(true);
+  };
+
+  const afterRedeem = async () => {
+    await refreshUser();
+    void queryClient.invalidateQueries({ queryKey: ['membership-me'] });
+    void queryClient.invalidateQueries({ queryKey: ['membership-orders'] });
+    void queryClient.invalidateQueries({ queryKey: ['card-purchases'] });
+  };
 
   return (
     <PageContainer>
@@ -104,10 +137,24 @@ export function MembershipPage() {
             <Button size="lg" onClick={submitRedeem} disabled={redeemMutation.isPending || !code.trim()}>
               {redeemMutation.isPending ? '订阅中…' : '立即订阅'}
             </Button>
+            {cardShop?.enabled ? (
+              <Button
+                size="lg"
+                onClick={openCardShop}
+                className="border-0 bg-[#1e3a8a] text-white hover:bg-[#1e40af]"
+              >
+                <ShoppingCart />
+                购买卡密
+              </Button>
+            ) : null}
           </div>
-          <p className="text-xs text-muted-foreground">已是订阅会员时自动叠加时间。</p>
+          <p className="text-xs text-muted-foreground">
+            没有订阅码？点「购买卡密」自助购买，付款后立即到账。
+          </p>
         </CardContent>
       </Card>
+
+      {purchases && purchases.length > 0 ? <MyCardsSection purchases={purchases} /> : null}
 
       <section className="space-y-4">
         <h2 className="text-lg font-semibold tracking-tight">计划</h2>
@@ -207,6 +254,60 @@ export function MembershipPage() {
           </div>
         </section>
       ) : null}
+
+      <CardShopDialog open={cardShopOpen} onOpenChange={setCardShopOpen} onRedeemed={afterRedeem} />
     </PageContainer>
+  );
+}
+
+/** 买过的卡密留在页面上，用户关掉弹窗也能回来复制。 */
+function MyCardsSection({ purchases }: { purchases: CardPurchaseRecord[] }) {
+  const { copy } = useCopy();
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold tracking-tight">我的卡密</h2>
+      <div className="space-y-2">
+        {purchases.map((purchase) => (
+          <Card key={purchase.id}>
+            <CardContent className="space-y-2.5 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">{purchase.productName}</span>
+                <Badge variant={purchase.status === 'paid' ? 'default' : 'secondary'}>
+                  {CARD_PURCHASE_STATUS_LABELS[purchase.status]}
+                </Badge>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  ¥{purchase.amount} · {purchase.quantity} 张 · {formatDate(purchase.createdAt, true)}
+                </span>
+              </div>
+              {purchase.codes.length > 0 ? (
+                <div className="space-y-1.5">
+                  {purchase.codes.map((code) => (
+                    <div key={code} className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2">
+                      <code className="flex-1 font-mono text-sm tracking-[0.1em] break-all select-all">{code}</code>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="复制卡密"
+                        onClick={() => {
+                          void copy(code);
+                          toast.success('卡密已复制');
+                        }}
+                      >
+                        <Copy className="size-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {purchase.status === 'pending' ? '等待付款，付款后卡密会出现在这里' : '该订单没有可用卡密'}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </section>
   );
 }

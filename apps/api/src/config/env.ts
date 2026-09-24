@@ -49,6 +49,12 @@ const envSchema = z.object({
   /** 逗号分隔的额外 CORS 来源，给多域名 / CDN 回源用。 */
   EXTRA_CORS_ORIGINS: z.string().default(''),
 
+  /**
+   * 后台入口路径的初始值（不带斜杠）。站点设置里保存过就以数据库为准，这里只是首次部署的兜底。
+   * 刻意放在服务端 env 而不是 packages/shared：shared 会被打进公开的前台包。
+   */
+  ADMIN_ENTRY_PATH: z.string().default(''),
+
   JWT_ACCESS_SECRET: z.string().min(16),
   JWT_REFRESH_SECRET: z.string().min(16),
   PLAY_TOKEN_SECRET: z.string().min(16),
@@ -77,6 +83,17 @@ const envSchema = z.object({
   PLAY_TOKEN_IP_PREFIX_PARTS: z.coerce.number().int().default(3),
 
   GEOIP_MMDB_PATH: z.string().default(''),
+
+  /**
+   * 上游卡密渠道。密钥留空则订阅页不展示购买入口，
+   * 老部署漏配也不会把整个 API 拦在启动前。
+   */
+  JT_CARD_API_BASE: z.string().default('https://jingtiang.com/api/card-dist/v1'),
+  JT_CHANNEL_SECRET: z.string().default(''),
+  /** 成交回调验签密钥，缺省与渠道密钥同一把。 */
+  JT_WEBHOOK_SECRET: z.string().default(''),
+  /** 付款后的回跳地址，必须是上游后台已登记的白名单地址。 */
+  CARD_SHOP_RETURN_URL: z.string().default(''),
 
   TRANSCODE_CONCURRENCY: z.coerce.number().int().default(2),
   TRANSCODE_PRESET: z.string().default('veryfast'),
@@ -149,6 +166,9 @@ export const env = {
     isHttpsUrl(raw.ADMIN_PUBLIC_URL) ||
     isHttpsUrl(raw.PARTNER_PUBLIC_URL),
   storageRoot: absolute(raw.STORAGE_LOCAL_ROOT),
+  cardShopEnabled: raw.JT_CHANNEL_SECRET.length > 0,
+  cardShopWebhookSecret: raw.JT_WEBHOOK_SECRET || raw.JT_CHANNEL_SECRET,
+  cardShopReturnUrl: raw.CARD_SHOP_RETURN_URL || `${raw.SITE_PUBLIC_URL.replace(/\/+$/, '')}/membership`,
   uploadTmpDir: absolute(raw.UPLOAD_TMP_DIR),
   /** CORS 白名单：三个前端 + 本机常见变体。只比 origin，路径 /m /admin 不进比对。 */
   corsOrigins: [

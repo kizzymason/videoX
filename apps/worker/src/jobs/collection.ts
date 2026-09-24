@@ -232,6 +232,13 @@ async function fetchDetailJob(job: Job<DetailFetchJobData>): Promise<void> {
     throw new Error(`源站 play API 异常: ${playResult.code} ${playResult.message ?? ''}`);
   }
 
+  // 详情接口补时长与源站标签。play 接口没有这两样，列表接口没有标签。
+  // 拿不到就算了：播放地址已经到手，不该因为补充信息失败而让整个任务失败。
+  const detail = await client.getVideoDetail(externalId, kind).catch((error) => {
+    logger.warn({ externalId, kind, err: error }, '获取源站详情失败，仅保存播放地址');
+    return null;
+  });
+
   // 合并进已有 metadata
   const [existing] = await db
     .select()
@@ -257,6 +264,17 @@ async function fetchDetailJob(job: Job<DetailFetchJobData>): Promise<void> {
         ...(existing.metadata ?? {}),
         playUrl: playResult.data.url,
         qualities: playResult.data.qualities,
+        ...(detail
+          ? {
+              // 时长只在拿到正数时覆盖，别用一次失败的 0 把已有的真实值抹掉。
+              ...(detail.duration > 0 ? { duration: detail.duration } : {}),
+              sourceTags: detail.tags,
+              viewCount: detail.viewCount,
+              likeCount: detail.likeCount,
+              sizeBytes: detail.sizeBytes,
+              hasHd: detail.hasHd,
+            }
+          : {}),
         lastFetchedAt: new Date().toISOString(),
       },
       lastFetchedAt: new Date(),
@@ -264,9 +282,19 @@ async function fetchDetailJob(job: Job<DetailFetchJobData>): Promise<void> {
     })
     .where(eq(t.collectedVideos.id, existing.id));
 
+  // 已经入库的视频顺手把真实时长写回正式表，不用等下一次维护任务。
+  if (detail && detail.duration > 0 && existing.videoId) {
+    await db
+      .update(t.videos)
+      .set({ durationSeconds: detail.duration, updatedAt: new Date() })
+      .where(eq(t.videos.id, existing.videoId));
+  }
+
   await logCollectionJob(collectionJobId, 'info', `获取播放地址成功（${kind}/${externalId}）`, {
     externalId,
     qualities: playResult.data.qualities?.length ?? 0,
+    duration: detail?.duration ?? 0,
+    tags: detail?.tags.length ?? 0,
   });
 }
 

@@ -67,21 +67,75 @@ export interface YitongKanLoginResult {
 }
 
 /**
- * 源站列表原始响应结构（实测 2026-08：items/cover/filters.count）
+ * 源站列表原始响应结构（实测 2026-09：items/cover/filters.count）
+ *
+ * 时长字段叫 durationSeconds，不是 duration —— 早期按 duration 读，结果全站 5 万多条
+ * 时长都是 0。两个名字都留着做兜底，源站改字段时不至于又静默变 0。
  */
+interface RawListItem {
+  id: number;
+  title: string;
+  cover?: string;
+  durationSeconds?: number;
+  duration?: number;
+  viewCount?: number;
+  zan?: number;
+  sizeBytes?: number;
+  has_hd?: boolean;
+  year?: string;
+}
+
 interface RawListResponse {
   code: string;
   message: string;
   data?: {
     section?: string;
-    items?: Array<{
-      id: number;
-      title: string;
-      cover?: string;
-      duration?: number;
-    }>;
+    items?: RawListItem[];
     filters?: Array<{ value: string; label: string; count: number }>;
     total?: number;
+  };
+}
+
+/** 归一化后的列表条目，metadata 直接存这个结构。 */
+export interface YitongKanListItem {
+  id: number;
+  title: string;
+  coverUrl: string;
+  /** 秒。源站给的是准确值（与 m3u8 分片求和一致），拿不到时为 0。 */
+  duration: number;
+  viewCount: number;
+  likeCount: number;
+  sizeBytes: number;
+  hasHd: boolean;
+  year: string;
+}
+
+/** 源站详情接口的返回，比列表多出 tags 与 downloadable。 */
+export interface YitongKanVideoDetail {
+  id: number;
+  title: string;
+  coverUrl: string;
+  duration: number;
+  viewCount: number;
+  likeCount: number;
+  sizeBytes: number;
+  hasHd: boolean;
+  year: string;
+  tags: string[];
+  downloadable: boolean;
+}
+
+function normalizeListItem(it: RawListItem): YitongKanListItem {
+  return {
+    id: it.id,
+    title: it.title,
+    coverUrl: it.cover ?? '',
+    duration: Math.max(0, Math.round(it.durationSeconds ?? it.duration ?? 0)),
+    viewCount: it.viewCount ?? 0,
+    likeCount: it.zan ?? 0,
+    sizeBytes: it.sizeBytes ?? 0,
+    hasHd: Boolean(it.has_hd),
+    year: it.year ?? '',
   };
 }
 
@@ -242,7 +296,7 @@ export class YitongKanApiClient {
   ): Promise<{
     code: string;
     data: {
-      list: Array<{ id: number; title: string; coverUrl: string; duration: number }>;
+      list: YitongKanListItem[];
       total: number;
       page: number;
       pageSize: number;
@@ -265,12 +319,7 @@ export class YitongKanApiClient {
       code: raw.code,
       message: raw.message,
       data: {
-        list: items.map((it) => ({
-          id: it.id,
-          title: it.title,
-          coverUrl: it.cover ?? '',
-          duration: it.duration ?? 0,
-        })),
+        list: items.map(normalizeListItem),
         // 源站无显式 total，取「全部」筛选项的 count
         total: raw.data?.filters?.find((f) => f.value === 'all')?.count ?? raw.data?.total ?? items.length,
         page,
@@ -280,12 +329,36 @@ export class YitongKanApiClient {
   }
 
   /**
+   * 视频详情。比列表多 tags（源站人工标注的题材标签，比 AI 生成的准）与 downloadable。
+   * 列表已经带时长，所以这个接口主要是为了补标签。
+   */
+  async getVideoDetail(videoId: number, kind: 'gv' | 'mv' | 'tv'): Promise<YitongKanVideoDetail | null> {
+    const raw = await this.get<{
+      code: string;
+      message: string;
+      data?: RawListItem & { tags?: unknown; downloadable?: boolean };
+    }>(`/api/content/${kind}/${videoId}`, true);
+
+    if (String(raw.code) !== '200' || !raw.data?.id) return null;
+
+    const tags = Array.isArray(raw.data.tags)
+      ? raw.data.tags
+          .filter((tag): tag is string => typeof tag === 'string')
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+          .slice(0, 32)
+      : [];
+
+    return { ...normalizeListItem(raw.data), tags, downloadable: Boolean(raw.data.downloadable) };
+  }
+
+  /**
    * 获取 GV 视频列表
    */
   async getGVList(page: number, pageSize: number = 20): Promise<{
     code: string;
     data: {
-      list: Array<{ id: number; title: string; coverUrl: string; duration: number }>;
+      list: YitongKanListItem[];
       total: number;
       page: number;
       pageSize: number;
@@ -301,7 +374,7 @@ export class YitongKanApiClient {
   async getMVList(page: number, pageSize: number = 20): Promise<{
     code: string;
     data: {
-      list: Array<{ id: number; title: string; coverUrl: string; duration: number }>;
+      list: YitongKanListItem[];
       total: number;
       page: number;
       pageSize: number;
@@ -317,7 +390,7 @@ export class YitongKanApiClient {
   async getTVList(page: number, pageSize: number = 20): Promise<{
     code: string;
     data: {
-      list: Array<{ id: number; title: string; coverUrl: string; duration: number }>;
+      list: YitongKanListItem[];
       total: number;
       page: number;
       pageSize: number;

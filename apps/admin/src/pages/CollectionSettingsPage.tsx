@@ -3,7 +3,7 @@
 // ========================================================================
 
 import * as React from 'react';
-import { Check, Database, Loader2, Play, Save, Settings2, Users } from 'lucide-react';
+import { Check, Database, Download, Loader2, Play, Save, Settings2, Users } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -52,6 +52,14 @@ type PoolSettingsForm = {
   vipWeightMultiplier: string;
   healthCheckIntervalMinutes: string;
   autoRemoveFailedAfterAttempts: string;
+};
+
+type AutoImportForm = {
+  enabled: boolean;
+  autoPublish: boolean;
+  intervalMinutes: string;
+  batchSize: string;
+  maxAttempts: string;
 };
 
 type ScheduleForm = {
@@ -118,6 +126,13 @@ export function CollectionSettingsPage() {
     healthCheckIntervalMinutes: '10',
     autoRemoveFailedAfterAttempts: '3',
   });
+  const [autoImport, setAutoImport] = React.useState<AutoImportForm>({
+    enabled: true,
+    autoPublish: true,
+    intervalMinutes: '10',
+    batchSize: '40',
+    maxAttempts: '3',
+  });
   const [fullKinds, setFullKinds] = React.useState({ gv: true, mv: true, tv: true });
   const [fullEndPage, setFullEndPage] = React.useState('2755');
   const [fullPagesPerBatch, setFullPagesPerBatch] = React.useState('140');
@@ -154,6 +169,13 @@ export function CollectionSettingsPage() {
         vipWeightMultiplier: String(s.pool?.vipWeightMultiplier ?? 3),
         healthCheckIntervalMinutes: String(s.pool?.healthCheckIntervalMinutes ?? 10),
         autoRemoveFailedAfterAttempts: String(s.pool?.autoRemoveFailedAfterAttempts ?? 3),
+      });
+      setAutoImport({
+        enabled: s.autoImport?.enabled ?? true,
+        autoPublish: s.autoImport?.autoPublish ?? true,
+        intervalMinutes: String(s.autoImport?.intervalMinutes ?? 10),
+        batchSize: String(s.autoImport?.batchSize ?? 40),
+        maxAttempts: String(s.autoImport?.maxAttempts ?? 3),
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -208,6 +230,13 @@ export function CollectionSettingsPage() {
           vipWeightMultiplier: Math.max(1, Math.min(20, Number(pool.vipWeightMultiplier) || 3)),
           healthCheckIntervalMinutes: Math.min(120, Math.max(1, Number(pool.healthCheckIntervalMinutes) || 10)),
           autoRemoveFailedAfterAttempts: Math.max(1, Number(pool.autoRemoveFailedAfterAttempts) || 3),
+        },
+        autoImport: {
+          enabled: autoImport.enabled,
+          autoPublish: autoImport.autoPublish,
+          intervalMinutes: Math.min(1440, Math.max(1, Number(autoImport.intervalMinutes) || 10)),
+          batchSize: Math.min(80, Math.max(1, Number(autoImport.batchSize) || 40)),
+          maxAttempts: Math.min(10, Math.max(1, Number(autoImport.maxAttempts) || 3)),
         },
       });
       setSavedAt(new Date().toLocaleTimeString('zh-CN'));
@@ -434,6 +463,79 @@ export function CollectionSettingsPage() {
             maxPages={500}
             onChange={setWeekly}
           />
+        </CardContent>
+      </Card>
+
+      {/* 自动导入 */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm font-medium">
+            <Download className="size-4" />
+            自动导入
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">采集后自动入库</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                关掉后采集照常跑，只是要到「采集视频」页手动点导入。开关也在那一页，两处同步。
+              </p>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <Switch
+                checked={autoImport.enabled}
+                onCheckedChange={(checked) => setAutoImport({ ...autoImport, enabled: checked })}
+              />
+              {autoImport.enabled ? '已开启' : '已关闭'}
+            </label>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2">
+              <Label>检查间隔（分钟）</Label>
+              <Input
+                type="number"
+                min={1}
+                max={1440}
+                value={autoImport.intervalMinutes}
+                onChange={(e) => setAutoImport({ ...autoImport, intervalMinutes: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">改完立即生效，不用重启</p>
+            </div>
+            <div className="space-y-2">
+              <Label>单批条数</Label>
+              <Input
+                type="number"
+                min={1}
+                max={80}
+                value={autoImport.batchSize}
+                onChange={(e) => setAutoImport({ ...autoImport, batchSize: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">一轮最多跑 6 批，剩下的等下一个间隔</p>
+            </div>
+            <div className="space-y-2">
+              <Label>最多重试次数</Label>
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={autoImport.maxAttempts}
+                onChange={(e) => setAutoImport({ ...autoImport, maxAttempts: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">超过就标记「源站失效」，不再占用待导入队列</p>
+            </div>
+            <div className="space-y-2">
+              <Label>入库后</Label>
+              <label className="flex h-9 items-center gap-2 text-sm">
+                <Switch
+                  checked={autoImport.autoPublish}
+                  onCheckedChange={(checked) => setAutoImport({ ...autoImport, autoPublish: checked })}
+                />
+                {autoImport.autoPublish ? '直接发布' : '待审核'}
+              </label>
+              <p className="text-xs text-muted-foreground">存储方式跟随上方存储策略自动决策</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

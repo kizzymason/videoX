@@ -3,10 +3,22 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { Clock, Heart, Trash2, UserCheck, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCount, watchPercent } from '@videox/shared';
-import { Avatar, AvatarFallback, AvatarImage, Button, EmptyState, Skeleton, Tabs, TabsList, TabsTrigger } from '@videox/ui';
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+  Button,
+  EmptyState,
+  ListPager,
+  Skeleton,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from '@videox/ui';
 import { contentApi, socialApi } from '../lib/api';
-import { flatten, nextPageParam } from '../lib/query';
+import { flatten, nextPageParam, useBrowsableList } from '../lib/query';
 import { useSeo } from '../hooks/use-seo';
+import { useShowViewCount } from '../hooks/use-site';
 import { PageContainer, PageHeader } from '../components/Page';
 import { VideoGrid } from '../components/video/VideoGrid';
 import { VideoCard } from '../components/video/VideoCard';
@@ -21,12 +33,7 @@ export function HistoryPage() {
   useSeo({ title: '观看历史' });
   const queryClient = useQueryClient();
 
-  const query = useInfiniteQuery({
-    queryKey: ['history'],
-    queryFn: ({ pageParam }) => socialApi.history(pageParam, 24),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
-  });
+  const query = useBrowsableList(['history'], (page, pageSize) => socialApi.history(page, pageSize));
 
   const clearMutation = useMutation({
     mutationFn: () => socialApi.clearHistory(),
@@ -41,13 +48,13 @@ export function HistoryPage() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['history'] }),
   });
 
-  const items = flatten(query.data?.pages);
+  const items = query.items;
 
   return (
     <PageContainer>
       <PageHeader
         title="观看历史"
-        description={items.length > 0 ? `共 ${query.data?.pages[0]?.meta.total ?? 0} 条记录` : undefined}
+        description={items.length > 0 ? `共 ${query.meta?.total ?? 0} 条记录` : undefined}
         action={
           items.length > 0 ? (
             <Button variant="outline" size="sm" onClick={() => clearMutation.mutate()}>
@@ -58,7 +65,7 @@ export function HistoryPage() {
         }
       />
 
-      {query.isLoading ? (
+      {query.loading ? (
         <VideoGrid videos={[]} loading />
       ) : items.length === 0 ? (
         <EmptyState
@@ -72,7 +79,10 @@ export function HistoryPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-x-4 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+        <div
+          key={query.transitionKey}
+          className="vx-list-enter grid grid-cols-1 gap-x-4 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+        >
           {items.map((item) => (
             <div key={item.id} className="group/history relative">
               <VideoCard
@@ -92,12 +102,16 @@ export function HistoryPage() {
         </div>
       )}
 
-      <InfiniteFooter
-        hasNextPage={query.hasNextPage}
-        isFetchingNextPage={query.isFetchingNextPage}
-        fetchNextPage={() => void query.fetchNextPage()}
-        empty={items.length === 0}
-      />
+      {query.mode === 'paged' ? (
+        <ListPager meta={query.meta} page={query.page} onChange={query.setPage} busy={query.fetching} />
+      ) : (
+        <InfiniteFooter
+          hasNextPage={query.hasNextPage}
+          isFetchingNextPage={query.isFetchingNextPage}
+          fetchNextPage={query.fetchNextPage}
+          empty={items.length === 0}
+        />
+      )}
     </PageContainer>
   );
 }
@@ -109,31 +123,34 @@ export function HistoryPage() {
 export function FavoritesPage() {
   useSeo({ title: '我的收藏' });
 
-  const query = useInfiniteQuery({
-    queryKey: ['favorites'],
-    queryFn: ({ pageParam }) => socialApi.favorites(pageParam, 24),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
-  });
+  const query = useBrowsableList(['favorites'], (page, pageSize) => socialApi.favorites(page, pageSize));
 
-  const items = flatten(query.data?.pages);
+  const items = query.items;
 
   return (
     <PageContainer>
       <PageHeader title="我的收藏" />
-      {query.isLoading ? (
+      {query.loading ? (
         <VideoGrid videos={[]} loading />
       ) : items.length === 0 ? (
         <EmptyState icon={<Heart />} title="收藏夹是空的" description="点击视频页的收藏按钮就能存到这里" />
       ) : (
-        <VideoGrid videos={items.map((item) => item.video)} />
+        <VideoGrid
+          videos={items.map((item) => item.video)}
+          fetching={query.fetching}
+          transitionKey={query.transitionKey}
+        />
       )}
-      <InfiniteFooter
-        hasNextPage={query.hasNextPage}
-        isFetchingNextPage={query.isFetchingNextPage}
-        fetchNextPage={() => void query.fetchNextPage()}
-        empty={items.length === 0}
-      />
+      {query.mode === 'paged' ? (
+        <ListPager meta={query.meta} page={query.page} onChange={query.setPage} busy={query.fetching} />
+      ) : (
+        <InfiniteFooter
+          hasNextPage={query.hasNextPage}
+          isFetchingNextPage={query.isFetchingNextPage}
+          fetchNextPage={query.fetchNextPage}
+          empty={items.length === 0}
+        />
+      )}
     </PageContainer>
   );
 }
@@ -146,11 +163,7 @@ export function FollowingPage() {
   useSeo({ title: '我的关注' });
   const [tab, setTab] = React.useState<'feed' | 'authors'>('feed');
 
-  const feedQuery = useInfiniteQuery({
-    queryKey: ['following-feed'],
-    queryFn: ({ pageParam }) => socialApi.followingFeed(pageParam, 24),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
+  const feedQuery = useBrowsableList(['following-feed'], (page, pageSize) => socialApi.followingFeed(page, pageSize), {
     enabled: tab === 'feed',
   });
 
@@ -162,7 +175,7 @@ export function FollowingPage() {
     enabled: tab === 'authors',
   });
 
-  const videos = flatten(feedQuery.data?.pages);
+  const videos = feedQuery.items;
   const authors = flatten(authorsQuery.data?.pages);
 
   return (
@@ -183,16 +196,22 @@ export function FollowingPage() {
         <>
           <VideoGrid
             videos={videos}
-            loading={feedQuery.isLoading}
-            loadingMore={feedQuery.isFetchingNextPage}
+            loading={feedQuery.loading}
+            loadingMore={feedQuery.mode === 'infinite' && feedQuery.isFetchingNextPage}
+            fetching={feedQuery.fetching}
+            transitionKey={feedQuery.transitionKey}
             emptyTitle="关注的创作者还没有新作品"
           />
-          <InfiniteFooter
-            hasNextPage={feedQuery.hasNextPage}
-            isFetchingNextPage={feedQuery.isFetchingNextPage}
-            fetchNextPage={() => void feedQuery.fetchNextPage()}
-            empty={videos.length === 0 && !feedQuery.isLoading}
-          />
+          {feedQuery.mode === 'paged' ? (
+            <ListPager meta={feedQuery.meta} page={feedQuery.page} onChange={feedQuery.setPage} busy={feedQuery.fetching} />
+          ) : (
+            <InfiniteFooter
+              hasNextPage={feedQuery.hasNextPage}
+              isFetchingNextPage={feedQuery.isFetchingNextPage}
+              fetchNextPage={feedQuery.fetchNextPage}
+              empty={videos.length === 0 && !feedQuery.loading}
+            />
+          )}
         </>
       ) : (
         <>
@@ -245,6 +264,7 @@ export function FollowingPage() {
 export function ChannelPage() {
   const { username = '' } = useParams();
   const queryClient = useQueryClient();
+  const showViewCount = useShowViewCount();
 
   const { data: channel, isLoading } = useQuery({
     queryKey: ['channel', username],
@@ -253,12 +273,9 @@ export function ChannelPage() {
 
   useSeo(channel ? { title: channel.displayName, description: channel.bio ?? undefined } : undefined);
 
-  const videosQuery = useInfiniteQuery({
-    queryKey: ['channel-videos', username],
-    queryFn: ({ pageParam }) => contentApi.channelVideos(username, pageParam, 24),
-    initialPageParam: 1,
-    getNextPageParam: nextPageParam,
-  });
+  const videosQuery = useBrowsableList(['channel-videos', username], (page, pageSize) =>
+    contentApi.channelVideos(username, page, pageSize),
+  );
 
   const followMutation = useMutation({
     mutationFn: () => socialApi.follow(channel!.id),
@@ -268,7 +285,7 @@ export function ChannelPage() {
     },
   });
 
-  const videos = flatten(videosQuery.data?.pages);
+  const videos = videosQuery.items;
 
   if (isLoading) {
     return (
@@ -298,8 +315,8 @@ export function ChannelPage() {
           <h1 className="text-xl font-semibold tracking-tight">{channel.displayName}</h1>
           <p className="text-sm text-muted-foreground">@{channel.username}</p>
           <p className="text-sm text-muted-foreground tabular-nums">
-            {formatCount(channel.followerCount)} 粉丝 · {channel.videoCount} 个视频 ·{' '}
-            {formatCount(channel.totalViews)} 次播放
+            {formatCount(channel.followerCount)} 粉丝 · {channel.videoCount} 个视频
+            {showViewCount ? ` · ${formatCount(channel.totalViews)} 次播放` : ''}
           </p>
           {channel.bio ? <p className="pt-1 text-sm">{channel.bio}</p> : null}
         </div>
@@ -313,13 +330,28 @@ export function ChannelPage() {
         </Button>
       </div>
 
-      <VideoGrid videos={videos} loading={videosQuery.isLoading} loadingMore={videosQuery.isFetchingNextPage} />
-      <InfiniteFooter
-        hasNextPage={videosQuery.hasNextPage}
-        isFetchingNextPage={videosQuery.isFetchingNextPage}
-        fetchNextPage={() => void videosQuery.fetchNextPage()}
-        empty={videos.length === 0 && !videosQuery.isLoading}
+      <VideoGrid
+        videos={videos}
+        loading={videosQuery.loading}
+        loadingMore={videosQuery.mode === 'infinite' && videosQuery.isFetchingNextPage}
+        fetching={videosQuery.fetching}
+        transitionKey={videosQuery.transitionKey}
       />
+      {videosQuery.mode === 'paged' ? (
+        <ListPager
+          meta={videosQuery.meta}
+          page={videosQuery.page}
+          onChange={videosQuery.setPage}
+          busy={videosQuery.fetching}
+        />
+      ) : (
+        <InfiniteFooter
+          hasNextPage={videosQuery.hasNextPage}
+          isFetchingNextPage={videosQuery.isFetchingNextPage}
+          fetchNextPage={videosQuery.fetchNextPage}
+          empty={videos.length === 0 && !videosQuery.loading}
+        />
+      )}
     </PageContainer>
   );
 }

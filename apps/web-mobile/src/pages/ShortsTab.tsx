@@ -8,6 +8,7 @@ import { Spinner } from '@videox/ui';
 import { ApiError, contentApi, socialApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
 import { track } from '../lib/analytics';
+import { useShowViewCount } from '../hooks/use-site';
 import { useAuthStore } from '../stores/auth';
 
 function enterFullscreen(container: HTMLElement | null) {
@@ -88,6 +89,7 @@ function ShortsPage({
   const ref = React.useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const showViewCount = useShowViewCount();
   const requireLogin = React.useCallback(
     (action: () => void) => {
       if (!user) {
@@ -125,8 +127,12 @@ function ShortsPage({
           {video.author ? (
             <p className="text-xs text-white/70">
               @{video.author.username}
-              <span className="mx-1 text-white/30">·</span>
-              {formatCount(video.viewCount)} 播放
+              {showViewCount ? (
+                <>
+                  <span className="mx-1 text-white/30">·</span>
+                  {formatCount(video.viewCount)} 播放
+                </>
+              ) : null}
             </p>
           ) : null}
         </div>

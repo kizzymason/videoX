@@ -18,6 +18,7 @@ import {
 import type {
   AccessLevel,
   AlgoWeights,
+  CardPurchaseStatus,
   CommentStatus,
   OrderSource,
   OrderStatus,
@@ -393,6 +394,37 @@ export const redeemCodes = pgTable(
     index('redeem_codes_batch_idx').on(t.batchId),
     index('redeem_codes_plan_idx').on(t.planId),
     index('redeem_codes_created_by_idx').on(t.createdBy),
+  ],
+);
+
+/**
+ * 卡密自助购买记录。收款与发卡都在上游渠道，这里只留一份本站账：
+ * reference 是我们自己的订单号（幂等键），卡密密文存储。
+ */
+export const cardPurchases = pgTable(
+  'card_purchases',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    reference: varchar('reference', { length: 40 }).notNull(),
+    upstreamOrderNo: varchar('upstream_order_no', { length: 64 }),
+    productId: varchar('product_id', { length: 64 }).notNull(),
+    productName: varchar('product_name', { length: 80 }).notNull(),
+    quantity: integer('quantity').notNull().default(1),
+    amountCents: integer('amount_cents').notNull().default(0),
+    email: varchar('email', { length: 160 }),
+    status: varchar('status', { length: 16 }).$type<CardPurchaseStatus>().notNull().default('pending'),
+    /** AES-256-GCM 密文，明文只在响应里出现一次。 */
+    codesEncrypted: text('codes_encrypted'),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    payload: jsonb('payload').$type<Record<string, unknown>>(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('card_purchases_reference_uq').on(t.reference),
+    uniqueIndex('card_purchases_upstream_uq').on(t.upstreamOrderNo),
+    index('card_purchases_user_idx').on(t.userId, t.createdAt),
+    index('card_purchases_status_idx').on(t.status),
   ],
 );
 
@@ -885,11 +917,16 @@ export const collectedVideos = pgTable('collected_videos',
     kind: varchar('kind', { length: 16 }).notNull(), // gv | mv | tv
     page: integer('page').notNull().default(1),
     fetchUrl: varchar('fetch_url', { length: 500 }),
-    status: varchar('status', { length: 16 }).notNull().default('pending'), // pending | imported | updating | archived
+    status: varchar('status', { length: 16 }).notNull().default('pending'), // pending | imported | updating | archived | failed
     importMode: varchar('import_mode', { length: 20 }), // hotlink | r2_transfer | none
     localVideoUrl: varchar('local_video_url', { length: 500 }), // 如果有转存
     externalPlayUrl: varchar('external_play_url', { length: 500 }), // 原始播放地址
     metadata: jsonb('metadata').$type<Record<string, unknown>>(), // 完整元数据快照
+    /** 自动导入尝试次数。源站临时故障会重试，超过阈值转 failed，不再堵住队列。 */
+    importAttempts: integer('import_attempts').notNull().default(0),
+    /** 最近一次导入失败原因，供后台排查（源站下架 / 号池不可用 / 超时等）。 */
+    importError: text('import_error'),
+    lastImportAttemptAt: timestamp('last_import_attempt_at', { withTimezone: true }),
     lastFetchedAt: timestamp('last_fetched_at', { withTimezone: true }),
     importedAt: timestamp('imported_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(now),
@@ -897,6 +934,7 @@ export const collectedVideos = pgTable('collected_videos',
   },
   (t) => [
     uniqueIndex('collected_videos_external_site_uq').on(t.externalId, t.targetSite),
+    index('collected_videos_import_queue_idx').on(t.targetSite, t.status, t.importAttempts, t.createdAt),
     index('collected_videos_status_idx').on(t.status),
     index('collected_videos_video_idx').on(t.videoId),
     index('collected_videos_target_site_idx').on(t.targetSite),

@@ -87,6 +87,9 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export const ORDER_SOURCES = ['redeem_code', 'manual_grant', 'payment'] as const;
 export type OrderSource = (typeof ORDER_SOURCES)[number];
 
+/** 上游渠道单次最多买多少张，实际还要再受商品自身 perOrderLimit 约束。 */
+export const CARD_SHOP_MAX_QUANTITY = 10;
+
 export const SUBSCRIPTION_STATUSES = ['active', 'expired', 'canceled'] as const;
 export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
 
@@ -180,3 +183,75 @@ export const PLAY_TOKEN_PARAM = 'tk';
 
 export const PAGE_SIZE_DEFAULT = 24;
 export const PAGE_SIZE_MAX = 100;
+
+/** 前台视频列表浏览模式。分页固定每页 20 条，不改全局 PAGE_SIZE_DEFAULT。 */
+export const BROWSE_MODES = ['paged', 'infinite'] as const;
+export type BrowseMode = (typeof BROWSE_MODES)[number];
+export const BROWSE_PAGE_SIZE = 20;
+
+export const HOME_SORTS = ['recommended', 'latest', 'popular', 'most_liked'] as const;
+export type HomeSort = (typeof HOME_SORTS)[number];
+
+export function parseHomeSort(value: string | null | undefined): HomeSort {
+  if (value && (HOME_SORTS as readonly string[]).includes(value)) return value as HomeSort;
+  return 'recommended';
+}
+
+// --------------------------------------------------------------------------
+// 后台入口路径
+// --------------------------------------------------------------------------
+
+/**
+ * 后台入口只允许「小写字母开头 + 小写字母数字、且至少含一个数字」的单段路径。
+ *
+ * 必须含数字这条不是洁癖：nginx 只能靠形态先筛一遍请求，再问 API 是不是真入口；
+ * 前台路由（/history、/membership…）全是纯字母，带上数字这条约束就永不撞车，
+ * 前台深链也不会白跑一次子请求。改这里必须同步改 deploy/videox-locations.conf 的正则。
+ */
+export const ADMIN_PATH_MIN = 6;
+export const ADMIN_PATH_MAX = 32;
+export const ADMIN_PATH_PATTERN = /^[a-z][a-z0-9]{5,31}$/;
+
+/** 与前台/运维路径重名的段一律拒绝，避免把站点自己挡掉。 */
+export const ADMIN_PATH_RESERVED = [
+  'admin',
+  'admins',
+  'api',
+  'assets',
+  'media',
+  'static',
+  'health',
+  'embed',
+  'watch',
+  'search',
+  'shorts',
+  'category',
+  'categories',
+  'channel',
+  'explore',
+  'history',
+  'favorites',
+  'following',
+  'membership',
+  'profile',
+  'settings',
+  'subscribe',
+  'sitemap',
+  'robots',
+  'favicon',
+] as const;
+
+/**
+ * 这里刻意不放任何「默认入口路径」常量：packages/shared 会被前台两个 SPA 打进公开包，
+ * 任何字面量都会随 JS 泄露出去。兜底值只存在于 API 侧（apps/api 的 settings 服务 + ADMIN_ENTRY_PATH）。
+ */
+export function isValidAdminPath(value: string): boolean {
+  if (!ADMIN_PATH_PATTERN.test(value)) return false;
+  if (!/[0-9]/.test(value)) return false;
+  return !(ADMIN_PATH_RESERVED as readonly string[]).includes(value);
+}
+
+/** 前后端共用的入库前清洗：去空格、去首尾斜杠、转小写。 */
+export function normalizeAdminPath(value: string): string {
+  return value.trim().replace(/^\/+|\/+$/g, '').toLowerCase();
+}

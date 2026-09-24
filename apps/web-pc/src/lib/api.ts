@@ -2,6 +2,9 @@ import { ApiClient, ApiError } from '@videox/shared';
 import type {
   AuthSession,
   Banner,
+  CardCheckout,
+  CardProduct,
+  CardPurchaseRecord,
   Category,
   Comment,
   CurrentUser,
@@ -207,4 +210,23 @@ export const membershipApi = {
         createdAt: string;
       }[]
     >('/membership/orders'),
+};
+
+// ---------------------------------------------------------------------------
+// 卡密自助购买
+// ---------------------------------------------------------------------------
+
+export const cardShopApi = {
+  status: () => api.get<{ enabled: boolean }>('/card-shop/status'),
+  products: () => api.get<CardProduct[]>('/card-shop/products'),
+  checkout: (body: { productId: string; quantity: number; email: string }) =>
+    api.post<CardCheckout>('/card-shop/checkouts', body),
+  order: (orderNo: string) => api.get<CardCheckout>(`/card-shop/checkouts/${encodeURIComponent(orderNo)}`),
+  purchases: () => api.get<CardPurchaseRecord[]>('/card-shop/purchases'),
+  /** 二维码要带 access token，<img src> 带不上，所以取回 blob 自己造 objectURL。 */
+  qrBlobUrl: async (path: string) => {
+    const response = await api.request<Response>(path.replace(/^\/api/, ''), { method: 'GET', raw: true });
+    if (!response.ok) throw new Error('二维码获取失败');
+    return URL.createObjectURL(await response.blob());
+  },
 };

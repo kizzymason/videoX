@@ -8,7 +8,18 @@ import { App } from './App';
 import { queryClient } from './lib/query';
 import './styles.css';
 
-const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined;
+/**
+ * 后台挂载在哪个路径由站点设置决定（nginx 按设置放行入口），构建时并不知道，
+ * 所以 basename 只能在运行时从当前地址的第一段取。资源前缀仍是构建时的 BASE_URL。
+ * 开发服务器把后台挂在根路径，直接沿用 BASE_URL。
+ */
+function resolveBasename(): string | undefined {
+  if (import.meta.env.DEV) return import.meta.env.BASE_URL.replace(/\/$/, '') || undefined;
+  const segment = window.location.pathname.split('/')[1] ?? '';
+  return segment ? `/${segment}` : undefined;
+}
+
+const routerBasename = resolveBasename();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
