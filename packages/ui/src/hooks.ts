@@ -1,4 +1,9 @@
 import * as React from 'react';
+import {
+  CONSOLE_SHIELD_INTERVAL_MS,
+  CONSOLE_SHIELD_SETTLE_MS,
+  createConsoleShieldProbe,
+} from '@videox/shared';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -220,6 +225,10 @@ function isViteDev(): boolean {
  * 播放页控台劝退。开 DevTools 后返回 true，由页面卸播放器、清票据。
  * 不拦右键、不拦选中——和订阅页 useAntiPeek 刻意分开。
  * 浏览器关不掉控制台，尺寸差 + 调试器耗时只提高随手偷看的成本。
+ *
+ * 判定策略本身在 `@videox/shared` 的 console-shield.ts 里，这里只负责
+ * 按节拍喂样本：读环境 → 采一次样 → 交给 probe 决定要不要劝退。
+ * 拆开是为了能写单测——这套规则过去只在真机旋屏时才暴露误杀。
  */
 export function useConsoleShield(options: { enabled?: boolean } = {}) {
   const { enabled = true } = options;
@@ -229,31 +238,57 @@ export function useConsoleShield(options: { enabled?: boolean } = {}) {
     if (!enabled || tripped) return undefined;
     if (isViteDev()) return undefined;
 
+    const probe = createConsoleShieldProbe({
+      coarsePointer:
+        typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches,
+      maxTouchPoints: navigator.maxTouchPoints || 0,
+    });
+
     const trip = () => setTripped(true);
 
-    const checkSize = () => {
-      const widthGap = Math.abs(window.outerWidth - window.innerWidth);
-      const heightGap = Math.abs(window.outerHeight - window.innerHeight);
-      if (widthGap > 180 || heightGap > 180) trip();
-    };
-
-    const checkDebugger = () => {
+    const sample = () => {
       const start = performance.now();
       // eslint-disable-next-line no-debugger
       debugger;
-      if (performance.now() - start > 120) trip();
+      const debuggerCostMs = performance.now() - start;
+
+      if (
+        probe.sample({
+          outerWidth: window.outerWidth,
+          outerHeight: window.outerHeight,
+          innerWidth: window.innerWidth,
+          innerHeight: window.innerHeight,
+          fullscreen: Boolean(document.fullscreenElement),
+          debuggerCostMs,
+        })
+      ) {
+        trip();
+      }
     };
 
-    checkSize();
-    const timer = window.setInterval(() => {
-      checkSize();
-      checkDebugger();
-    }, 1600);
-    window.addEventListener('resize', checkSize);
+    // 旋屏、拖动窗口、进出全屏都会让尺寸连续抖动，抖完再判。
+    let settleTimer: number | undefined;
+    const onViewportChange = () => {
+      probe.invalidate();
+      if (settleTimer !== undefined) window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(() => {
+        settleTimer = undefined;
+        sample();
+      }, CONSOLE_SHIELD_SETTLE_MS);
+    };
+
+    sample();
+    const timer = window.setInterval(sample, CONSOLE_SHIELD_INTERVAL_MS);
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('orientationchange', onViewportChange);
+    document.addEventListener('fullscreenchange', onViewportChange);
 
     return () => {
       window.clearInterval(timer);
-      window.removeEventListener('resize', checkSize);
+      if (settleTimer !== undefined) window.clearTimeout(settleTimer);
+      window.removeEventListener('resize', onViewportChange);
+      window.removeEventListener('orientationchange', onViewportChange);
+      document.removeEventListener('fullscreenchange', onViewportChange);
     };
   }, [enabled, tripped]);
 

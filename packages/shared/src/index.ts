@@ -16,3 +16,4 @@ export * from './full-crawl.js';
 export * from './collection-kinds.js';
 export * from './collection-import.js';
 export * from './collection-maintenance.js';
+export * from './console-shield.js';
