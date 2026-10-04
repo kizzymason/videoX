@@ -10,7 +10,9 @@ import { useAuthStore } from '../stores/auth';
 
 /**
  * 移动端卡密购买面板。和 PC 版共用后端与类型，交互按手机重做。
- * 付款一律在本站页面内扫码完成，不给任何跳去收银台的入口。
+ * 付款方式与 PC 端一致：把收款二维码摆在眼前，另给一个「打开支付宝付款」按钮走
+ * 支付宝 scheme（alipays://…），由支付宝自己的容器打开收银台。
+ * 页面不做任何自动跳转——手机浏览器直接跳收银台域名只会一直加载、唤不起支付宝。
  */
 export function CardShopSheet({
   open,
@@ -48,36 +50,11 @@ export function CardShopSheet({
   const selected = products?.find((p) => p.id === productId) ?? null;
   const maxQuantity = selected?.perOrderLimit ?? 1;
 
-  /**
-   * 收银台标签页要在点击的同一个事件里开出来，等接口回来再 open 会被当弹窗拦掉。
-   * 所以先开一个空白页占位，拿到地址后再把它导航过去；下单失败就把它关掉。
-   */
-  const payWindow = React.useRef<Window | null>(null);
-
   const checkoutMutation = useMutation({
     mutationFn: () => cardShopApi.checkout({ productId, quantity, email: email.trim() }),
-    onSuccess: (order) => {
-      setOrderNo(order.orderNo);
-      const held = payWindow.current;
-      payWindow.current = null;
-      if (!order.payUrl) {
-        held?.close();
-        return;
-      }
-      if (held && !held.closed) held.location.href = order.payUrl;
-      else window.open(order.payUrl, '_blank', 'noopener');
-    },
-    onError: (error) => {
-      payWindow.current?.close();
-      payWindow.current = null;
-      toast.error(error instanceof ApiError ? error.message : '下单失败，请稍后再试');
-    },
+    onSuccess: (order) => setOrderNo(order.orderNo),
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : '下单失败，请稍后再试'),
   });
-
-  const startPay = () => {
-    payWindow.current = window.open('', '_blank');
-    checkoutMutation.mutate();
-  };
 
   const order = checkoutMutation.data ?? null;
 
@@ -210,7 +187,7 @@ export function CardShopSheet({
                   size="lg"
                   className="h-12 w-full"
                   disabled={!selected?.inStock || checkoutMutation.isPending || !email.trim()}
-                  onClick={startPay}
+                  onClick={() => checkoutMutation.mutate()}
                 >
                   {checkoutMutation.isPending ? (
                     <>
@@ -232,6 +209,14 @@ export function CardShopSheet({
       </Drawer.Portal>
     </Drawer.Root>
   );
+}
+
+/**
+ * 支付宝在手机上的唤起链接：二维码里那条收银台地址交给支付宝自己的容器去打开，
+ * 比在手机浏览器里直接跳过去可靠（跳域名会一直加载、唤不起支付宝）。
+ */
+function alipayScheme(payUrl: string): string {
+  return `alipays://platformapi/startapp?appId=20000067&url=${encodeURIComponent(payUrl)}`;
 }
 
 function MobileProduct({
@@ -277,6 +262,26 @@ function MobilePay({
   expired: boolean;
   onRetry: () => void;
 }) {
+  const [qrSrc, setQrSrc] = React.useState('');
+
+  React.useEffect(() => {
+    if (!order.qrUrl) return undefined;
+    let objectUrl = '';
+    let alive = true;
+    void cardShopApi
+      .qrBlobUrl(order.qrUrl)
+      .then((url) => {
+        objectUrl = url;
+        if (alive) setQrSrc(url);
+        else URL.revokeObjectURL(url);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [order.qrUrl]);
+
   if (expired) {
     return (
       <div className="space-y-4 py-6 text-center">
@@ -298,12 +303,25 @@ function MobilePay({
         <p className="mt-1 text-3xl font-semibold tabular-nums">¥{order.amount}</p>
       </div>
 
-      {/* 下单时已自动跳转，这个按钮兜住被浏览器拦掉或用户误关的情况。 */}
+      {/* 和 PC 端一样把二维码摆在眼前：同一台手机可以截图后用支付宝「扫一扫 → 相册」识别。 */}
+      <div className="mx-auto grid size-[200px] place-items-center rounded-xl border border-border bg-white p-2">
+        {qrSrc ? (
+          <img src={qrSrc} alt="Alipay 付款二维码" className="size-full object-contain" draggable={false} />
+        ) : (
+          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        )}
+      </div>
+      <p className="flex items-center justify-center gap-1.5 text-sm font-medium">
+        <AlipayIcon className="size-4 text-[#1677FF]" />
+        请用 Alipay 扫码支付
+      </p>
+
+      {/* 手机上一键唤起支付宝：走 alipays scheme，由支付宝自己的容器打开收银台，不跳浏览器。 */}
       {order.payUrl ? (
         <Button size="lg" className="h-12 w-full" asChild>
-          <a href={order.payUrl} target="_blank" rel="noopener noreferrer">
+          <a href={alipayScheme(order.payUrl)}>
             <AlipayIcon className="size-5 text-[#1677FF]" />
-            打开 Alipay 付款
+            打开支付宝付款
           </a>
         </Button>
       ) : null}
