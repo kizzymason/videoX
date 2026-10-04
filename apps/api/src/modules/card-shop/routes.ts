@@ -49,7 +49,8 @@ cardShopRouter.post(
   asyncHandler(async (req, res) => {
     assertCardShopEnabled();
     const input = body<{ productId: string; quantity: number; email: string }>(req);
-    ok(res, await createCheckout({ userId: req.auth!.id, ...input }));
+    // req.ip 已是买家真实地址：app.set('trust proxy', 1) 配合 nginx 的 X-Forwarded-For。
+    ok(res, await createCheckout({ userId: req.auth!.id, buyerIp: req.ip ?? '', ...input }));
   }),
 );
 
