@@ -116,6 +116,8 @@ export async function createCheckout(params: {
   productId: string;
   quantity: number;
   email: string;
+  /** 买家真实地址（req.ip），透传给上游作为支付网关的付款人 IP。 */
+  buyerIp?: string;
 }): Promise<CardCheckout> {
   const product = await findProduct(params.productId);
   const limit = Math.max(1, Number(product.perOrderLimit ?? 1));
@@ -145,6 +147,7 @@ export async function createCheckout(params: {
     quantity: params.quantity,
     email: params.email,
     reference,
+    buyerIp: params.buyerIp,
   });
 
   const qrSource = checkout.img || checkout.qrcode || '';

@@ -53,7 +53,7 @@ export function assertCardShopEnabled(): void {
 
 async function call<T>(
   path: string,
-  options: { method?: 'GET' | 'POST'; body?: unknown; timeoutMs?: number } = {},
+  options: { method?: 'GET' | 'POST'; body?: unknown; timeoutMs?: number; headers?: Record<string, string> } = {},
 ): Promise<T> {
   assertCardShopEnabled();
   const controller = new AbortController();
@@ -66,6 +66,7 @@ async function call<T>(
       headers: {
         Authorization: `Bearer ${env.JT_CHANNEL_SECRET}`,
         'Content-Type': 'application/json',
+        ...(options.headers ?? {}),
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
       signal: controller.signal,
@@ -116,6 +117,8 @@ export async function createUpstreamCheckout(input: {
   quantity: number;
   email: string;
   reference: string;
+  /** 买家真实地址，供上游支付网关风控使用；拿不到就整个头都不带。 */
+  buyerIp?: string;
 }): Promise<UpstreamCheckout> {
   return call<UpstreamCheckout>('/checkouts', {
     method: 'POST',
@@ -127,6 +130,8 @@ export async function createUpstreamCheckout(input: {
       method: 'alipay',
       returnUrl: env.cardShopReturnUrl,
     },
+    // 上游用它当支付网关记的付款人 IP；不带这个头时上游会回落成它自己的地址。
+    headers: input.buyerIp ? { 'X-Buyer-IP': input.buyerIp } : undefined,
     timeoutMs: 25_000,
   });
 }
