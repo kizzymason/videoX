@@ -497,6 +497,11 @@ export interface SiteSettings {
   footerText: string | null;
   contactEmail: string | null;
   allowRegistration: boolean;
+  /** 注册防护：关闭后不限制；窗口内超过次数的新注册会被拒。 */
+  registerGuardEnabled: boolean;
+  registerGuardWindowDays: number;
+  registerDeviceLimit: number;
+  registerIpLimit: number;
   /** 新用户注册即赠送的会员天数，0 = 不赠送。 */
   signupGiftDays: number;
   commentsRequireApproval: boolean;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { deviceSignalsSchema } from './device-signals.js';
 import {
   ACCESS_LEVELS,
   ADMIN_PATH_MAX,
@@ -74,6 +75,8 @@ export const registerSchema = z.object({
   username: usernameSchema,
   password: passwordSchema,
   displayName: z.string().min(1).max(32).optional(),
+  /** 设备信号，服务端据此算注册指纹（前端可能不传，可选）。 */
+  device: deviceSignalsSchema.optional(),
 });
 
 export const loginSchema = z.object({
@@ -372,6 +375,11 @@ export const siteSettingsSchema = z.object({
   footerText: z.string().max(300).nullable().default(null),
   contactEmail: z.string().max(160).nullable().default(null),
   allowRegistration: z.boolean().default(true),
+  /** 注册防护：同一设备 / 同一 IP 在窗口内允许注册的次数（0 = 不限制该项）。 */
+  registerGuardEnabled: z.boolean().default(true),
+  registerGuardWindowDays: z.coerce.number().int().min(1).max(3650).default(1095),
+  registerDeviceLimit: z.coerce.number().int().min(0).max(100).default(1),
+  registerIpLimit: z.coerce.number().int().min(0).max(100).default(1),
   /**
    * 新用户注册即赠送的会员天数，0 = 不赠送。
    *

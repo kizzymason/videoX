@@ -165,6 +165,33 @@ export function SettingsPage() {
                 onChange={(checked) => patch({ allowRegistration: checked })}
               />
               <Toggle
+                label="注册防护（设备 + IP）"
+                hint="开启后同一设备、同一 IP 在窗口期内只允许注册一次，重复注册提示「设备已注册请登录」。关闭则不限制。"
+                checked={draft.registerGuardEnabled}
+                onChange={(checked) => patch({ registerGuardEnabled: checked })}
+              />
+              <Field label="注册防护窗口（天）" hint="默认 1095 天（三年）。窗口内重复的设备/IP 会被拒绝。">
+                <Input
+                  type="number"
+                  value={String(draft.registerGuardWindowDays)}
+                  onChange={(e) => patch({ registerGuardWindowDays: Number(e.target.value) || 0 })}
+                />
+              </Field>
+              <Field label="同一设备最多注册" hint="默认 1。填 0 表示不按设备限制。">
+                <Input
+                  type="number"
+                  value={String(draft.registerDeviceLimit)}
+                  onChange={(e) => patch({ registerDeviceLimit: Number(e.target.value) || 0 })}
+                />
+              </Field>
+              <Field label="同一 IP 最多注册" hint="默认 1。同一路由器、公司或运营商共享 IP 下的家人会被一起挡住，需要时调大或填 0 关闭。">
+                <Input
+                  type="number"
+                  value={String(draft.registerIpLimit)}
+                  onChange={(e) => patch({ registerIpLimit: Number(e.target.value) || 0 })}
+                />
+              </Field>
+              <Toggle
                 label="评论先审后发"
                 hint="开启后新评论默认隐藏，需在评论审核页放行"
                 checked={draft.commentsRequireApproval}

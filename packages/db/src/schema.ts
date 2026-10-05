@@ -1043,3 +1043,31 @@ export const collectionAiMessages = pgTable(
     index('collection_ai_messages_status_idx').on(t.toolStatus),
   ],
 );
+
+/**
+ * 注册防护记录：同一设备指纹 / 同一 IP 在窗口内注册过几次。
+ *
+ * 每次成功注册写入若干行（浏览器信号、设备 cookie、IP 各一行），判定时按
+ * kind + fingerprint 数窗口内的行数，达到上限就拒绝下一次注册。
+ * 每行自带 expires_at，窗口过了自动不再参与计数，不需要额外的清理任务。
+ */
+export const registerGuards = pgTable(
+  'register_guards',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** signal（浏览器信号）| device（信号+cookie）| ip */
+    kind: varchar('kind', { length: 16 }).notNull(),
+    /** 指纹：前两者是 sha256 十六进制，ip 是归一化后的地址或网段 */
+    fingerprint: varchar('fingerprint', { length: 64 }).notNull(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    ip: varchar('ip', { length: 64 }).notNull().default(''),
+    userAgent: varchar('user_agent', { length: 300 }).notNull().default(''),
+    ...timestamps,
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    index('register_guards_lookup_idx').on(t.kind, t.fingerprint, t.expiresAt),
+    index('register_guards_user_idx').on(t.userId),
+    index('register_guards_expires_idx').on(t.expiresAt),
+  ],
+);
