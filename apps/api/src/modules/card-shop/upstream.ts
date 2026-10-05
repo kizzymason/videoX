@@ -31,6 +31,17 @@ export interface UpstreamProduct {
   stock: number;
 }
 
+/** 上游当前开通的收款方式（method 回传下单，label 仅作参考，展示文案由本站决定）。 */
+export interface UpstreamMethod {
+  method: string;
+  label?: string;
+}
+
+export interface UpstreamCatalog {
+  items: UpstreamProduct[];
+  methods: UpstreamMethod[];
+}
+
 export interface UpstreamCheckout {
   orderNo: string;
   amount: string;
@@ -107,9 +118,18 @@ async function call<T>(
   }
 }
 
-export async function fetchProducts(): Promise<UpstreamProduct[]> {
-  const data = await call<{ items?: UpstreamProduct[] }>('/products');
-  return data.items ?? [];
+/**
+ * 商品与收款方式一起拿：上游这两个字段来自同一个响应，
+ * 分开请求只会白跑一趟。
+ */
+export async function fetchCatalog(): Promise<UpstreamCatalog> {
+  const data = await call<{ items?: UpstreamProduct[]; methods?: UpstreamMethod[] }>('/products');
+  return {
+    items: data.items ?? [],
+    methods: Array.isArray(data.methods)
+      ? data.methods.filter((item) => item && typeof item.method === 'string')
+      : [],
+  };
 }
 
 export async function createUpstreamCheckout(input: {
@@ -117,6 +137,8 @@ export async function createUpstreamCheckout(input: {
   quantity: number;
   email: string;
   reference: string;
+  /** 支付方式：alipay / wxpay，取自上游 /products 返回的 methods。 */
+  method: string;
   /** 买家真实地址，供上游支付网关风控使用；拿不到就整个头都不带。 */
   buyerIp?: string;
 }): Promise<UpstreamCheckout> {
@@ -127,7 +149,7 @@ export async function createUpstreamCheckout(input: {
       quantity: input.quantity,
       email: input.email,
       reference: input.reference,
-      method: 'alipay',
+      method: input.method,
       returnUrl: env.cardShopReturnUrl,
     },
     // 上游用它当支付网关记的付款人 IP；不带这个头时上游会回落成它自己的地址。

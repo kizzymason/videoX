@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import express, { Router } from 'express';
 import { z } from 'zod';
-import { cardCheckoutSchema } from '@videox/shared';
+import { cardCheckoutSchema, type CardPaymentMethod } from '@videox/shared';
 import { env } from '../../config/env.js';
 import { AppError } from '../../core/errors.js';
 import { logger } from '../../core/logger.js';
@@ -14,6 +14,7 @@ import {
   createCheckout,
   getQrSource,
   listMyPurchases,
+  listPaymentMethods,
   listProducts,
   syncCheckout,
 } from './service.js';
@@ -41,6 +42,17 @@ cardShopRouter.get(
   }),
 );
 
+/** 可用支付方式（Alipay / Wechat Pay）。上游关掉某个渠道时这里会自动少一项。 */
+cardShopRouter.get(
+  '/methods',
+  requireAuth,
+  cardPollLimiter,
+  asyncHandler(async (_req, res) => {
+    assertCardShopEnabled();
+    ok(res, await listPaymentMethods());
+  }),
+);
+
 cardShopRouter.post(
   '/checkouts',
   requireAuth,
@@ -48,7 +60,7 @@ cardShopRouter.post(
   validate({ body: cardCheckoutSchema }),
   asyncHandler(async (req, res) => {
     assertCardShopEnabled();
-    const input = body<{ productId: string; quantity: number; email: string }>(req);
+    const input = body<{ productId: string; quantity: number; email: string; method?: CardPaymentMethod }>(req);
     // req.ip 已是买家真实地址：app.set('trust proxy', 1) 配合 nginx 的 X-Forwarded-For。
     ok(res, await createCheckout({ userId: req.auth!.id, buyerIp: req.ip ?? '', ...input }));
   }),
