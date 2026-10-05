@@ -3,6 +3,8 @@ import type {
   AuthSession,
   Banner,
   CardCheckout,
+  CardPaymentMethod,
+  CardPaymentOption,
   CardProduct,
   CardPurchaseRecord,
   Category,
@@ -220,7 +222,9 @@ export const membershipApi = {
 export const cardShopApi = {
   status: () => api.get<{ enabled: boolean }>('/card-shop/status'),
   products: () => api.get<CardProduct[]>('/card-shop/products'),
-  checkout: (body: { productId: string; quantity: number; email: string }) =>
+  /** 可用支付方式（Alipay / Wechat Pay），上游只开一种时前端不展示选择。 */
+  methods: () => api.get<CardPaymentOption[]>('/card-shop/methods'),
+  checkout: (body: { productId: string; quantity: number; email: string; method?: CardPaymentMethod }) =>
     api.post<CardCheckout>('/card-shop/checkouts', body),
   order: (orderNo: string) => api.get<CardCheckout>(`/card-shop/checkouts/${encodeURIComponent(orderNo)}`),
   purchases: () => api.get<CardPurchaseRecord[]>('/card-shop/purchases'),

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CARD_PAYMENT_METHODS } from './card-shop.js';
 import { deviceSignalsSchema } from './device-signals.js';
 import {
   ACCESS_LEVELS,
@@ -209,6 +210,8 @@ export const cardCheckoutSchema = z.object({
   productId: z.string().min(1).max(64),
   quantity: z.coerce.number().int().min(1).max(CARD_SHOP_MAX_QUANTITY),
   email: z.string().email('请填写正确的邮箱').max(160),
+  /** 支付方式，取自 GET /api/card-shop/methods；不传时服务端按支付宝处理。 */
+  method: z.enum(CARD_PAYMENT_METHODS).optional(),
 });
 
 export const planSchema = z.object({

@@ -1,8 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { and, desc, eq } from 'drizzle-orm';
 import {
+  CARD_PAYMENT_METHODS,
   CARD_SHOP_PAY_TIMEOUT_MS,
   type CardCheckout,
+  type CardPaymentMethod,
+  type CardPaymentOption,
   type CardProduct,
   type CardPurchaseRecord,
   type CardPurchaseStatus,
@@ -14,7 +17,7 @@ import { cached } from '../../core/redis.js';
 import { decryptSecret, encryptSecret } from '../../core/secret-box.js';
 import {
   createUpstreamCheckout,
-  fetchProducts,
+  fetchCatalog,
   fetchUpstreamOrder,
   type UpstreamProduct,
 } from './upstream.js';
@@ -67,6 +70,7 @@ function toCheckout(row: PurchaseRow): CardCheckout {
     amount: (row.amountCents / 100).toFixed(2),
     quantity: row.quantity,
     productName: row.productName,
+    method: readMethod(row),
     qrUrl: qrUrlFor(row),
     payUrl: (row.payload as { payUrl?: string } | null)?.payUrl ?? null,
     codes: readCodes(row),
@@ -82,6 +86,7 @@ function toRecord(row: PurchaseRow): CardPurchaseRecord {
     quantity: row.quantity,
     amount: (row.amountCents / 100).toFixed(2),
     status: row.status,
+    method: readMethod(row),
     codes: readCodes(row),
     paidAt: row.paidAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -91,7 +96,7 @@ function toRecord(row: PurchaseRow): CardPurchaseRecord {
 /** 商品列表短缓存。上游的佣金字段绝不能进这个返回值。 */
 export async function listProducts(): Promise<CardProduct[]> {
   return cached('card-shop:products', 60, async () => {
-    const items = await fetchProducts();
+    const { items } = await fetchCatalog();
     return items.map((item) => ({
       id: item.id,
       name: item.name,
@@ -103,8 +108,39 @@ export async function listProducts(): Promise<CardProduct[]> {
   });
 }
 
+/** 展示文案以本站为准：上游的 label 是给别的渠道看的中文名，这里统一成品牌名。 */
+const PAYMENT_METHOD_LABELS: Record<CardPaymentMethod, string> = {
+  alipay: 'Alipay',
+  wxpay: 'Wechat Pay',
+};
+
+/**
+ * 当前可用的支付方式，用来给前端渲染选项。
+ *
+ * 取交集而不是取上游：上游多开一种我们没有前端实现的渠道时，
+ * 不能让它冒出来给买家点到（点了必然下单失败）。
+ */
+export async function listPaymentMethods(): Promise<CardPaymentOption[]> {
+  return cached('card-shop:methods', 60, async () => {
+    const { methods } = await fetchCatalog();
+    const supported = new Set(methods.map((item) => item.method));
+    return CARD_PAYMENT_METHODS.filter((method) => supported.has(method)).map((method) => ({
+      method,
+      label: PAYMENT_METHOD_LABELS[method],
+    }));
+  });
+}
+
+/** 老订单的 payload 里没有 method，一律按支付宝显示。 */
+function readMethod(row: PurchaseRow): CardPaymentMethod {
+  const value = (row.payload as { method?: string } | null)?.method;
+  return CARD_PAYMENT_METHODS.includes(value as CardPaymentMethod)
+    ? (value as CardPaymentMethod)
+    : 'alipay';
+}
+
 async function findProduct(productId: string): Promise<UpstreamProduct> {
-  const items = await fetchProducts();
+  const { items } = await fetchCatalog();
   const product = items.find((item) => item.id === productId);
   if (!product) throw AppError.badRequest('该规格已下架，请刷新后重试');
   if (Number(product.stock ?? 0) <= 0) throw AppError.badRequest('该规格暂时售罄，请稍后再试');
@@ -116,9 +152,18 @@ export async function createCheckout(params: {
   productId: string;
   quantity: number;
   email: string;
+  /** 支付方式；不传按支付宝处理，老前端照常可用。 */
+  method?: CardPaymentMethod;
   /** 买家真实地址（req.ip），透传给上游作为支付网关的付款人 IP。 */
   buyerIp?: string;
 }): Promise<CardCheckout> {
+  const method: CardPaymentMethod = params.method ?? 'alipay';
+  const available = await listPaymentMethods();
+  // 上游随时可能关掉某个收款渠道，这里以实时可用集合为准再挡一道。
+  if (!available.some((item) => item.method === method)) {
+    throw AppError.badRequest('该支付方式暂不可用，请重新选择');
+  }
+
   const product = await findProduct(params.productId);
   const limit = Math.max(1, Number(product.perOrderLimit ?? 1));
   if (params.quantity > limit) throw AppError.badRequest(`该规格单次最多购买 ${limit} 张`);
@@ -147,6 +192,7 @@ export async function createCheckout(params: {
     quantity: params.quantity,
     email: params.email,
     reference,
+    method,
     buyerIp: params.buyerIp,
   });
 
@@ -158,7 +204,7 @@ export async function createCheckout(params: {
     .set({
       upstreamOrderNo: checkout.orderNo,
       amountCents: toCents(checkout.amount) || amountCents,
-      payload: { qrSource, payUrl },
+      payload: { qrSource, payUrl, method },
       updatedAt: new Date(),
     })
     .where(eq(t.cardPurchases.id, row.id))

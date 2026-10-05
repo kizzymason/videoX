@@ -2,7 +2,12 @@ import * as React from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Check, Copy, Loader2, Minus, Plus, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
-import { CARD_SHOP_POLL_INTERVAL_MS, type CardCheckout, type CardProduct } from '@videox/shared';
+import {
+  CARD_SHOP_POLL_INTERVAL_MS,
+  type CardCheckout,
+  type CardPaymentMethod,
+  type CardProduct,
+} from '@videox/shared';
 import {
   AlipayIcon,
   Button,
@@ -13,6 +18,7 @@ import {
   Field,
   Input,
   Skeleton,
+  WechatIcon,
   cn,
   useCopy,
 } from '@videox/ui';
@@ -31,6 +37,7 @@ export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialo
   const [productId, setProductId] = React.useState('');
   const [quantity, setQuantity] = React.useState(1);
   const [email, setEmail] = React.useState('');
+  const [method, setMethod] = React.useState<CardPaymentMethod>('alipay');
   const [orderNo, setOrderNo] = React.useState('');
   const [paid, setPaid] = React.useState<CardCheckout | null>(null);
 
@@ -40,6 +47,22 @@ export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialo
     enabled: open,
     staleTime: 60_000,
   });
+
+  // 支付方式来自上游当前开通的渠道；上游关掉微信时这里自动少一项。
+  const { data: methods } = useQuery({
+    queryKey: ['card-methods'],
+    queryFn: cardShopApi.methods,
+    enabled: open,
+    staleTime: 60_000,
+  });
+
+  React.useEffect(() => {
+    if (!methods?.length) return;
+    // 之前选的那种要是上游突然下线了，回落成第一个可用的。
+    setMethod((prev) => (methods.some((item) => item.method === prev) ? prev : methods[0]!.method));
+  }, [methods]);
+
+  const methodLabel = methods?.find((item) => item.method === method)?.label ?? 'Alipay';
 
   React.useEffect(() => {
     if (!open) return;
@@ -55,7 +78,7 @@ export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialo
   const maxQuantity = selected?.perOrderLimit ?? 1;
 
   const checkoutMutation = useMutation({
-    mutationFn: () => cardShopApi.checkout({ productId, quantity, email: email.trim() }),
+    mutationFn: () => cardShopApi.checkout({ productId, quantity, email: email.trim(), method }),
     onSuccess: (order) => setOrderNo(order.orderNo),
     onError: (error) => toast.error(error instanceof ApiError ? error.message : '下单失败，请稍后再试'),
   });
@@ -114,7 +137,7 @@ export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialo
         onContextMenu={(e) => e.preventDefault()}
       >
         <DialogTitle className="text-lg font-semibold tracking-tight">购买卡密</DialogTitle>
-        <DialogDescription className="sr-only">选择规格并使用 Alipay 付款，付款成功后立即获得卡密</DialogDescription>
+        <DialogDescription className="sr-only">选择规格并使用 Alipay 或 Wechat Pay 付款，付款成功后立即获得卡密</DialogDescription>
 
         {paid ? (
           <CodesPanel
@@ -196,6 +219,35 @@ export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialo
               />
             </Field>
 
+            {/* 上游只开一种收款方式时不展示选择，避免多一个没意义的步骤。 */}
+            {methods && methods.length > 1 ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">支付方式</p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {methods.map((item) => (
+                    <button
+                      key={item.method}
+                      type="button"
+                      onClick={() => setMethod(item.method)}
+                      className={cn(
+                        'flex h-11 items-center justify-center gap-2 rounded-xl border text-sm font-medium transition-colors',
+                        method === item.method
+                          ? 'border-foreground/50 bg-muted/50'
+                          : 'border-border hover:border-foreground/25',
+                      )}
+                    >
+                      {item.method === 'wxpay' ? (
+                        <WechatIcon className="size-5 text-[#07C160]" />
+                      ) : (
+                        <AlipayIcon className="size-5 text-[#1677FF]" />
+                      )}
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <Button
               size="lg"
               className="w-full"
@@ -209,8 +261,12 @@ export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialo
                 </>
               ) : (
                 <>
-                  <AlipayIcon className="size-5 text-[#1677FF]" />
-                  Alipay支付 ¥{selected ? (Number(selected.price) * quantity).toFixed(2) : '0.00'}
+                  {method === 'wxpay' ? (
+                    <WechatIcon className="size-5 text-[#07C160]" />
+                  ) : (
+                    <AlipayIcon className="size-5 text-[#1677FF]" />
+                  )}
+                  {methodLabel} 支付 ¥{selected ? (Number(selected.price) * quantity).toFixed(2) : '0.00'}
                 </>
               )}
             </Button>
@@ -288,6 +344,11 @@ function PayPanel({
     };
   }, [order.qrUrl]);
 
+  const isWechat = order.method === 'wxpay';
+  const methodLabel = isWechat ? 'Wechat Pay' : 'Alipay';
+  const BrandIcon = isWechat ? WechatIcon : AlipayIcon;
+  const brandColor = isWechat ? 'text-[#07C160]' : 'text-[#1677FF]';
+
   if (expired) {
     return (
       <div className="space-y-4 py-4 text-center">
@@ -311,15 +372,15 @@ function PayPanel({
 
       <div className="mx-auto grid size-[200px] place-items-center rounded-xl border border-border bg-white p-2">
         {qrSrc ? (
-          <img src={qrSrc} alt="Alipay 付款二维码" className="size-full object-contain" draggable={false} />
+          <img src={qrSrc} alt={`${methodLabel} 付款二维码`} className="size-full object-contain" draggable={false} />
         ) : (
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
         )}
       </div>
 
       <p className="flex items-center justify-center gap-1.5 text-sm font-medium">
-        <AlipayIcon className="size-4 text-[#1677FF]" />
-        请用 Alipay 扫码支付
+        <BrandIcon className={cn('size-4', brandColor)} />
+        请用 {methodLabel} 扫码支付
       </p>
       <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
         <Loader2 className="size-3.5 animate-spin" />

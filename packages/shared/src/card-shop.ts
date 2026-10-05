@@ -6,6 +6,19 @@
 export const CARD_PURCHASE_STATUSES = ['pending', 'paid', 'expired', 'failed', 'refunded'] as const;
 export type CardPurchaseStatus = (typeof CARD_PURCHASE_STATUSES)[number];
 
+/**
+ * 本站支持的支付方式。上游可以同时开通多种收款渠道，
+ * 前端按 GET /api/card-shop/methods 的返回渲染选项，不写死。
+ */
+export const CARD_PAYMENT_METHODS = ['alipay', 'wxpay'] as const;
+export type CardPaymentMethod = (typeof CARD_PAYMENT_METHODS)[number];
+
+/** 一种可用支付方式：method 下单时回传，label 直接展示（Alipay / Wechat Pay）。 */
+export interface CardPaymentOption {
+  method: CardPaymentMethod;
+  label: string;
+}
+
 /** 上游建议 2～3 秒一次，取 3 秒留出余量给多标签页。 */
 export const CARD_SHOP_POLL_INTERVAL_MS = 3000;
 /**
@@ -30,6 +43,8 @@ export interface CardCheckout {
   amount: string;
   quantity: number;
   productName: string;
+  /** 本单使用的支付方式，收银台文案按它切换（Alipay / Wechat Pay）。 */
+  method: CardPaymentMethod;
   /** 二维码经本站代理，PC 端就地扫码，不暴露上游地址。 */
   qrUrl: string | null;
   /**
@@ -49,6 +64,8 @@ export interface CardPurchaseRecord {
   quantity: number;
   amount: string;
   status: CardPurchaseStatus;
+  /** 本单使用的支付方式。 */
+  method: CardPaymentMethod;
   codes: string[];
   paidAt: string | null;
   createdAt: string;

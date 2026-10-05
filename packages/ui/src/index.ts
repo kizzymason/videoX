@@ -74,7 +74,7 @@ export {
   SelectSeparator,
 } from './components/menu.js';
 export { Label, Checkbox, Switch, Slider, Field, type FieldProps } from './components/form.js';
-export { AlipayIcon } from './components/brand.js';
+export { AlipayIcon, WechatIcon } from './components/brand.js';
 export {
   Avatar,
   AvatarImage,
