@@ -32,6 +32,8 @@ export function setUnauthorizedHandler(handler: () => void): void {
   onUnauthorized = handler;
 }
 
+import { collectDeviceSignals } from '@videox/shared';
+
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 export const api = new ApiClient({
@@ -58,7 +60,8 @@ export { ApiError };
 
 export const authApi = {
   register: (body: { username: string; password: string; email?: string; displayName?: string }) =>
-    api.post<AuthSession>('/auth/register', body),
+    // 带上设备信号，服务端据此判定同一设备是否已经注册过。
+    api.post<AuthSession>('/auth/register', { ...body, device: collectDeviceSignals() }),
   login: (body: { identifier: string; password: string; remember?: boolean }) =>
     api.post<AuthSession>('/auth/login', body),
   logout: () => api.post<null>('/auth/logout'),

@@ -7,14 +7,24 @@ import {
   updateProfileSchema,
   type AuthSession,
   type CurrentUser,
+  EMPTY_DEVICE_SIGNALS,
 } from '@videox/shared';
 import { db, t } from '../../core/db.js';
+import type { DeviceSignals } from '@videox/shared';
 import { AppError } from '../../core/errors.js';
 import { asyncHandler, ok } from '../../core/respond.js';
 import { authLimiter, clientIp } from '../../middleware/request-context.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { body, validate } from '../../middleware/validate.js';
 import { REFRESH_COOKIE, clearRefreshCookie, setRefreshCookie } from './tokens.js';
+import { getSiteSettings } from '../settings/service.js';
+import {
+  assertRegisterAllowed,
+  ensureDeviceSeed,
+  guardSettingsFrom,
+  readDeviceSeed,
+  rememberRegistration,
+} from './device-guard.js';
 import {
   authenticate,
   changePassword,
@@ -41,9 +51,19 @@ authRouter.post(
   authLimiter,
   validate({ body: registerSchema }),
   asyncHandler(async (req, res) => {
-    const input = body<{ email?: string; username: string; password: string; displayName?: string }>(req);
-    const { user, giftDays } = await registerUser(input);
+    const input = body<{ email?: string; username: string; password: string; displayName?: string; device?: DeviceSignals }>(req);
     const ctx = sessionContext(req);
+
+    // 注册防护：同一设备、同一 IP 在窗口内只允许注册一次（后台设置可调）。
+    const guard = guardSettingsFrom(await getSiteSettings());
+    const seed = readDeviceSeed(req);
+    const signals = input.device ?? EMPTY_DEVICE_SIGNALS;
+    await assertRegisterAllowed({ ip: ctx.ip, userAgent: ctx.userAgent, signals, seed, settings: guard });
+
+    const { user, giftDays } = await registerUser(input);
+    await rememberRegistration({ userId: user.id, ip: ctx.ip, userAgent: ctx.userAgent, signals, seed, settings: guard });
+    // 给这台设备落下长期标识。
+    ensureDeviceSeed(req, res);
     const { access, refresh } = await issueSession(user, ctx);
     await markLogin(user.id, ctx.ip);
 

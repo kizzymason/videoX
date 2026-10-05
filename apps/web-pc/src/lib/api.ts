@@ -1,4 +1,4 @@
-import { ApiClient, ApiError } from '@videox/shared';
+import { ApiClient, ApiError, collectDeviceSignals } from '@videox/shared';
 import type {
   AuthSession,
   Banner,
@@ -68,7 +68,8 @@ export { ApiError };
 
 export const authApi = {
   register: (body: { username: string; password: string; email?: string; displayName?: string }) =>
-    api.post<AuthSession>('/auth/register', body),
+    // 带上设备信号，服务端据此判定同一设备是否已经注册过。
+    api.post<AuthSession>('/auth/register', { ...body, device: collectDeviceSignals() }),
   login: (body: { identifier: string; password: string; remember?: boolean }) =>
     api.post<AuthSession>('/auth/login', body),
   logout: () => api.post<null>('/auth/logout'),
