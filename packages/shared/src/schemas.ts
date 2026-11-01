@@ -360,7 +360,7 @@ export const siteSettingsSchema = z.object({
   siteKeywords: z.string().max(300).default(''),
   logoUrl: z.string().max(500).nullable().default(null),
   faviconUrl: z.string().max(500).nullable().default(null),
-  defaultTheme: z.enum(['light', 'dark', 'system']).default('dark'),
+  defaultTheme: z.enum(['light', 'dark', 'system']).default('light'),
   defaultBrowseMode: z.enum(BROWSE_MODES).default('paged'),
   /**
    * 前台是否展示播放量。默认关：热链片源的播放数据不完整，露出来反而不可信。
