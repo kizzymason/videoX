@@ -327,12 +327,12 @@ export function WatchPage() {
 
         <section className="px-3 pb-8">
           <h2 className="px-1 pb-2.5 text-sm font-semibold">相关推荐</h2>
-          <div className="vx-stagger grid grid-cols-1 gap-3">
+          <div className="vx-stagger grid grid-cols-2 gap-x-2.5 gap-y-4">
             {relatedQuery.isLoading && related.length === 0
-              ? Array.from({ length: 3 }, (_, i) => (
-                  <div key={i} className="vx-card overflow-hidden rounded-2xl">
+              ? Array.from({ length: 4 }, (_, i) => (
+                  <div key={i} className="vx-card overflow-hidden rounded-xl">
                     <Skeleton className="aspect-[3/2] w-full rounded-none" />
-                    <div className="space-y-2 px-3 pt-2.5 pb-3">
+                    <div className="space-y-1.5 px-2.5 pt-2 pb-2.5">
                       <Skeleton className="h-3.5 w-full" />
                       <Skeleton className="h-3 w-1/3" />
                     </div>
