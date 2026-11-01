@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ThemeMode } from '@videox/ui';
+import { migrateThemeMode, type ThemeMode } from '@videox/ui';
 
 interface UiState {
   sidebarCollapsed: boolean;
@@ -16,12 +16,16 @@ export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
       sidebarCollapsed: false,
-      theme: 'system',
+      theme: 'dark',
       autoplayNext: true,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setTheme: (theme) => set({ theme }),
       setAutoplayNext: (autoplayNext) => set({ autoplayNext }),
     }),
-    { name: 'videox:pc-ui' },
+    {
+      name: 'videox:pc-ui',
+      version: 1,
+      migrate: migrateThemeMode as never,
+    },
   ),
 );

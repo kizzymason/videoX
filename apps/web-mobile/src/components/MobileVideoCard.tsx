@@ -1,10 +1,15 @@
 import { Link } from 'react-router-dom';
 import { formatCount, formatDuration, type VideoSummary } from '@videox/shared';
-import { cn } from '@videox/ui';
+import { SmartImage, cn } from '@videox/ui';
 import { prefetchWatchPage } from '../lib/prefetch-watch';
 import { useShowViewCount } from '../hooks/use-site';
 
-export const CARD_TEXT_HEIGHT = 62;
+/**
+ * 卡片文字区的高度预算（单列布局）。
+ * 标题两行 2×20.3 ≈ 41、作者行 16、上下内边距 20、描边 2 —— 留到 82 有余量。
+ * MasonryFeed 用它算虚拟列表的行高，算小了会出现"卡片压住下一张"。
+ */
+export const CARD_TEXT_HEIGHT = 82;
 
 /** 列表封面统一 3:2 横图，不再按竖版封面走 3:4。 */
 export const LIST_POSTER_ASPECT = '3 / 2';
@@ -18,6 +23,12 @@ export function cardHeight(_video: VideoSummary, columnWidth: number): number {
   return Math.round(columnWidth / LIST_POSTER_RATIO) + CARD_TEXT_HEIGHT;
 }
 
+/**
+ * 移动端视频卡。
+ *
+ * 单列之后封面就是主角：整卡带描边和阴影，标题压在卡片内部，和封面是一体的一张卡，
+ * 而不是"图 + 下面两行字"的松散组合。
+ */
 export function MobileVideoCard({
   video,
   className,
@@ -38,16 +49,14 @@ export function MobileVideoCard({
     <Link
       to={`/watch/${video.slug || video.id}`}
       onPointerDown={prefetchWatchPage}
-      className={cn('vx-press no-tap-highlight flex flex-col', className)}
+      className={cn('vx-card vx-press no-tap-highlight flex flex-col overflow-hidden rounded-2xl', className)}
     >
-      <div className="relative w-full overflow-hidden rounded-xl bg-muted" style={{ aspectRatio: ratio }}>
-        {poster ? (
-          <img src={poster} alt={video.title} loading="lazy" decoding="async" className="size-full object-cover" />
-        ) : null}
+      <div className="relative w-full overflow-hidden bg-muted" style={{ aspectRatio: ratio }}>
+        {poster ? <SmartImage src={poster} alt={video.title} loading="lazy" decoding="async" /> : null}
 
         {/* 只有拿到真实时长才显示。早期热链片源时长全是 0，标 00:00 反而误导。 */}
         {video.durationSeconds > 0 ? (
-          <span className="absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white tabular-nums">
+          <span className="absolute right-2 bottom-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums backdrop-blur-sm">
             {formatDuration(video.durationSeconds)}
           </span>
         ) : null}
@@ -59,14 +68,14 @@ export function MobileVideoCard({
         ) : null}
       </div>
 
-      <div className="px-0.5 pt-1.5">
-        <p className="line-clamp-2-cjk text-[13px] leading-[1.35] font-medium">{video.title}</p>
-        <p className="mt-1 truncate text-[11px] text-muted-foreground">
+      <div className="px-3 pt-2 pb-3">
+        <p className="line-clamp-2-cjk text-[14.5px] leading-[1.4] font-medium">{video.title}</p>
+        <p className="mt-1 truncate text-[11.5px] text-muted-foreground">
           {video.author?.displayName ?? '未知作者'}
           {showViewCount ? (
             <>
               <span className="mx-1 text-muted-foreground/40">·</span>
-              <span className="tabular-nums">{formatCount(video.viewCount)}</span>
+              <span className="tabular-nums">{formatCount(video.viewCount)} 次播放</span>
             </>
           ) : null}
         </p>

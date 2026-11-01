@@ -43,7 +43,7 @@ export function VideoGrid({
     return (
       <div className="space-y-2">
         <ListLoadingBar active />
-        <div className={cn(gridClass, 'vx-list-enter')}>
+        <div className={cn(gridClass, 'vx-list-enter vx-stagger')}>
           {Array.from({ length: 12 }, (_, i) => (
             <VideoCardSkeleton key={i} />
           ))}
@@ -59,7 +59,7 @@ export function VideoGrid({
   return (
     <div className="space-y-2">
       <ListLoadingBar active={fetching} />
-      <div key={transitionKey} className={cn(gridClass, 'vx-list-enter')}>
+      <div key={transitionKey} className={cn(gridClass, 'vx-list-enter vx-stagger')}>
         {videos.map((video) => (
           <VideoCard key={video.id} video={video} progressPercent={progressOf?.(video)} />
         ))}

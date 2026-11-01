@@ -10,6 +10,7 @@ export { cn } from './lib/cn.js';
 
 export { Button, buttonVariants, type ButtonProps } from './components/button.js';
 export { Input, Textarea } from './components/input.js';
+export { SmartImage, type SmartImageProps } from './components/image.js';
 export {
   Card,
   CardHeader,
@@ -94,6 +95,7 @@ export { BrowseModeToggle } from './components/browse-toggle.js';
 
 export {
   useTheme,
+  migrateThemeMode,
   useMediaQuery,
   useDebouncedValue,
   useInfiniteSentinel,

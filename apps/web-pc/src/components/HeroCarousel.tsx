@@ -4,7 +4,7 @@ import useEmblaCarousel from 'embla-carousel-react';
 import Autoplay from 'embla-carousel-autoplay';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Banner } from '@videox/shared';
-import { cn } from '@videox/ui';
+import { SmartImage, cn } from '@videox/ui';
 import { contentApi } from '../lib/api';
 import { prefetchWatchPage } from '../lib/prefetch-watch';
 
@@ -36,7 +36,7 @@ export function HeroCarousel({ banners }: { banners: Banner[] }) {
 
   return (
     <div className="group/hero relative">
-      <div ref={emblaRef} className="overflow-hidden rounded-2xl">
+      <div ref={emblaRef} className="overflow-hidden rounded-2xl border border-border shadow-card">
         <div className="flex">
           {banners.map((banner) => (
             <button
@@ -46,10 +46,11 @@ export function HeroCarousel({ banners }: { banners: Banner[] }) {
               className="group relative min-w-0 flex-[0_0_100%] text-left"
             >
               <div className="relative aspect-[21/9] w-full overflow-hidden bg-muted">
-                <img
+                <SmartImage
                   src={banner.imageUrl}
                   alt={banner.title}
-                  className="size-full object-cover transition-transform duration-700 ease-out-quint group-hover:scale-[1.02]"
+                  loading="eager"
+                  className="transition-transform duration-700 ease-out-quint group-hover:scale-[1.02]"
                 />
                 {/* 左侧渐变压暗，保证白色标题在任何封面上都读得清 */}
                 <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/25 to-transparent" />
