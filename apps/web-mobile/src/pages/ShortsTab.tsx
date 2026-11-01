@@ -1,10 +1,10 @@
 import * as React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bookmark, Heart, Maximize, Volume2, VolumeX } from 'lucide-react';
+import { Bookmark, Heart, Lock, Maximize, Volume2, VolumeX } from 'lucide-react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { PlayPauseHint, usePlayPauseFlash, usePlayer, type PlayerEngine, type PlayerSource } from '@videox/player';
 import { formatCount, parseShortsTrialDetails, type ShortsTrialQuota, type VideoSummary } from '@videox/shared';
-import { Spinner } from '@videox/ui';
+import { Button, Spinner } from '@videox/ui';
 import { ApiError, contentApi, socialApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
 import { track } from '../lib/analytics';
@@ -22,11 +22,49 @@ function enterFullscreen(container: HTMLElement | null) {
 }
 
 /**
+ * Shorts 登录墙：竖滑短片只对登录用户开放。
+ *
+ * 门禁做在数据之前——未登录时整个 feed 组件都不挂载，query 不会发出，
+ * 页面上不残留任何一帧可看的短片，而不是"盖一层遮罩、底下还在播"。
+ */
+export function ShortsTab({ active = true }: { active?: boolean }) {
+  const user = useAuthStore((s) => s.user);
+  const initializing = useAuthStore((s) => s.initializing);
+
+  // 进站时的静默续登录还没回来，先铺黑，避免已登录用户闪一下登录墙。
+  if (initializing) {
+    return <div className="fixed inset-0 z-30 bg-black" style={{ colorScheme: 'dark' }} />;
+  }
+  if (!user) return <ShortsLoginWall />;
+  return <ShortsFeed active={active} />;
+}
+
+function ShortsLoginWall() {
+  return (
+    <div
+      className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-black px-8 text-center text-white"
+      style={{ colorScheme: 'dark' }}
+    >
+      <div className="grid size-20 place-items-center rounded-full bg-white/10">
+        <Lock className="size-8" />
+      </div>
+      <div className="space-y-2">
+        <p className="text-[26px] leading-tight font-semibold tracking-tight">登录后观看 Shorts</p>
+        <p className="text-[14px] text-white/60">竖滑短片需登录后观看</p>
+      </div>
+      <Button asChild size="lg" className="h-13 w-full max-w-xs rounded-full bg-white text-base font-medium text-black hover:bg-white/90">
+        <Link to={`/login?redirect=${encodeURIComponent('/shorts')}`}>登录 / 注册</Link>
+      </Button>
+    </div>
+  );
+}
+
+/**
  * Shorts：全屏竖滑，点击不进 /watch。数据走 GET /api/videos/shorts。
  * 进入视口（~80%）才取 play-ticket + usePlayer 起播；离开即卸载引擎，全 feed 只活一个。
  * 顶/底安全区都铺黑，离开由 App.applyChrome 卸回亮色。封面满屏；点按切换播放并闪 TikTok 式提示。
  */
-export function ShortsTab({ active = true }: { active?: boolean }) {
+function ShortsFeed({ active = true }: { active?: boolean }) {
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const query = useInfiniteQuery({
     queryKey: ['shorts'],
