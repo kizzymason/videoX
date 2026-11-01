@@ -25,6 +25,7 @@ import {
   injectTokenIntoPlaylist,
   rewriteKeyUri,
 } from './manifest.js';
+import { buildHotlinkMaster } from './hotlink-manifest.js';
 
 export const mediaRouter: Router = Router();
 
@@ -183,7 +184,26 @@ mediaRouter.get(
 
       if (collected) {
         const hotlink = HotlinkProxyService.getInstance();
-        const { url } = await hotlink.getPlayUrl(collected.id);
+        const { url, qualities } = await hotlink.getPlayUrl(collected.id);
+
+        // 源站给了整条码率阶梯（流畅 / 标清 / 高清）时现拼 master：分档指回我们自己的
+        // /hls/:videoId/qN/index.m3u8，播放器每次取分档清单都会重新换地址，token 不会过期。
+        // 只有一档时仍旧 302，少一跳。
+        if (qualities.length >= 2) {
+          const token = String(req.query[PLAY_TOKEN_PARAM] ?? req.headers['x-play-token'] ?? '');
+          try {
+            const master = buildHotlinkMaster(qualities);
+            setDirectoryPlayCookie(res, videoId, token, claims.exp);
+            setCors(res);
+            res.set('Cache-Control', 'no-store');
+            res.type('application/vnd.apple.mpegurl').send(injectTokenIntoPlaylist(master, token));
+            return;
+          } catch (error) {
+            // 拼 master 出任何问题都退回单档 302，宁可低清也不能播不了。
+            logger.warn({ videoId, err: error }, '热链多清晰度清单生成失败，回退单档播放');
+          }
+        }
+
         setCors(res);
         res.redirect(302, url);
         return;
@@ -226,6 +246,31 @@ mediaRouter.get(
       streamSessionKey(claims),
       settings.maxConcurrentStreams || env.MAX_CONCURRENT_STREAMS,
     );
+
+    // 热链视频的分档：q0/q1/q2 对应源站给的 qualities 下标，清单现取现转，
+    // 分片地址（含源站 token）每次都是新鲜的。
+    if (isHotlinkVideo(video)) {
+      const match = /^q(\d+)$/.exec(rendition);
+      if (!match) throw AppError.notFound('清晰度不存在');
+
+      const [collected] = await db
+        .select({ id: t.collectedVideos.id })
+        .from(t.collectedVideos)
+        .where(eq(t.collectedVideos.videoId, video.id))
+        .limit(1);
+      if (!collected) throw AppError.notFound('热链视频源记录缺失');
+
+      const renditionPlaylist = await HotlinkProxyService.getInstance().getRenditionPlaylist(
+        collected.id,
+        Number(match[1]),
+      );
+      if (!renditionPlaylist) throw AppError.notFound('该清晰度暂不可用');
+
+      setCors(res);
+      res.set('Cache-Control', 'no-store');
+      res.type('application/vnd.apple.mpegurl').send(renditionPlaylist.playlist);
+      return;
+    }
 
     const storage = await getStorage();
     const key = sanitizeKey(`hls/${mediaOwnerId(video)}/${rendition}/index.m3u8`);

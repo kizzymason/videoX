@@ -7,6 +7,7 @@ import { db, t } from '../../../core/db.js';
 import { logger } from '../../../core/logger.js';
 import { AccountPoolManager } from '../pool-manager.js';
 import { createClientFromAccount } from '../yitongkan/api-client.js';
+import { absolutizePlaylist } from '../../media/hotlink-manifest.js';
 
 /**
  * 热链播放地址缓存（内存 + TTL）
@@ -24,11 +25,21 @@ interface CacheEntry {
 
 const playUrlCache = new Map<string, CacheEntry>();
 
+/**
+ * 分档清单缓存。源站地址几分钟就失效，所以只缓存 2 分钟：
+ * 播放器切档、拖进度条都会重新取一次，每次拿到的分片地址都是新鲜的。
+ */
+const renditionCache = new Map<string, { playlist: string; label: string; expiresAt: number }>();
+const RENDITION_CACHE_TTL_MS = 2 * 60 * 1000;
+
 // 定期清理过期缓存，防止内存泄漏
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of playUrlCache) {
     if (entry.expiresAt < now) playUrlCache.delete(key);
+  }
+  for (const [key, entry] of renditionCache) {
+    if (entry.expiresAt < now) renditionCache.delete(key);
   }
 }, 60_000).unref();
 
@@ -163,10 +174,47 @@ export class HotlinkProxyService {
   }
 
   /**
+   * 取某一档的 media playlist，相对地址补成绝对地址后返回。
+   *
+   * 源站每档都是独立的 media playlist（没有 master），分片与密钥分散在不同域名上，
+   * 由我们转发清单、浏览器直连 CDN 拉分片。index 对应 qualities 数组下标。
+   */
+  async getRenditionPlaylist(
+    collectedVideoId: string,
+    index: number,
+  ): Promise<{ playlist: string; label: string } | null> {
+    const cacheKey = `${collectedVideoId}:${index}`;
+    const cached = renditionCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return { playlist: cached.playlist, label: cached.label };
+    }
+
+    const { qualities } = await this.getPlayUrl(collectedVideoId);
+    const quality = qualities[index];
+    if (!quality) return null;
+
+    const response = await fetch(quality.url);
+    if (!response.ok) {
+      throw new Error(`源站分档清单请求失败: ${response.status}`);
+    }
+
+    const playlist = absolutizePlaylist(await response.text(), quality.url);
+    renditionCache.set(cacheKey, {
+      playlist,
+      label: quality.label,
+      expiresAt: Date.now() + RENDITION_CACHE_TTL_MS,
+    });
+    return { playlist, label: quality.label };
+  }
+
+  /**
    * 清除指定视频的播放地址缓存
    */
   invalidateCache(collectedVideoId: string): void {
     playUrlCache.delete(collectedVideoId);
+    for (const key of renditionCache.keys()) {
+      if (key.startsWith(`${collectedVideoId}:`)) renditionCache.delete(key);
+    }
   }
 
   /**
