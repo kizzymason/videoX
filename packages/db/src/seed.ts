@@ -107,7 +107,7 @@ const DEFAULT_SITE_SETTINGS = {
   siteKeywords: '视频,在线观看,HLS,会员,PandaGV',
   logoUrl: null,
   faviconUrl: null,
-  defaultTheme: 'light',
+  defaultTheme: 'dark',
   defaultBrowseMode: 'paged',
   showViewCount: false,
   icpBeian: null,

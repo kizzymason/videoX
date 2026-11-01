@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ThemeMode } from '@videox/ui';
+import { migrateThemeMode, type ThemeMode } from '@videox/ui';
 
 interface UiState {
   theme: ThemeMode;
@@ -13,7 +13,7 @@ interface UiState {
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
-      theme: 'system',
+      theme: 'dark',
       scrollPositions: {},
       setTheme: (theme) => set({ theme }),
       rememberScroll: (key, offset) =>
@@ -21,6 +21,8 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: 'videox:mobile-ui',
+      version: 1,
+      migrate: migrateThemeMode as never,
       // 滚动位置是会话级的，持久化到下次进站反而莫名其妙。
       partialize: (state) => ({ theme: state.theme }) as UiState,
     },

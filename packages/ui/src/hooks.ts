@@ -18,7 +18,19 @@ function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
 function applyTheme(resolved: 'light' | 'dark') {
   const root = document.documentElement;
   root.classList.toggle('dark', resolved === 'dark');
+  root.classList.toggle('light', resolved === 'light');
   root.style.colorScheme = resolved;
+}
+
+/**
+ * 老版本把「跟随系统」当默认值写进了持久化状态，于是绝大多数老用户其实
+ * 从没主动选过主题，却会被这条设置钉死在系统色上。升到 v1 时把它一次性
+ * 归到 dark；用户显式选过的 light / dark 原样保留。
+ */
+export function migrateThemeMode(persisted: unknown): unknown {
+  const next = persisted as { state?: { theme?: string } } | null;
+  if (next?.state && next.state.theme === 'system') next.state.theme = 'dark';
+  return next;
 }
 
 /**

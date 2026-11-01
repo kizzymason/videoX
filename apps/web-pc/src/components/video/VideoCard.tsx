@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { formatCount, formatDuration, formatRelativeTime, type VideoSummary } from '@videox/shared';
-import { Badge, Skeleton, cn } from '@videox/ui';
+import { Badge, Skeleton, SmartImage, cn } from '@videox/ui';
 import { prefetchWatchPage } from '../../lib/prefetch-watch';
 import { useShowViewCount } from '../../hooks/use-site';
 
@@ -14,7 +14,11 @@ export interface VideoCardProps {
 }
 
 /**
- * 视频卡片。点播有会员门禁，封面不挂悬停预览片。
+ * 视频卡片。
+ *
+ * 网格里是一张"有厚度"的卡：描边 + 阴影 + 悬浮抬 2px；右侧相关列表是行内卡，
+ * 只做底色提亮，不再叠阴影——侧栏一屏十几张，全带阴影会显得脏。
+ * 点播有会员门禁，封面不挂悬停预览片。
  */
 export function VideoCard({ video, progressPercent, className, layout = 'grid' }: VideoCardProps) {
   const isRow = layout === 'row';
@@ -24,27 +28,25 @@ export function VideoCard({ video, progressPercent, className, layout = 'grid' }
     <Link
       to={`/watch/${video.slug || video.id}`}
       onMouseEnter={prefetchWatchPage}
-      className={cn('group/card block', isRow ? 'flex gap-3' : 'space-y-2.5', className)}
+      className={cn(
+        'group/card block',
+        isRow ? 'vx-row-card flex gap-3 rounded-xl p-2' : 'vx-card overflow-hidden rounded-xl',
+        className,
+      )}
     >
       <div
         className={cn(
-          'hover-zoom relative overflow-hidden rounded-xl bg-muted',
-          isRow ? 'aspect-video w-40 shrink-0' : 'aspect-video w-full',
+          'hover-zoom relative shrink-0 overflow-hidden bg-muted',
+          isRow ? 'aspect-video w-40 rounded-lg' : 'aspect-video w-full',
         )}
       >
         {video.posterUrl ? (
-          <img
-            src={video.posterUrl}
-            alt={video.title}
-            loading="lazy"
-            decoding="async"
-            className="size-full object-cover"
-          />
+          <SmartImage src={video.posterUrl} alt={video.title} loading="lazy" decoding="async" />
         ) : null}
 
         {/* 只有拿到真实时长才显示。早期热链片源时长全是 0，标 00:00 反而误导。 */}
         {video.durationSeconds > 0 ? (
-          <span className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">
+          <span className="absolute right-1.5 bottom-1.5 rounded bg-black/75 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums backdrop-blur-sm">
             {formatDuration(video.durationSeconds)}
           </span>
         ) : null}
@@ -56,10 +58,10 @@ export function VideoCard({ video, progressPercent, className, layout = 'grid' }
         ) : null}
       </div>
 
-      <div className={cn('min-w-0', isRow && 'flex-1')}>
+      <div className={cn('min-w-0', isRow ? 'flex-1 py-0.5' : 'px-3 pt-2.5 pb-3')}>
         <h3
           className={cn(
-            'line-clamp-2-cjk text-sm leading-snug font-medium transition-colors group-hover/card:text-foreground/80',
+            'line-clamp-2-cjk text-sm leading-snug font-medium transition-colors duration-200 group-hover/card:text-foreground/85',
             isRow && 'text-[13px]',
           )}
           title={video.title}
@@ -91,7 +93,7 @@ export function VideoCardSkeleton({ layout = 'grid' }: { layout?: 'grid' | 'row'
   if (layout === 'row') {
     return (
       <div className="flex gap-3">
-        <Skeleton className="aspect-video w-40 shrink-0 rounded-xl" />
+        <Skeleton className="aspect-video w-40 shrink-0 rounded-lg" />
         <div className="flex-1 space-y-2 py-1">
           <Skeleton className="h-3.5 w-full" />
           <Skeleton className="h-3.5 w-2/3" />
@@ -101,10 +103,12 @@ export function VideoCardSkeleton({ layout = 'grid' }: { layout?: 'grid' | 'row'
     );
   }
   return (
-    <div className="space-y-2.5">
-      <Skeleton className="aspect-video w-full rounded-xl" />
-      <Skeleton className="h-4 w-full" />
-      <Skeleton className="h-3 w-1/2" />
+    <div className="vx-card overflow-hidden rounded-xl">
+      <Skeleton className="aspect-video w-full rounded-none" />
+      <div className="space-y-2 px-3 pt-2.5 pb-3">
+        <Skeleton className="h-3.5 w-full" />
+        <Skeleton className="h-3 w-2/3" />
+      </div>
     </div>
   );
 }

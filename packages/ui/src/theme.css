@@ -19,9 +19,12 @@
   --radius-lg: 0.875rem;
   --radius-xl: 1.125rem;
 
-  /* 卡片阴影刻意做得很淡：主要靠描边分层，阴影只用来提示悬浮。 */
-  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.04), 0 1px 3px oklch(0 0 0 / 0.06);
+  /* 卡片是内容的主角：描边负责"清晰"，阴影负责"有厚度"，两者都要在。
+     悬浮时再抬一层，幅度小（-2px），靠阴影变化表达"拿起来了"。 */
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.06), 0 4px 12px oklch(0 0 0 / 0.07);
+  --shadow-card-hover: 0 2px 4px oklch(0 0 0 / 0.08), 0 14px 32px oklch(0 0 0 / 0.12);
   --shadow-pop: 0 8px 24px oklch(0 0 0 / 0.1), 0 2px 6px oklch(0 0 0 / 0.06);
+  --shadow-raise: 0 10px 30px oklch(0 0 0 / 0.14);
 
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -59,6 +62,8 @@
   --vip-foreground: oklch(0.26 0.06 78);
 
   --border: oklch(0.922 0.003 285);
+  /* 卡片描边比通用描边略实一点，否则一屏卡片会糊成一片。 */
+  --border-strong: oklch(0.885 0.004 285);
   --input: oklch(0.922 0.003 285);
   --ring: oklch(0.17 0.004 285);
 
@@ -78,10 +83,11 @@
 }
 
 .dark {
-  --background: oklch(0.145 0.004 285);
+  --background: oklch(0.135 0.004 285);
   --foreground: oklch(0.96 0.002 285);
 
-  --card: oklch(0.178 0.004 285);
+  /* 卡片与底的亮度差拉到 0.06：暗色下没有阴影托底，全靠这一档分离。 */
+  --card: oklch(0.196 0.004 285);
   --card-foreground: oklch(0.96 0.002 285);
   --popover: oklch(0.19 0.004 285);
   --popover-foreground: oklch(0.96 0.002 285);
@@ -108,7 +114,8 @@
   --vip: oklch(0.79 0.14 80);
   --vip-foreground: oklch(0.22 0.06 78);
 
-  --border: oklch(1 0 0 / 0.1);
+  --border: oklch(1 0 0 / 0.12);
+  --border-strong: oklch(1 0 0 / 0.19);
   --input: oklch(1 0 0 / 0.14);
   --ring: oklch(0.72 0.006 285);
 
@@ -123,6 +130,11 @@
   --chart-3: oklch(0.74 0.13 165);
   --chart-4: oklch(0.79 0.14 78);
   --chart-5: oklch(0.7 0.17 12);
+
+  /* 暗色阴影要更黑更散，再补一条顶部内高光，卡片才有"面"的感觉。 */
+  --shadow-card: inset 0 1px 0 oklch(1 0 0 / 0.04), 0 1px 2px oklch(0 0 0 / 0.5), 0 10px 26px oklch(0 0 0 / 0.38);
+  --shadow-card-hover: inset 0 1px 0 oklch(1 0 0 / 0.07), 0 2px 6px oklch(0 0 0 / 0.5), 0 18px 42px oklch(0 0 0 / 0.5);
+  --shadow-raise: 0 12px 34px oklch(0 0 0 / 0.55);
 }
 
 @theme inline {
@@ -307,5 +319,114 @@
   }
   .vx-chrome-topbar {
     view-transition-name: vx-topbar;
+  }
+
+  /* 卡片：描边负责清晰、阴影负责厚度，悬浮抬 2px 表达"拿起来"。 */
+  .vx-card {
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
+    transition:
+      transform 220ms var(--ease-out-quint),
+      box-shadow 220ms var(--ease-out-quint),
+      border-color 220ms var(--ease-out-quint);
+  }
+  .vx-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-card-hover);
+  }
+  /* 触屏没有真正的 hover，点完会"粘住"抬升态，这里按下去就还原。 */
+  @media (hover: none) {
+    .vx-card:hover,
+    .vx-card:active {
+      transform: none;
+      border-color: var(--border);
+      box-shadow: var(--shadow-card);
+    }
+  }
+  .vx-card:active {
+    transform: translateY(0) scale(0.997);
+  }
+
+  /* 行内卡片（侧栏、相关推荐）不整卡抬升，只提亮底与描边。 */
+  .vx-row-card {
+    border: 1px solid transparent;
+    transition:
+      background-color 180ms var(--ease-out-quint),
+      border-color 180ms var(--ease-out-quint);
+  }
+  .vx-row-card:hover {
+    background-color: var(--accent);
+    border-color: var(--border);
+  }
+  @media (hover: none) {
+    .vx-row-card:hover {
+      background-color: transparent;
+      border-color: transparent;
+    }
+  }
+
+  /* 封面淡入：解码完成后才显形，避免灰块直接跳成照片。 */
+  .vx-img-fade {
+    opacity: 0;
+    transition: opacity 420ms var(--ease-out-quint);
+  }
+  .vx-img-fade[data-loaded='true'] {
+    opacity: 1;
+  }
+
+  /* 首屏错峰进场：每项 18ms、封顶 8 项，整段不到 400ms。 */
+  .vx-stagger > * {
+    animation: vx-item-in 220ms var(--ease-out-quint) both;
+  }
+  .vx-stagger > *:nth-child(2) {
+    animation-delay: 18ms;
+  }
+  .vx-stagger > *:nth-child(3) {
+    animation-delay: 36ms;
+  }
+  .vx-stagger > *:nth-child(4) {
+    animation-delay: 54ms;
+  }
+  .vx-stagger > *:nth-child(5) {
+    animation-delay: 72ms;
+  }
+  .vx-stagger > *:nth-child(6) {
+    animation-delay: 90ms;
+  }
+  .vx-stagger > *:nth-child(7) {
+    animation-delay: 108ms;
+  }
+  .vx-stagger > *:nth-child(8) {
+    animation-delay: 126ms;
+  }
+  @keyframes vx-item-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* 系统开了「减弱动态效果」就整体收敛：动画不能跟无障碍设置对着干。 */
+  @media (prefers-reduced-motion: reduce) {
+    .vx-page-enter,
+    .vx-list-enter,
+    .vx-stagger > *,
+    .vx-loading-bar::after {
+      animation: none !important;
+    }
+    .vx-card,
+    .vx-press,
+    .vx-img-fade {
+      transition: none !important;
+    }
+    .vx-card:hover {
+      transform: none;
+    }
   }
 }

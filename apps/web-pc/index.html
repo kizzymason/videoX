@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" class="light">
+<html lang="zh-CN" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -20,7 +20,25 @@
         location.replace('/m' + path + location.search + location.hash);
       })();
     </script>
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#0a0a0c" />
+    <!-- 先上色再挂载：默认暗色，只有用户显式选过亮色才走亮色，避免首帧白闪。 -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('videox:theme');
+          var dark = stored
+            ? stored === 'dark' || (stored === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+            : true;
+          var root = document.documentElement;
+          root.classList.toggle('dark', dark);
+          root.classList.toggle('light', !dark);
+          var color = dark ? '#0a0a0c' : '#ffffff';
+          root.style.backgroundColor = color;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', color);
+        } catch (e) {}
+      })();
+    </script>
     <title>PandaGV - Gay Videos &amp; GV 男同视频</title>
     <meta
       name="description"
