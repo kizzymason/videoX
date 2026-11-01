@@ -48,6 +48,8 @@ export interface PlayerSnapshot {
   ended: boolean;
   volume: number;
   muted: boolean;
+  /** 静音是自动播放策略兜底造成的（不是用户自己选的），点一下即可恢复声音。 */
+  autoMuted: boolean;
   playbackRate: number;
   levels: QualityLevel[];
   /** 当前实际播放的档位索引 */

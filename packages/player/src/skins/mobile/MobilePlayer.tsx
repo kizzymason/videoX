@@ -116,6 +116,7 @@ export function MobilePlayer({
       ref={containerRef}
       className={cn('relative aspect-video w-full touch-none overflow-hidden bg-black select-none', className)}
       {...handlers}
+      onPointerDownCapture={() => engine.unmuteIfAutoMuted()}
     >
       <video
         ref={videoRef}
@@ -157,6 +158,12 @@ export function MobilePlayer({
       />
 
       <GestureHintLayer hint={hint} />
+
+      {snapshot.autoMuted && !snapshot.gate.blocked ? (
+        <div className="pointer-events-none absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/60 px-4 py-2 text-[13px] font-medium text-white backdrop-blur-sm">
+          点击开启声音
+        </div>
+      ) : null}
 
       {/* 锁屏后只留一个解锁按钮 */}
       {locked ? (

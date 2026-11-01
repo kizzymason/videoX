@@ -35,6 +35,7 @@ function emptySnapshot(): PlayerSnapshot {
     ended: false,
     volume: prefs.getVolume(),
     muted: prefs.getMuted(),
+    autoMuted: false,
     playbackRate: prefs.getRate(),
     levels: [],
     currentLevel: -1,
@@ -599,6 +600,9 @@ export class PlayerEngine {
         video.muted = true;
         try {
           await video.play();
+          // 这是"为了能自动播才静音"，不是用户的选择：标记出来，点一下就恢复声音，
+          // 也绝不写进偏好（否则以后每条片子都从静音开始）。
+          this.patch({ autoMuted: true });
         } catch {
           this.patch({ paused: true });
         } finally {
@@ -637,6 +641,7 @@ export class PlayerEngine {
     const next = Math.max(0, Math.min(1, volume));
     video.volume = next;
     if (next > 0 && video.muted) video.muted = false;
+    if (this.snapshot.autoMuted) this.patch({ autoMuted: false });
   }
 
   toggleMute(): void {
@@ -644,6 +649,20 @@ export class PlayerEngine {
     if (!video) return;
     video.muted = !video.muted;
     if (!video.muted && video.volume === 0) video.volume = 0.5;
+    if (this.snapshot.autoMuted) this.patch({ autoMuted: false });
+  }
+
+  /**
+   * 用户碰了一下播放器：如果当前静音是被自动播放策略逼的，就在这里恢复声音。
+   * 调用点挂在播放器根节点的 pointerdown 捕获阶段——那一下本身就是用户手势，
+   * 浏览器允许此时开声。
+   */
+  unmuteIfAutoMuted(): void {
+    const video = this.video;
+    if (!video || !this.snapshot.autoMuted) return;
+    if (video.volume === 0) video.volume = 1;
+    video.muted = false;
+    this.patch({ autoMuted: false });
   }
 
   setRate(rate: number): void {

@@ -1,21 +1,29 @@
 import * as React from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, useNavigationType } from 'react-router-dom';
 import { cn, TooltipProvider } from '@videox/ui';
 import { useUiStore } from '../../stores/ui';
 import { track } from '../../lib/analytics';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { SiteFooter } from './SiteFooter';
+import { disableNativeScrollRestoration, useScrollRestoration } from '../../lib/scroll-restore';
 
 export function AppShell() {
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
   const location = useLocation();
+  const navigationType = useNavigationType();
   const fullBleed = location.pathname.startsWith('/shorts');
+
+  // 返回（POP）时不要跳顶，交给 scroll-restore 还原到离开时的位置。
+  React.useEffect(() => {
+    disableNativeScrollRestoration();
+  }, []);
+  useScrollRestoration();
 
   React.useEffect(() => {
     track('pageview');
-    if (!fullBleed) window.scrollTo({ top: 0 });
-  }, [fullBleed, location.pathname, location.search]);
+    if (!fullBleed && navigationType !== 'POP') window.scrollTo({ top: 0 });
+  }, [fullBleed, location.pathname, location.search, navigationType]);
 
   return (
     <TooltipProvider>
