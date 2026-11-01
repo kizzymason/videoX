@@ -23,13 +23,22 @@ function applyTheme(resolved: 'light' | 'dark') {
 }
 
 /**
- * 老版本把「跟随系统」当默认值写进了持久化状态，于是绝大多数老用户其实
- * 从没主动选过主题，却会被这条设置钉死在系统色上。升到 v1 时把它一次性
- * 归到 dark；用户显式选过的 light / dark 原样保留。
+ * 主题默认值改过两次，老状态得跟着走，否则"从没选过主题"的人会被旧默认钉死：
+ * - v1：旧默认值 `system` 是自动写进去的，归到当时的默认 dark。
+ * - v2：v1 写进去的 `dark` 同样是自动写的，现在默认改回 light，一次还原。
+ *
+ * 判据只看持久化里的版本号：显式选过 light 的从来不会被改到 dark，
+ * 所以这两步都不会动到他们的选择。
  */
-export function migrateThemeMode(persisted: unknown): unknown {
+export function migrateThemeMode(persisted: unknown, version?: number): unknown {
   const next = persisted as { state?: { theme?: string } } | null;
-  if (next?.state && next.state.theme === 'system') next.state.theme = 'dark';
+  if (!next?.state) return persisted;
+  if (version === undefined || version < 1) {
+    if (next.state.theme === 'system') next.state.theme = 'dark';
+  }
+  if (version === undefined || version < 2) {
+    if (next.state.theme === 'dark') next.state.theme = 'light';
+  }
   return next;
 }
 

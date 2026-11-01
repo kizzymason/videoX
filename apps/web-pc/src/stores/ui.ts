@@ -16,7 +16,7 @@ export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
       sidebarCollapsed: false,
-      theme: 'dark',
+      theme: 'light',
       autoplayNext: true,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setTheme: (theme) => set({ theme }),
@@ -24,7 +24,7 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: 'videox:pc-ui',
-      version: 1,
+      version: 2,
       migrate: migrateThemeMode as never,
     },
   ),
