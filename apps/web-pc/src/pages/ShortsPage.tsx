@@ -1,9 +1,9 @@
 import * as React from 'react';
-import { Bookmark, Heart, Maximize, Volume2, VolumeX } from 'lucide-react';
+import { Bookmark, Heart, Lock, Maximize, Volume2, VolumeX } from 'lucide-react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { PlayPauseHint, usePlayPauseFlash, usePlayer, type PlayerEngine, type PlayerSource } from '@videox/player';
 import { formatCount, parseShortsTrialDetails, type ShortsTrialQuota, type VideoSummary } from '@videox/shared';
-import { cn } from '@videox/ui';
+import { Button, cn } from '@videox/ui';
 import { ApiError, contentApi, socialApi } from '../lib/api';
 import { flatten, nextPageParam } from '../lib/query';
 import { track } from '../lib/analytics';
@@ -30,12 +30,17 @@ function enterFullscreen(container: HTMLElement | null) {
  */
 export function ShortsPage() {
   useSeo({ title: 'Shorts' });
+  const user = useAuthStore((s) => s.user);
+  const initializing = useAuthStore((s) => s.initializing);
+  const openAuth = useAuthModalStore((s) => s.openAuth);
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const query = useInfiniteQuery({
     queryKey: ['pc-shorts'],
     queryFn: ({ pageParam }) => contentApi.shorts({ page: pageParam, pageSize: 10 }),
     initialPageParam: 1,
     getNextPageParam: nextPageParam,
+    // 未登录不取数据：门禁在数据之前，而不是遮罩盖着一个还在播的 feed。
+    enabled: Boolean(user),
   });
   const videos = flatten(query.data?.pages);
   const feedRef = React.useRef<HTMLDivElement | null>(null);
@@ -49,6 +54,31 @@ export function ShortsPage() {
   const onActiveChange = React.useCallback((id: string, active: boolean) => {
     setActiveId((current) => (active ? id : current === id ? null : current));
   }, []);
+
+  if (initializing) return <div className="h-[calc(100dvh-4rem)] w-full bg-black" />;
+
+  if (!user) {
+    return (
+      <div className="grid h-[calc(100dvh-4rem)] w-full place-items-center bg-black text-white">
+        <div className="flex flex-col items-center gap-6 px-8 text-center">
+          <div className="grid size-20 place-items-center rounded-full bg-white/10">
+            <Lock className="size-8" />
+          </div>
+          <div className="space-y-2">
+            <p className="text-[26px] leading-tight font-semibold tracking-tight">登录后观看 Shorts</p>
+            <p className="text-sm text-white/60">竖滑短片需登录后观看</p>
+          </div>
+          <Button
+            size="lg"
+            onClick={() => openAuth('login', '/shorts')}
+            className="h-12 w-56 rounded-full bg-white text-base font-medium text-black hover:bg-white/90"
+          >
+            登录 / 注册
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[calc(100dvh-4rem)] w-full bg-black text-white">

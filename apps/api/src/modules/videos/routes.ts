@@ -65,10 +65,10 @@ videosRouter.get(
   }),
 );
 
-/** Shorts：只按 kind=shorts，不按宽高。必须挂在 /:idOrSlug 前面。 */
+/** Shorts：只按 kind=shorts，不按宽高。必须挂在 /:idOrSlug 前面。未登录直接 401。 */
 videosRouter.get(
   '/shorts',
-  optionalAuth,
+  requireAuth,
   validate({ query: videoListQuerySchema }),
   asyncHandler(async (req, res) => {
     const q = query<{
