@@ -13,6 +13,7 @@ import { RegisterPage } from './pages/RegisterPage';
 import { SearchPage } from './pages/SearchPage';
 import { AuthGatePage } from './pages/AuthGatePage';
 import { prefetchWatchPage } from './lib/prefetch-watch';
+import { disableNativeScrollRestoration, useScrollRestoration } from './lib/scroll-restore';
 
 const WatchPage = React.lazy(() => import('./pages/WatchPage').then((m) => ({ default: m.WatchPage })));
 
@@ -127,6 +128,12 @@ export function App() {
   React.useEffect(() => {
     setMode(themeMode);
   }, [themeMode, setMode]);
+
+  React.useEffect(() => {
+    disableNativeScrollRestoration();
+  }, []);
+  // 从播放页返回列表时，把列表恢复到离开时的位置，而不是回到第一屏。
+  useScrollRestoration();
 
   React.useEffect(() => {
     track('pageview');

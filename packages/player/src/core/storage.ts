@@ -21,6 +21,23 @@ function write(key: string, value: unknown): void {
   }
 }
 
+/**
+ * 历史遗留清理：早期版本把"自动播放被拦截后的静音"也写进了 muted 偏好，
+ * 结果所有人打开任何一条片子都是静音。这里一次性把旧的 muted=true 清掉，
+ * 之后再静音就一定是用户自己点的按钮。
+ */
+function migrateStaleMute(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (localStorage.getItem(`${NS}:muteMigration`) === '1') return;
+    if (read<boolean>('muted', false)) write('muted', false);
+    localStorage.setItem(`${NS}:muteMigration`, '1');
+  } catch {
+    /* 无痕模式忽略 */
+  }
+}
+migrateStaleMute();
+
 export const prefs = {
   getVolume: () => Math.min(1, Math.max(0, read('volume', 1))),
   setVolume: (v: number) => write('volume', Math.min(1, Math.max(0, v))),

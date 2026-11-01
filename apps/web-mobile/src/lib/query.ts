@@ -58,7 +58,8 @@ export function useBrowsableList<T>(
         const nextParams = new URLSearchParams(params);
         if (safe <= 1) nextParams.delete('page');
         else nextParams.set('page', String(safe));
-        setParams(nextParams, { replace: true });
+        // 翻页要进历史栈：用户按返回键应当回到上一页，而不是直接跳出列表。
+        setParams(nextParams);
       } else {
         setLocalPage(safe);
       }

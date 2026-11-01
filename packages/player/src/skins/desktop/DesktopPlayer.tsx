@@ -99,6 +99,7 @@ export function DesktopPlayer({
       onMouseMove={keepVisible}
       onMouseLeave={() => !pinned && setControlsVisible(false)}
       onDoubleClick={() => void engine.toggleFullscreen(containerRef.current)}
+      onPointerDownCapture={() => engine.unmuteIfAutoMuted()}
     >
       <video
         ref={videoRef}
