@@ -119,13 +119,13 @@ export function HomeTab() {
         <ListLoadingBar active={showSkeleton || query.fetching} className="mx-3 mt-2 w-auto" />
         <div
           key={`${query.transitionKey}:${showSkeleton ? 'skeleton' : 'data'}`}
-          className="vx-list-enter vx-stagger grid grid-cols-1 gap-y-3.5 px-3 pt-2.5 pb-4"
+          className="vx-list-enter vx-stagger grid grid-cols-2 gap-x-2.5 gap-y-4 px-3 pt-2.5 pb-4"
         >
           {showSkeleton
-            ? Array.from({ length: 5 }, (_, i) => (
-                <div key={i} className="vx-card overflow-hidden rounded-2xl">
+            ? Array.from({ length: 6 }, (_, i) => (
+                <div key={i} className="vx-card overflow-hidden rounded-xl">
                   <div className="aspect-[3/2] w-full bg-muted" />
-                  <div className="space-y-2 px-3 pt-2.5 pb-3">
+                  <div className="space-y-1.5 px-2.5 pt-2 pb-2.5">
                     <div className="h-3.5 w-full rounded bg-muted" />
                     <div className="h-3 w-1/3 rounded bg-muted" />
                   </div>

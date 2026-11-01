@@ -3,10 +3,8 @@ import type { VideoSummary } from '@videox/shared';
 import { ListLoadingBar, Skeleton, cn } from '@videox/ui';
 import { MobileVideoCard, cardHeight } from './MobileVideoCard';
 
-/** 单列列表的卡片间距。 */
-const GAP = 12;
-/** 单列：两列时封面只有半屏宽，看不出内容，选片全靠猜。 */
-const COLUMNS = 1;
+const GAP = 10;
+const COLUMNS = 2;
 /** 视口外多渲染这么多像素，快速滑动时不会看到白块。 */
 const OVERSCAN = 900;
 
@@ -156,11 +154,11 @@ export function MasonryFeed({
         style={{ height: showSkeleton ? undefined : totalHeight }}
       >
         {showSkeleton ? (
-          <div className="vx-list-enter grid grid-cols-1 gap-3">
-            {Array.from({ length: 5 }, (_, i) => (
-              <div key={i} className="vx-card overflow-hidden rounded-2xl">
+          <div className="vx-list-enter grid grid-cols-2 gap-2.5">
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} className="vx-card overflow-hidden rounded-xl">
                 <Skeleton className="aspect-[3/2] w-full rounded-none" />
-                <div className="space-y-2 px-3 pt-2.5 pb-3">
+                <div className="space-y-1.5 px-2.5 pt-2 pb-2.5">
                   <Skeleton className="h-3.5 w-full" />
                   <Skeleton className="h-3 w-1/3" />
                 </div>

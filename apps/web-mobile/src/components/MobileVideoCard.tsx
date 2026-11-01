@@ -5,11 +5,11 @@ import { prefetchWatchPage } from '../lib/prefetch-watch';
 import { useShowViewCount } from '../hooks/use-site';
 
 /**
- * 卡片文字区的高度预算（单列布局）。
- * 标题两行 2×20.3 ≈ 41、作者行 16、上下内边距 20、描边 2 —— 留到 82 有余量。
+ * 卡片文字区的高度预算（双列布局）。
+ * 标题两行 2×17.6 ≈ 35、作者行 15、上下内边距 18、描边 2 —— 留到 76 有余量。
  * MasonryFeed 用它算虚拟列表的行高，算小了会出现"卡片压住下一张"。
  */
-export const CARD_TEXT_HEIGHT = 82;
+export const CARD_TEXT_HEIGHT = 76;
 
 /** 列表封面统一 3:2 横图，不再按竖版封面走 3:4。 */
 export const LIST_POSTER_ASPECT = '3 / 2';
@@ -49,14 +49,14 @@ export function MobileVideoCard({
     <Link
       to={`/watch/${video.slug || video.id}`}
       onPointerDown={prefetchWatchPage}
-      className={cn('vx-card vx-press no-tap-highlight flex flex-col overflow-hidden rounded-2xl', className)}
+      className={cn('vx-card vx-press no-tap-highlight flex flex-col overflow-hidden rounded-xl', className)}
     >
       <div className="relative w-full overflow-hidden bg-muted" style={{ aspectRatio: ratio }}>
         {poster ? <SmartImage src={poster} alt={video.title} loading="lazy" decoding="async" /> : null}
 
         {/* 只有拿到真实时长才显示。早期热链片源时长全是 0，标 00:00 反而误导。 */}
         {video.durationSeconds > 0 ? (
-          <span className="absolute right-2 bottom-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums backdrop-blur-sm">
+          <span className="absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white tabular-nums backdrop-blur-sm">
             {formatDuration(video.durationSeconds)}
           </span>
         ) : null}
@@ -68,9 +68,9 @@ export function MobileVideoCard({
         ) : null}
       </div>
 
-      <div className="px-3 pt-2 pb-3">
-        <p className="line-clamp-2-cjk text-[14.5px] leading-[1.4] font-medium">{video.title}</p>
-        <p className="mt-1 truncate text-[11.5px] text-muted-foreground">
+      <div className="px-2.5 pt-2 pb-2.5">
+        <p className="line-clamp-2-cjk text-[13px] leading-[1.35] font-medium">{video.title}</p>
+        <p className="mt-1 truncate text-[11px] text-muted-foreground">
           {video.author?.displayName ?? '未知作者'}
           {showViewCount ? (
             <>
