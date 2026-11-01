@@ -346,7 +346,8 @@
     }
   }
   .vx-card:active {
-    transform: translateY(0) scale(0.997);
+    transform: translateY(0) scale(0.985);
+    transition-duration: 120ms;
   }
 
   /* 行内卡片（侧栏、相关推荐）不整卡抬升，只提亮底与描边。 */
