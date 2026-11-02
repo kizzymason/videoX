@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, Copy, Loader2, Minus, Plus, ShieldCheck } from 'lucide-react';
+import { Check, Copy, Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   CARD_SHOP_POLL_INTERVAL_MS,
@@ -16,7 +16,6 @@ import {
   DialogDescription,
   DialogTitle,
   Field,
-  Input,
   Skeleton,
   WechatIcon,
   cn,
@@ -35,8 +34,6 @@ interface CardShopDialogProps {
 export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialogProps) {
   const user = useAuthStore((s) => s.user);
   const [productId, setProductId] = React.useState('');
-  const [quantity, setQuantity] = React.useState(1);
-  const [email, setEmail] = React.useState('');
   const [method, setMethod] = React.useState<CardPaymentMethod>('alipay');
   const [orderNo, setOrderNo] = React.useState('');
   const [paid, setPaid] = React.useState<CardCheckout | null>(null);
@@ -65,11 +62,6 @@ export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialo
   const methodLabel = methods?.find((item) => item.method === method)?.label ?? 'Alipay';
 
   React.useEffect(() => {
-    if (!open) return;
-    setEmail((prev) => prev || user?.email || '');
-  }, [open, user?.email]);
-
-  React.useEffect(() => {
     if (!products?.length || productId) return;
     setProductId(products.find((p) => p.inStock)?.id ?? products[0]!.id);
   }, [products, productId]);
@@ -78,7 +70,8 @@ export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialo
   const maxQuantity = selected?.perOrderLimit ?? 1;
 
   const checkoutMutation = useMutation({
-    mutationFn: () => cardShopApi.checkout({ productId, quantity, email: email.trim(), method }),
+    // 一次一张：数量与邮箱都不再让用户填，卡密在「我的卡密」里随时取。
+    mutationFn: () => cardShopApi.checkout({ productId, quantity: 1, method }),
     onSuccess: (order) => setOrderNo(order.orderNo),
     onError: (error) => toast.error(error instanceof ApiError ? error.message : '下单失败，请稍后再试'),
   });
@@ -117,7 +110,6 @@ export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialo
   const reset = () => {
     setOrderNo('');
     setPaid(null);
-    setQuantity(1);
     checkoutMutation.reset();
     redeemMutation.reset();
   };
@@ -163,61 +155,11 @@ export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialo
                     key={product.id}
                     product={product}
                     active={product.id === productId}
-                    onSelect={() => {
-                      setProductId(product.id);
-                      setQuantity(1);
-                    }}
+                    onSelect={() => setProductId(product.id)}
                   />
                 ))}
               </div>
             )}
-
-            <Field label="数量" htmlFor="vx-card-qty" hint={`单次最多 ${maxQuantity} 张`}>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  aria-label="减少"
-                  disabled={quantity <= 1}
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                >
-                  <Minus className="size-4" />
-                </Button>
-                <Input
-                  id="vx-card-qty"
-                  value={quantity}
-                  inputMode="numeric"
-                  onChange={(e) => {
-                    const next = Number(e.target.value.replace(/\D/g, '')) || 1;
-                    setQuantity(Math.min(maxQuantity, Math.max(1, next)));
-                  }}
-                  className="h-10 w-16 text-center tabular-nums"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  aria-label="增加"
-                  disabled={quantity >= maxQuantity}
-                  onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
-                >
-                  <Plus className="size-4" />
-                </Button>
-              </div>
-            </Field>
-
-            <Field label="收卡邮箱" htmlFor="vx-card-email" hint="仅用于卡密自助找回，不会用于营销">
-              <Input
-                id="vx-card-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                autoComplete="email"
-                className="h-10"
-              />
-            </Field>
 
             {/* 上游只开一种收款方式时不展示选择，避免多一个没意义的步骤。 */}
             {methods && methods.length > 1 ? (
@@ -251,7 +193,7 @@ export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialo
             <Button
               size="lg"
               className="w-full"
-              disabled={!selected?.inStock || checkoutMutation.isPending || !email.trim()}
+              disabled={!selected?.inStock || checkoutMutation.isPending}
               onClick={() => checkoutMutation.mutate()}
             >
               {checkoutMutation.isPending ? (
@@ -266,7 +208,7 @@ export function CardShopDialog({ open, onOpenChange, onRedeemed }: CardShopDialo
                   ) : (
                     <AlipayIcon className="size-5 text-[#1677FF]" />
                   )}
-                  {methodLabel} 支付 ¥{selected ? (Number(selected.price) * quantity).toFixed(2) : '0.00'}
+                  {methodLabel} 支付 ¥{selected ? Number(selected.price).toFixed(2) : '0.00'}
                 </>
               )}
             </Button>

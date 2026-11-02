@@ -1,7 +1,9 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import express, { Router } from 'express';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { cardCheckoutSchema, type CardPaymentMethod } from '@videox/shared';
+import { db, t } from '../../core/db.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../core/errors.js';
 import { logger } from '../../core/logger.js';
@@ -21,6 +23,16 @@ import {
 import { assertCardShopEnabled, fetchQrImage } from './upstream.js';
 
 export const cardShopRouter: Router = Router();
+
+/**
+ * 买家邮箱：有账号邮箱就用真的，没有就给一个本站域下的占位地址。
+ * 上游只做格式校验，卡密本身在「我的卡密」里取，不依赖邮件。
+ */
+async function resolveBuyerEmail(userId: string): Promise<string> {
+  const [row] = await db.select({ email: t.users.email }).from(t.users).where(eq(t.users.id, userId)).limit(1);
+  const real = row?.email?.trim();
+  return real || `no-reply+${userId.slice(0, 8)}@pandagv.com`;
+}
 
 const orderNoSchema = z.object({ orderNo: z.string().min(4).max(64) });
 
@@ -60,9 +72,22 @@ cardShopRouter.post(
   validate({ body: cardCheckoutSchema }),
   asyncHandler(async (req, res) => {
     assertCardShopEnabled();
-    const input = body<{ productId: string; quantity: number; email: string; method?: CardPaymentMethod }>(req);
+    const input = body<{ productId: string; quantity?: number; email?: string; method?: CardPaymentMethod }>(req);
+    // 前台已经不再收邮箱。上游接口的 email 字段仍必填，这里按「账号邮箱 > 站内占位地址」补齐：
+    // 卡密本来就落在本站订单里，邮箱只是上游的格式要求，不再承担发卡职责。
+    const email = input.email?.trim() || (await resolveBuyerEmail(req.auth!.id));
     // req.ip 已是买家真实地址：app.set('trust proxy', 1) 配合 nginx 的 X-Forwarded-For。
-    ok(res, await createCheckout({ userId: req.auth!.id, buyerIp: req.ip ?? '', ...input }));
+    ok(
+      res,
+      await createCheckout({
+        userId: req.auth!.id,
+        buyerIp: req.ip ?? '',
+        productId: input.productId,
+        quantity: input.quantity ?? 1,
+        email,
+        method: input.method,
+      }),
+    );
   }),
 );
 

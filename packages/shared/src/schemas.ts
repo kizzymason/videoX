@@ -211,11 +211,16 @@ export const redeemSchema = z.object({
     .refine((v) => /^[A-Z0-9-]+$/.test(v), '订阅码只能是字母、数字'),
 });
 
-/** 卡密下单。email 只交给上游做买家自助找回，不进本站营销链路。 */
+/**
+ * 卡密下单。
+ *
+ * quantity / email 都已改成可选：前台不再让用户填（一次买 1 张，卡密在「我的卡密」里
+ * 随时可取），服务端缺省数量 1、邮箱用账号邮箱或站内占位地址。老客户端继续传也照旧生效。
+ */
 export const cardCheckoutSchema = z.object({
   productId: z.string().min(1).max(64),
-  quantity: z.coerce.number().int().min(1).max(CARD_SHOP_MAX_QUANTITY),
-  email: z.string().email('请填写正确的邮箱').max(160),
+  quantity: z.coerce.number().int().min(1).max(CARD_SHOP_MAX_QUANTITY).default(1),
+  email: z.string().email('请填写正确的邮箱').max(160).optional(),
   /** 支付方式，取自 GET /api/card-shop/methods；不传时服务端按支付宝处理。 */
   method: z.enum(CARD_PAYMENT_METHODS).optional(),
 });

@@ -9,9 +9,8 @@ import {
   type CardPaymentMethod,
   type CardProduct,
 } from '@videox/shared';
-import { AlipayIcon, Button, Input, Skeleton, WechatIcon, cn, useCopy } from '@videox/ui';
+import { AlipayIcon, Button, Skeleton, WechatIcon, cn, useCopy } from '@videox/ui';
 import { ApiError, cardShopApi, membershipApi } from '../lib/api';
-import { useAuthStore } from '../stores/auth';
 
 /**
  * 移动端卡密购买面板。和 PC 版共用后端与类型，交互按手机重做。
@@ -29,10 +28,7 @@ export function CardShopSheet({
   onOpenChange: (open: boolean) => void;
   onRedeemed: () => void | Promise<void>;
 }) {
-  const user = useAuthStore((s) => s.user);
   const [productId, setProductId] = React.useState('');
-  const [quantity, setQuantity] = React.useState(1);
-  const [email, setEmail] = React.useState('');
   const [method, setMethod] = React.useState<CardPaymentMethod>('alipay');
   const [orderNo, setOrderNo] = React.useState('');
   const [paid, setPaid] = React.useState<CardCheckout | null>(null);
@@ -60,20 +56,15 @@ export function CardShopSheet({
   const methodLabel = methods?.find((item) => item.method === method)?.label ?? 'Alipay';
 
   React.useEffect(() => {
-    if (!open) return;
-    setEmail((prev) => prev || user?.email || '');
-  }, [open, user?.email]);
-
-  React.useEffect(() => {
     if (!products?.length || productId) return;
     setProductId(products.find((p) => p.inStock)?.id ?? products[0]!.id);
   }, [products, productId]);
 
   const selected = products?.find((p) => p.id === productId) ?? null;
-  const maxQuantity = selected?.perOrderLimit ?? 1;
 
   const checkoutMutation = useMutation({
-    mutationFn: () => cardShopApi.checkout({ productId, quantity, email: email.trim(), method }),
+    // 一次一张：数量与邮箱都不再让用户填，卡密在「我的卡密」里随时取。
+    mutationFn: () => cardShopApi.checkout({ productId, quantity: 1, method }),
     onSuccess: (order) => setOrderNo(order.orderNo),
     onError: (error) => toast.error(error instanceof ApiError ? error.message : '下单失败，请稍后再试'),
   });
@@ -109,7 +100,6 @@ export function CardShopSheet({
   const reset = () => {
     setOrderNo('');
     setPaid(null);
-    setQuantity(1);
     checkoutMutation.reset();
     redeemMutation.reset();
   };
@@ -163,47 +153,11 @@ export function CardShopSheet({
                         key={product.id}
                         product={product}
                         active={product.id === productId}
-                        onSelect={() => {
-                          setProductId(product.id);
-                          setQuantity(1);
-                        }}
+                        onSelect={() => setProductId(product.id)}
                       />
                     ))}
                   </div>
                 )}
-
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">数量（单次最多 {maxQuantity} 张）</p>
-                  <div className="flex gap-2">
-                    {Array.from({ length: Math.min(5, maxQuantity) }, (_, i) => i + 1).map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => setQuantity(n)}
-                        className={cn(
-                          'h-11 flex-1 rounded-xl border text-sm font-medium tabular-nums',
-                          quantity === n ? 'border-foreground bg-foreground text-background' : 'border-border',
-                        )}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">收卡邮箱（仅用于卡密自助找回）</p>
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    autoCapitalize="off"
-                    autoCorrect="off"
-                    className="h-12"
-                  />
-                </div>
 
                 {/* 上游只开一种收款方式时不展示选择。 */}
                 {methods && methods.length > 1 ? (
@@ -237,7 +191,7 @@ export function CardShopSheet({
                 <Button
                   size="lg"
                   className="h-12 w-full"
-                  disabled={!selected?.inStock || checkoutMutation.isPending || !email.trim()}
+                  disabled={!selected?.inStock || checkoutMutation.isPending}
                   onClick={() => checkoutMutation.mutate()}
                 >
                   {checkoutMutation.isPending ? (
@@ -252,7 +206,7 @@ export function CardShopSheet({
                       ) : (
                         <AlipayIcon className="size-5 text-[#1677FF]" />
                       )}
-                      {methodLabel} 支付 ¥{selected ? (Number(selected.price) * quantity).toFixed(2) : '0.00'}
+                      {methodLabel} 支付 ¥{selected ? Number(selected.price).toFixed(2) : '0.00'}
                     </>
                   )}
                 </Button>
