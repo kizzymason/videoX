@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Share2, Sparkles } from 'lucide-react';
+import { Check, Share2, Sparkles } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Button, Skeleton, useCopy } from '@videox/ui';
+import { toast } from 'sonner';
+import { Button, Skeleton, cn, useCopy } from '@videox/ui';
 import { invitesApi } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 
@@ -12,7 +13,7 @@ import { useAuthStore } from '../stores/auth';
  */
 export function InviteCard() {
   const user = useAuthStore((s) => s.user);
-  const { copy } = useCopy();
+  const { copied, copy } = useCopy();
   const { data, isLoading } = useQuery({
     queryKey: ['invite-me'],
     queryFn: invitesApi.me,
@@ -84,9 +85,25 @@ export function InviteCard() {
             </div>
           </div>
 
+          {copied ? (
+            <p className="flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+              <Check className="size-3.5" />
+              链接已复制，发给好友即可
+            </p>
+          ) : null}
           <div className="flex gap-2">
-            <Button variant="outline" className="h-10 flex-1" onClick={() => void copy(link)}>
-              复制链接
+            <Button
+              variant="outline"
+              className={cn(
+                'h-10 flex-1',
+                copied && 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-600 hover:text-white',
+              )}
+              onClick={async () => {
+                await copy(link);
+                toast.success('链接已复制');
+              }}
+            >
+              {copied ? '已复制' : '复制链接'}
             </Button>
             <Button className="h-10 flex-1" onClick={() => void share()}>
               <Share2 className="size-4" />
