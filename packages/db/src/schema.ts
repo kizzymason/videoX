@@ -1071,3 +1071,59 @@ export const registerGuards = pgTable(
     index('register_guards_expires_idx').on(t.expiresAt),
   ],
 );
+
+/**
+ * 每个用户一条邀请码。懒生成：第一次打开邀请界面时才写入，
+ * 老用户不需要回填，也不会因为生成失败影响注册。
+ */
+export const inviteCodes = pgTable(
+  'invite_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** 8 位大写字母数字，去掉 0/O/1/I 等易混字符 */
+    code: varchar('code', { length: 16 }).notNull(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('invite_codes_user_uq').on(t.userId), uniqueIndex('invite_codes_code_uq').on(t.code)],
+);
+
+/**
+ * 邀请记录：注册时按邀请码落一行。
+ * 被拒的也落库（status='rejected' + reason），后台能看到刷单尝试。
+ * invitee_id 唯一 —— 一个账号只会被邀请一次。
+ */
+export const invitations = pgTable(
+  'invitations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    inviterId: uuid('inviter_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    inviteeId: uuid('invitee_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    code: varchar('code', { length: 16 }).notNull(),
+    /** granted（已发放）| rejected（命中防刷） */
+    status: varchar('status', { length: 16 }).notNull().default('granted'),
+    /** rejected 时的原因：same_ip / same_device / device_reused / ip_reused / disabled */
+    reason: varchar('reason', { length: 40 }).notNull().default(''),
+    /** 双方各得的会员天数（rejected 为 0） */
+    days: integer('days').notNull().default(0),
+    inviteeIp: varchar('invitee_ip', { length: 64 }).notNull().default(''),
+    inviterIp: varchar('inviter_ip', { length: 64 }).notNull().default(''),
+    /** 设备指纹（sha256），用于「一台设备只能领一次邀请奖励」 */
+    deviceHash: varchar('device_hash', { length: 64 }).notNull().default(''),
+    userAgent: varchar('user_agent', { length: 300 }).notNull().default(''),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('invitations_invitee_uq').on(t.inviteeId),
+    index('invitations_inviter_idx').on(t.inviterId, t.createdAt),
+    index('invitations_device_idx').on(t.deviceHash),
+    index('invitations_ip_idx').on(t.inviteeIp),
+    index('invitations_created_idx').on(t.createdAt),
+  ],
+);

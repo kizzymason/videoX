@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { CurrentUser } from '@videox/shared';
+import { clearInviteCode } from '../lib/invite';
 import { authApi, setAccessToken, setUnauthorizedHandler } from '../lib/api';
 
 interface AuthState {
@@ -47,6 +48,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const session = await authApi.register(input);
     setAccessToken(session.accessToken);
     set({ user: session.user });
+    // 邀请码只对这一次注册有效，用完即清。
+    clearInviteCode();
   },
 
   logout: async () => {

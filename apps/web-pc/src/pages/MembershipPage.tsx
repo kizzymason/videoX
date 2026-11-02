@@ -12,6 +12,7 @@ import {
 import { Badge, Button, Card, CardContent, Input, Skeleton, cn, useAntiPeek, useCopy } from '@videox/ui';
 import { ApiError, cardShopApi, membershipApi } from '../lib/api';
 import { CardShopDialog } from '../components/membership/CardShopDialog';
+import { InviteCard } from '../components/membership/InviteCard';
 import { useAuthStore } from '../stores/auth';
 import { useAuthModalStore } from '../stores/auth-modal';
 import { useSeo } from '../hooks/use-seo';
@@ -154,6 +155,9 @@ export function MembershipPage() {
         </CardContent>
       </Card>
 
+      {/* 邀请好友：紧贴充值板块下方 */}
+      <InviteCard />
+
       {purchases && purchases.length > 0 ? <MyCardsSection purchases={purchases} /> : null}
 
       <section className="space-y-4">
@@ -241,7 +245,15 @@ export function MembershipPage() {
                     <td className="px-4 py-2.5 font-mono text-xs">{order.orderNo}</td>
                     <td className="px-4 py-2.5">{order.planName ?? '-'}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">
-                      {order.source === 'redeem_code' ? '订阅码' : order.source === 'manual_grant' ? '后台赠送' : '支付'}
+                      {order.source === 'redeem_code'
+                        ? '订阅码'
+                        : order.source === 'manual_grant'
+                          ? '后台赠送'
+                          : order.source === 'signup_gift'
+                            ? '注册赠送'
+                            : order.source === 'invite_reward'
+                              ? '邀请奖励'
+                              : '支付'}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{formatPrice(order.amountCents)}</td>
                     <td className="px-4 py-2.5 text-right text-muted-foreground tabular-nums">

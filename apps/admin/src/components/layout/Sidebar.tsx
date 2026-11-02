@@ -9,6 +9,7 @@ import {
   CreditCard,
   Film,
   Gauge,
+  Gift,
   Handshake,
   Image,
   KeyRound,
@@ -88,6 +89,7 @@ export const NAV_GROUPS: Group[] = [
     title: '系统',
     items: [
       { to: '/users', label: '用户管理', icon: Users },
+      { to: '/invites', label: '邀请管理', icon: Gift },
       { to: '/storage', label: '存储配置', icon: Boxes },
       { to: '/settings', label: '站点设置', icon: Settings },
       { to: '/audit-logs', label: '操作审计', icon: ScrollText },

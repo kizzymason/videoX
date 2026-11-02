@@ -3,7 +3,9 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, Gift } from 'lucide-react';
 import { toast } from 'sonner';
 import { Field, Input } from '@videox/ui';
-import { ApiError } from '../lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { ApiError, invitesApi } from '../lib/api';
+import { getInviteCode } from '../lib/invite';
 import { useAuthStore } from '../stores/auth';
 import { AppHeader } from '../components/AppHeader';
 import { SlideCaptcha } from '../components/SlideCaptcha';
@@ -26,6 +28,15 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = React.useState(false);
   const [error, setError] = React.useState('');
   const [captchaKey, setCaptchaKey] = React.useState(0);
+
+  // 从邀请链接进来时，注册前先亮明"谁邀请你、双方各得几天"，转化和信任都更好。
+  const inviteCode = getInviteCode();
+  const { data: invite } = useQuery({
+    queryKey: ['invite-validate', inviteCode],
+    queryFn: () => invitesApi.validate(inviteCode!),
+    enabled: Boolean(inviteCode),
+    staleTime: 5 * 60_000,
+  });
 
   if (user) return <Navigate to={redirect} replace />;
 
@@ -56,6 +67,13 @@ export function RegisterPage() {
             <h1 className="text-3xl font-semibold tracking-tight">{siteName}</h1>
             <p className="text-sm text-muted-foreground">用户名即昵称，无需邮箱</p>
           </div>
+
+          {invite?.valid ? (
+            <div className="rounded-xl border border-border bg-muted/40 p-3 text-center text-xs text-muted-foreground">
+              好友 <span className="font-medium text-foreground">{invite.inviterName ?? '邀请人'}</span> 邀请你加入
+              {invite.rewardDays > 0 ? `，注册成功后你们各得 ${invite.rewardDays} 天会员` : ''}
+            </div>
+          ) : null}
           <div className="space-y-4">
             <Field label="用户名" htmlFor="vx-m-reg-user">
               <Input

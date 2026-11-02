@@ -13,7 +13,9 @@ import {
   Input,
   cn,
 } from '@videox/ui';
-import { ApiError } from '../lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { ApiError, invitesApi } from '../lib/api';
+import { getInviteCode } from '../lib/invite';
 import { useAuthStore } from '../stores/auth';
 import { useAuthModalStore } from '../stores/auth-modal';
 import { useSite, useSignupGiftDays, useSiteName } from '../hooks/use-site';
@@ -32,6 +34,15 @@ export function AuthModal() {
   const siteName = useSiteName();
   const { data: site } = useSite();
   const giftDays = useSignupGiftDays();
+
+  // 从邀请链接进来：注册前说明是谁邀请、双方各得几天。
+  const inviteCode = getInviteCode();
+  const { data: invite } = useQuery({
+    queryKey: ['invite-validate', inviteCode],
+    queryFn: () => invitesApi.validate(inviteCode!),
+    enabled: Boolean(inviteCode),
+    staleTime: 5 * 60_000,
+  });
 
   const [identifier, setIdentifier] = React.useState('');
   const [username, setUsername] = React.useState('');
@@ -172,6 +183,12 @@ export function AuthModal() {
                 onToggle={() => setShowPassword((v) => !v)}
               />
             </Field>
+            {invite?.valid ? (
+              <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-center text-xs text-muted-foreground">
+                好友 <span className="font-medium text-foreground">{invite.inviterName ?? '邀请人'}</span> 邀请你加入
+                {invite.rewardDays > 0 ? `，注册后你们各得 ${invite.rewardDays} 天会员` : ''}
+              </p>
+            ) : null}
             {giftDays > 0 ? (
               <p className="flex flex-wrap items-center justify-center gap-x-1 rounded-lg border border-vip/40 bg-vip/10 px-3 py-2 text-xs">
                 <Gift className="size-3.5 shrink-0 text-vip" aria-hidden />

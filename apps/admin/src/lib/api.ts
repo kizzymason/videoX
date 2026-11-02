@@ -843,3 +843,38 @@ export const collectionAiApi = {
   confirm: (id: string, approve: boolean) =>
     api.post<CollectionAiTurn>(`/collection/ai/conversations/${id}/confirm`, { approve }),
 };
+
+// ---------------------------------------------------------------------------
+// 邀请管理
+// ---------------------------------------------------------------------------
+
+export interface InviteRecordRow {
+  id: string;
+  status: 'granted' | 'rejected';
+  reason: string;
+  days: number;
+  code: string;
+  inviteeIp: string;
+  inviterIp: string;
+  deviceHash: string;
+  createdAt: string;
+  inviter: { id: string; username: string; displayName: string };
+  invitee: { id: string; username: string; displayName: string };
+}
+
+export interface InviteOverview {
+  settings: { enabled: boolean; rewardDays: number };
+  totalInvited: number;
+  totalDays: number;
+  rejected: number;
+  inviters: number;
+  todayInvited: number;
+  top: Array<{ userId: string; username: string; displayName: string; invited: number; days: number }>;
+}
+
+export const invitesAdminApi = {
+  overview: () => api.get<InviteOverview>('/admin/invites/overview'),
+  records: (query: Query) => api.get<Paginated<InviteRecordRow>>('/admin/invites/records', query),
+  updateSettings: (body: { enabled?: boolean; rewardDays?: number }) =>
+    api.patch<{ enabled: boolean; rewardDays: number }>('/admin/invites/settings', body),
+};

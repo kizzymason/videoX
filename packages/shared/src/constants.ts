@@ -84,7 +84,7 @@ export type RedeemCodeStatus = (typeof REDEEM_CODE_STATUSES)[number];
 export const ORDER_STATUSES = ['pending', 'paid', 'canceled', 'refunded'] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
-export const ORDER_SOURCES = ['redeem_code', 'manual_grant', 'signup_gift', 'payment'] as const;
+export const ORDER_SOURCES = ['redeem_code', 'manual_grant', 'signup_gift', 'invite_reward', 'payment'] as const;
 export type OrderSource = (typeof ORDER_SOURCES)[number];
 
 /**

@@ -32,6 +32,8 @@ import { staticRouter } from './modules/static/routes.js';
 import { internalRouter } from './modules/settings/entry-gate.js';
 import { collectionRouter } from './modules/collection/routes.js';
 import { partnerRouter } from './modules/partner/routes.js';
+import { invitesRouter } from './modules/invites/routes.js';
+import { invitesAdminRouter } from './modules/invites/admin-routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -117,7 +119,9 @@ export function createApp(): Express {
   app.use('/api/card-shop', cardShopRouter);
   app.use('/api/recommend', recommendRouter);
   app.use('/api/partner', partnerRouter);
+  app.use('/api/invites', invitesRouter);
   app.use('/api/admin/seo', seoAdminRouter);
+  app.use('/api/admin', invitesAdminRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/admin', publishGateRouter);
   app.use('/api/admin', captionRouter);

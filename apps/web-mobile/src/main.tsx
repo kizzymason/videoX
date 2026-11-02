@@ -6,11 +6,13 @@ import { Toaster } from 'sonner';
 import { App } from './App';
 import { queryClient } from './lib/query';
 import { initAnalytics } from './lib/analytics';
+import { captureInviteCode } from './lib/invite';
 import './styles.css';
 
 const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined;
 
 initAnalytics();
+captureInviteCode();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

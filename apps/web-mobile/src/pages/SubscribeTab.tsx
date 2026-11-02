@@ -13,6 +13,7 @@ import {
 import { Button, Input, Skeleton, cn, useAntiPeek, useCopy } from '@videox/ui';
 import { ApiError, cardShopApi, membershipApi } from '../lib/api';
 import { CardShopSheet } from '../components/CardShopSheet';
+import { InviteCard } from '../components/InviteCard';
 import { useAuthStore } from '../stores/auth';
 import { track } from '../lib/analytics';
 import { AppHeader } from '../components/AppHeader';
@@ -174,6 +175,9 @@ export function SubscribeTab() {
             <p className="text-center text-xs text-muted-foreground">已是订阅会员时自动叠加时间。</p>
           )}
         </section>
+
+        {/* 邀请好友：紧贴充值板块下方 */}
+        <InviteCard />
 
         {purchases && purchases.length > 0 ? <MyCards purchases={purchases} /> : null}
 
