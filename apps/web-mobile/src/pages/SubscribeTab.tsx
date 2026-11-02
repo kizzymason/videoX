@@ -90,12 +90,12 @@ export function SubscribeTab() {
         <AppHeader title="订阅" />
         <div className="flex-1 space-y-3 px-4 pt-4">
           <Skeleton className="h-28 w-full rounded-2xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
           <div className="grid grid-cols-2 gap-2.5">
             {Array.from({ length: 4 }, (_, i) => (
               <Skeleton key={i} className="h-32 rounded-xl" />
             ))}
           </div>
+          <Skeleton className="h-12 w-full rounded-xl" />
         </div>
       </div>
     );
@@ -141,67 +141,12 @@ export function SubscribeTab() {
           </div>
         </div>
 
-        {/* 订阅 */}
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold">订阅</h2>
-          <Input
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="请输入订阅码"
-            className="h-12"
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-          <Button size="lg" className="h-12 w-full" onClick={submit} disabled={redeemMutation.isPending || !code.trim()}>
-            {redeemMutation.isPending ? '订阅中…' : '立即订阅'}
-          </Button>
-          {cardShop?.enabled ? (
-            <>
-              <Button
-                size="lg"
-                className="h-12 w-full border-0 bg-[#1e3a8a] text-white hover:bg-[#1e40af]"
-                onClick={() => setCardShopOpen(true)}
-              >
-                <ShoppingCart />
-                购买卡密
-              </Button>
-              <p className="text-center text-xs text-muted-foreground">
-                没有订阅码？点「购买卡密」自助购买，付款后立即到账。
-              </p>
-            </>
-          ) : (
-            <p className="text-center text-xs text-muted-foreground">已是订阅会员时自动叠加时间。</p>
-          )}
-        </section>
-
-        {/* 邀请好友：紧贴充值板块下方 */}
-        <InviteCard />
-
-        {purchases && purchases.length > 0 ? <MyCards purchases={purchases} /> : null}
-
-        {/* 权益 */}
-        <section className="space-y-2.5">
-          <h2 className="text-sm font-semibold">权益</h2>
-          <div className="space-y-2">
-            {HIGHLIGHTS.map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="flex items-center gap-3 rounded-xl border border-border p-3">
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted">
-                  <Icon className="size-4" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{title}</p>
-                  <p className="text-xs text-muted-foreground">{desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
         {/* 计划 */}
         <section className="space-y-2.5">
-          <h2 className="text-sm font-semibold">计划</h2>
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold">选择套餐</h2>
+            <span className="text-[11px] text-muted-foreground">已是会员自动叠加时长</span>
+          </div>
           {isLoading ? (
             <div className="grid grid-cols-2 gap-2.5">
               {Array.from({ length: 4 }, (_, i) => (
@@ -239,6 +184,65 @@ export function SubscribeTab() {
             </div>
           )}
         </section>
+        {/* 权益 */}
+        <section className="space-y-2.5">
+          <h2 className="text-sm font-semibold">权益</h2>
+          <div className="space-y-2">
+            {HIGHLIGHTS.map(({ icon: Icon, title, desc }) => (
+              <div key={title} className="flex items-center gap-3 rounded-xl border border-border p-3">
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted">
+                  <Icon className="size-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{title}</p>
+                  <p className="text-xs text-muted-foreground">{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* 订阅 */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold">兑换订阅码</h2>
+          <Input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="请输入订阅码"
+            className="h-12"
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <Button size="lg" className="h-12 w-full" onClick={submit} disabled={redeemMutation.isPending || !code.trim()}>
+            {redeemMutation.isPending ? '订阅中…' : '立即订阅'}
+          </Button>
+          {cardShop?.enabled ? (
+            <>
+              <Button
+                size="lg"
+                className="h-12 w-full border-0 bg-[#1e3a8a] text-white hover:bg-[#1e40af]"
+                onClick={() => setCardShopOpen(true)}
+              >
+                <ShoppingCart />
+                购买卡密
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                没有订阅码？点「购买卡密」自助购买，付款后立即到账。
+              </p>
+            </>
+          ) : (
+            <p className="text-center text-xs text-muted-foreground">已是订阅会员时自动叠加时间。</p>
+          )}
+        </section>
+
+        {/* 邀请好友：紧贴充值板块下方 */}
+        <InviteCard />
+
+        {/* 我的卡密：历史订单放最后，不挡在前面 */}
+        {purchases && purchases.length > 0 ? <MyCards purchases={purchases} /> : null}
+
       </div>
 
       <CardShopSheet open={cardShopOpen} onOpenChange={setCardShopOpen} onRedeemed={afterRedeem} />
