@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Share2, Sparkles } from 'lucide-react';
+import { Check, Share2, Sparkles } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Button, Card, CardContent, Input, Skeleton, useCopy } from '@videox/ui';
+import { toast } from 'sonner';
+import { Button, Card, CardContent, Input, Skeleton, cn, useCopy } from '@videox/ui';
 import { invitesApi } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth';
 import { useAuthModalStore } from '../../stores/auth-modal';
@@ -14,7 +15,7 @@ import { useAuthModalStore } from '../../stores/auth-modal';
 export function InviteCard() {
   const user = useAuthStore((s) => s.user);
   const openAuth = useAuthModalStore((s) => s.openAuth);
-  const { copy } = useCopy();
+  const { copied, copy } = useCopy();
   const { data, isLoading } = useQuery({
     queryKey: ['invite-me'],
     queryFn: invitesApi.me,
@@ -96,8 +97,24 @@ export function InviteCard() {
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Input readOnly value={link} className="h-9 max-w-md flex-1 font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
-                  <Button variant="outline" onClick={() => void copy(link)}>
-                    复制链接
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      copied && 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-600 hover:text-white',
+                    )}
+                    onClick={async () => {
+                      await copy(link);
+                      toast.success('链接已复制');
+                    }}
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="size-4" />
+                        已复制
+                      </>
+                    ) : (
+                      '复制链接'
+                    )}
                   </Button>
                   <Button onClick={() => void share()}>
                     <Share2 className="size-4" />
@@ -106,6 +123,12 @@ export function InviteCard() {
                 </div>
               </div>
             </div>
+            {copied ? (
+              <p className="flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                <Check className="size-3.5" />
+                链接已复制，发给好友即可
+              </p>
+            ) : null}
             <p className="text-[11px] text-muted-foreground">
               好友通过你的链接注册成功后，你和好友各得 {data.rewardDays} 天会员。同一设备或同一网络只能领取一次，多开账号无效。
             </p>
