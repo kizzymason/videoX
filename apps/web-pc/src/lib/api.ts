@@ -1,3 +1,4 @@
+import { getInviteCode } from './invite';
 import { ApiClient, ApiError, collectDeviceSignals } from '@videox/shared';
 import type {
   AuthSession,
@@ -71,7 +72,12 @@ export { ApiError };
 export const authApi = {
   register: (body: { username: string; password: string; email?: string; displayName?: string }) =>
     // 带上设备信号，服务端据此判定同一设备是否已经注册过。
-    api.post<AuthSession>('/auth/register', { ...body, device: collectDeviceSignals() }),
+    api.post<AuthSession>('/auth/register', {
+      ...body,
+      device: collectDeviceSignals(),
+      // 从邀请链接带来的码，存在本地，注册时结算（服务端做 IP + 设备防刷）。
+      inviteCode: getInviteCode(),
+    }),
   login: (body: { identifier: string; password: string; remember?: boolean }) =>
     api.post<AuthSession>('/auth/login', body),
   logout: () => api.post<null>('/auth/logout'),
@@ -218,6 +224,23 @@ export const membershipApi = {
 // ---------------------------------------------------------------------------
 // 卡密自助购买
 // ---------------------------------------------------------------------------
+
+export interface InviteMine {
+  enabled: boolean;
+  rewardDays: number;
+  code: string;
+  invited: number;
+  daysEarned: number;
+  lastInvitedAt: string | null;
+}
+
+export const invitesApi = {
+  me: () => api.get<InviteMine>('/invites/me'),
+  validate: (code: string) =>
+    api.get<{ valid: boolean; inviterName: string | null; rewardDays: number }>(
+      `/invites/validate?code=${encodeURIComponent(code)}`,
+    ),
+};
 
 export const cardShopApi = {
   status: () => api.get<{ enabled: boolean }>('/card-shop/status'),

@@ -16,6 +16,7 @@ import { RedeemCodesPage } from './pages/RedeemCodesPage';
 import { OrdersPage } from './pages/OrdersPage';
 import { PartnersPage } from './pages/PartnersPage';
 import { UsersPage } from './pages/UsersPage';
+import { InvitesPage } from './pages/InvitesPage';
 import { StoragePage } from './pages/StoragePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SeoPage } from './pages/SeoPage';
@@ -90,6 +91,7 @@ export function App() {
           <Route path="partners" element={<PartnersPage />} />
           <Route path="orders" element={<OrdersPage />} />
           <Route path="users" element={<UsersPage />} />
+          <Route path="invites" element={<InvitesPage />} />
           <Route path="storage" element={<StoragePage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="audit-logs" element={<AuditLogsPage />} />

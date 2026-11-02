@@ -78,6 +78,12 @@ export const registerSchema = z.object({
   displayName: z.string().min(1).max(32).optional(),
   /** 设备信号，服务端据此算注册指纹（前端可能不传，可选）。 */
   device: deviceSignalsSchema.optional(),
+  /** 邀请码（从邀请链接带来的 ?invite=XXXX），注册成功后双方各得会员天数。 */
+  inviteCode: z
+    .preprocess(
+      (value) => (typeof value === 'string' && value.trim() === '' ? undefined : typeof value === 'string' ? value.trim().toUpperCase() : value),
+      z.string().max(16).regex(/^[A-Z0-9]*$/, '邀请码格式不正确').optional(),
+    ),
 });
 
 export const loginSchema = z.object({
@@ -391,6 +397,13 @@ export const siteSettingsSchema = z.object({
    * 播放门禁本来就看 vipExpiresAt 是否过期，到期自然拦截。
    */
   signupGiftDays: z.coerce.number().int().min(0).max(SIGNUP_GIFT_MAX_DAYS).default(0),
+  /** 邀请功能总开关。关闭后邀请码仍可生成，但注册时不再发奖励。 */
+  inviteEnabled: z.boolean().default(true),
+  /**
+   * 邀请一位好友注册，邀请人与被邀请人各自获得的会员天数。
+   * 0 = 只记录不发放。
+   */
+  inviteRewardDays: z.coerce.number().int().min(0).max(365).default(1),
   commentsRequireApproval: z.boolean().default(false),
   /** 点播不再按秒试看，保留字段以免旧后台配置校验失败。 */
   previewSeconds: z.coerce.number().int().min(0).max(3600).default(0),

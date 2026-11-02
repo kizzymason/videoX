@@ -504,6 +504,10 @@ export interface SiteSettings {
   registerIpLimit: number;
   /** 新用户注册即赠送的会员天数，0 = 不赠送。 */
   signupGiftDays: number;
+  /** 邀请功能开关：关闭后注册仍可带码，但不发奖励。 */
+  inviteEnabled: boolean;
+  /** 邀请一位好友注册，双方各得的会员天数。 */
+  inviteRewardDays: number;
   commentsRequireApproval: boolean;
   previewSeconds: number;
   shortsFreeCount: number;

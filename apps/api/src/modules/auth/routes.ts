@@ -18,6 +18,8 @@ import { requireAuth } from '../../middleware/auth.js';
 import { body, validate } from '../../middleware/validate.js';
 import { REFRESH_COOKIE, clearRefreshCookie, setRefreshCookie } from './tokens.js';
 import { getSiteSettings } from '../settings/service.js';
+import { applyInviteReward } from '../invites/service.js';
+import { logger } from '../../core/logger.js';
 import {
   assertRegisterAllowed,
   ensureDeviceSeed,
@@ -51,17 +53,45 @@ authRouter.post(
   authLimiter,
   validate({ body: registerSchema }),
   asyncHandler(async (req, res) => {
-    const input = body<{ email?: string; username: string; password: string; displayName?: string; device?: DeviceSignals }>(req);
+    const input = body<{
+      email?: string;
+      username: string;
+      password: string;
+      displayName?: string;
+      device?: DeviceSignals;
+      inviteCode?: string;
+    }>(req);
     const ctx = sessionContext(req);
 
     // 注册防护：同一设备、同一 IP 在窗口内只允许注册一次（后台设置可调）。
-    const guard = guardSettingsFrom(await getSiteSettings());
+    const site = await getSiteSettings();
+    const guard = guardSettingsFrom(site);
     const seed = readDeviceSeed(req);
     const signals = input.device ?? EMPTY_DEVICE_SIGNALS;
     await assertRegisterAllowed({ ip: ctx.ip, userAgent: ctx.userAgent, signals, seed, settings: guard });
 
     const { user, giftDays } = await registerUser(input);
     await rememberRegistration({ userId: user.id, ip: ctx.ip, userAgent: ctx.userAgent, signals, seed, settings: guard });
+
+    // 邀请奖励：注册本身不受影响，命中防刷规则只是不发奖励（后台能看到记录）。
+    let inviteNote = '';
+    if (input.inviteCode) {
+      try {
+        const invite = await applyInviteReward({
+          inviteeId: user.id,
+          inviteeUsername: user.username,
+          code: input.inviteCode,
+          ip: ctx.ip,
+          userAgent: ctx.userAgent,
+          signals,
+          seed,
+          settings: site,
+        });
+        if (invite.status === 'granted') inviteNote = `，邀请奖励已发放（双方各 ${invite.days} 天）`;
+      } catch (error) {
+        logger.warn({ err: error, userId: user.id }, '邀请奖励结算失败，注册继续');
+      }
+    }
     // 给这台设备落下长期标识。
     ensureDeviceSeed(req, res);
     const { access, refresh } = await issueSession(user, ctx);
@@ -75,7 +105,7 @@ authRouter.post(
       accessToken: access.token,
       accessTokenExpiresAt: access.expiresAt.toISOString(),
     };
-    ok(res, payload, giftDays > 0 ? `注册成功，已赠送 ${giftDays} 天会员` : '注册成功');
+    ok(res, payload, (giftDays > 0 ? `注册成功，已赠送 ${giftDays} 天会员` : '注册成功') + inviteNote);
   }),
 );
 
